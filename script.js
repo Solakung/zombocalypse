@@ -79,17 +79,40 @@ const ZONES = {
   forest: { name: "ป่าลึก", icon: "🌲", danger: 2, desc: "เงียบสงบ ผลไม้และมอสขึ้นชุก อาจเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 18 }, { id: "moss", w: 12 }, { id: "crowbar", w: 8 }, { id: "pistol", w: 4 }, { id: "scrap", w: 8 }, { id: null, w: 25 }] }
 };
 
+// เหตุการณ์ประจำโซน: dmod = ปรับระดับอันตราย, zmod = ปรับน้ำหนักโอกาสเจอซอมบี้, nmod = ปรับน้ำหนักช่อง "ไม่เจออะไร" (ลบ = เจอของง่ายขึ้น)
+const EVENT_TYPES = {
+  horde: { name: "ฝูงซอมบี้บุก", icon: "🧟", dmod: 3, zmod: 25, nmod: 0 },
+  fog: { name: "หมอกหนา", icon: "🌫️", dmod: 1, zmod: 8, nmod: 5 },
+  calm: { name: "ช่วงสงบ", icon: "🌤️", dmod: -2, zmod: -8, nmod: 0 },
+  supply: { name: "เสบียงตกค้าง", icon: "📦", dmod: 1, zmod: 5, nmod: -20 },
+  custom: { name: "เหตุการณ์พิเศษ", icon: "⚠️", dmod: 0, zmod: 0, nmod: 0 }
+};
+const eventIcon = (e) => EVENT_TYPES[e?.type]?.icon || "⚠️";
+const minsLeft = (e) => Math.max(1, Math.ceil((e.endsAt - serverNow()) / 60000));
+const activeEvent = (z) => { const e = state.events?.[z]; return e && e.endsAt > serverNow() ? e : null; };
+const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (activeEvent(z)?.dmod || 0)));
+function effectiveDrops(z) {
+  const e = activeEvent(z);
+  if (!e) return ZONES[z].drops;
+  return ZONES[z].drops.map((d) => d.id === "zombie" ? { ...d, w: Math.max(0, d.w + (e.zmod || 0)) } : d.id === null ? { ...d, w: Math.max(0, d.w + (e.nmod || 0)) } : d);
+}
+
 function dangerInfo(id) {
-  const z = ZONES[id], total = z.drops.reduce((t, d) => t + d.w, 0);
-  const chance = Math.round((100 * (z.drops.find((d) => d.id === "zombie")?.w || 0)) / total);
-  const tier = z.danger === 0 ? 0 : z.danger <= 3 ? 1 : z.danger <= 6 ? 2 : z.danger <= 8 ? 3 : 4;
-  return { chance, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier] };
+  const drops = effectiveDrops(id), total = drops.reduce((t, d) => t + d.w, 0) || 1;
+  const chance = Math.round((100 * (drops.find((d) => d.id === "zombie")?.w || 0)) / total);
+  const level = effDanger(id);
+  const tier = level === 0 ? 0 : level <= 3 ? 1 : level <= 6 ? 2 : level <= 8 ? 3 : 4;
+  return { chance, level, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier], ev: activeEvent(id) };
 }
 function renderZoneDanger(z) {
-  const el = $("zone-danger"); if (!el) return;
-  const d = dangerInfo(z);
+  const el = $("zone-danger"), evEl = $("zone-event"); if (!el) return;
+  const d = dangerInfo(z), base = ZONES[z].danger;
   el.className = "danger-line d" + d.tier;
-  el.textContent = `ระดับอันตราย ${ZONES[z].danger}/10 (${d.label}) • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${z === "safe" ? "ต่อสู้ระหว่างผู้เล่นไม่ได้" : "ผู้เล่นโจมตีกันได้"}`;
+  el.textContent = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${z === "safe" ? "ต่อสู้ระหว่างผู้เล่นไม่ได้" : "ผู้เล่นโจมตีกันได้"}`;
+  if (evEl) {
+    evEl.classList.toggle("hidden", !d.ev);
+    if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — อีกประมาณ ${minsLeft(d.ev)} นาที`;
+  }
 }
 
 /* =========================================================
@@ -97,7 +120,7 @@ function renderZoneDanger(z) {
    ========================================================= */
 const state = {
   uid: null, profile: null, zone: null, offset: 0, inv: {}, ground: {},
-  unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve()
+  unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -306,7 +329,7 @@ function startGame() {
     state.profile = p;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); buildAdmin(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -778,7 +801,7 @@ $("btn-scavenge").addEventListener("click", async () => {
   state.busy = true;
   
   try {
-    let found = rollDrop(ZONES[state.zone].drops);
+    let found = rollDrop(effectiveDrops(state.zone));
     const isZombie = p.faction === "zombie";
     const scrapIgnored = isZombie && found === "scrap";
     if (scrapIgnored) found = null;
@@ -843,7 +866,7 @@ async function zombieEncounter(u, hpNow) {
   if (w && r !== 1) wearUpdates(u, w);
 
   if (won) {
-    loot = rollDrop(ZONES[state.zone].drops.filter((d) => d.id !== "zombie"));
+    loot = rollDrop(effectiveDrops(state.zone).filter((d) => d.id !== "zombie"));
     if (loot) { invAddUpdate(u, loot, 1); verdict += ` และเจอ ${ITEMS[loot].icon} ${ITEMS[loot].name} ติดตัวมัน`; }
   }
 
@@ -1034,6 +1057,8 @@ function buildAdmin() {
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   fillSelect($("adm-clear-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
+  fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
+  fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
   itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/พิเศษ)"]);
   fillSelect($("adm-item"), itemOpts);
@@ -1208,4 +1233,112 @@ $("adm-clear").addEventListener("click", async () => {
 $("adm-delmode").addEventListener("change", (e) => {
   state.delMode = e.target.checked;
   $("chat-log").classList.toggle("del-mode", state.delMode);
+});
+
+/* =========================================================
+   14) เหตุการณ์ประจำโซน (สุ่มอัตโนมัติ + แอดมินกำหนดเอง)
+   ========================================================= */
+const AUTO_EVENT_WEIGHTS = { horde: 3, fog: 3, calm: 2, supply: 2 };
+
+function renderZoneTags() {
+  document.querySelectorAll(".zone-btn").forEach((b) => {
+    const id = b.dataset.zone, tag = b.querySelector(".danger-tag"); if (!tag || !ZONES[id]) return;
+    const d = dangerInfo(id);
+    tag.className = "danger-tag d" + d.tier;
+    tag.textContent = `${d.ev ? eventIcon(d.ev) + " " : ""}⚠ ${d.level}/10`;
+    b.title = `อันตราย ${d.level}/10 • เจอซอมบี้ ${d.chance}%` + (d.ev ? ` • ${d.ev.title} (อีก ~${minsLeft(d.ev)} นาที)` : "");
+  });
+}
+
+function renderAdminEvents() {
+  const ul = $("adm-ev-list"); if (!ul || !isStaff()) return;
+  ul.innerHTML = "";
+  Object.entries(state.events).forEach(([z, e]) => {
+    if (!ZONES[z] || e.endsAt <= serverNow()) return;
+    const li = mk("li");
+    li.append(mk("span", "", `${eventIcon(e)} ${e.title} @ ${ZONES[z].name} (อีก ~${minsLeft(e)} นาที${e.auto ? ", สุ่ม" : ""})`));
+    li.append(btn("ยุติ", () => endEvent(z), "btn ghost mini"));
+    ul.append(li);
+  });
+  if (!ul.children.length) ul.append(mk("li", "empty", "ไม่มีเหตุการณ์ที่กำลังเกิด"));
+}
+
+function refreshDanger() { renderZoneTags(); if (state.zone) renderZoneDanger(state.zone); renderAdminEvents(); }
+
+function listenEvents() {
+  onValue(ref(db, "eventMeta"), (s) => {
+    const m = s.val() || {};
+    state.nextAuto = m.nextAuto || 0; state.autoOff = !!m.autoOff;
+    const cb = $("adm-ev-auto"); if (cb) cb.checked = !state.autoOff;
+  });
+  onValue(ref(db, "zoneEvents"), (snap) => {
+    state.events = snap.val() || {};
+    Object.entries(state.events).forEach(([z, e]) => {
+      if (!ZONES[z] || state.evSeen[z] === e.endsAt) return;
+      state.evSeen[z] = e.endsAt;
+      if (typeof e.startedAt === "number" && e.startedAt >= state.sessionStart && e.endsAt > serverNow()) {
+        logLine(`${eventIcon(e)} [ข่าวด่วน] ${e.title} ที่${ZONES[z].name} (~${minsLeft(e)} นาที) — ระดับอันตรายตอนนี้ ${effDanger(z)}/10`, "system");
+      }
+    });
+    refreshDanger();
+  });
+  setInterval(tickEvents, 5000);
+}
+
+function tickEvents() {
+  Object.entries(state.events).forEach(([z, e]) => {
+    if (e.endsAt > serverNow() || state.evEnded[z] === e.endsAt || state.evSeen[z] !== e.endsAt) return;
+    state.evEnded[z] = e.endsAt;
+    if (z === state.zone && e.endsAt > state.sessionStart) logLine(`${e.title} ที่${ZONES[z].name} สิ้นสุดแล้ว สถานการณ์กลับสู่ปกติ`, "info");
+  });
+  refreshDanger();
+  maybeStartAutoEvent();
+}
+
+// ไม่มีเซิร์ฟเวอร์ → ผู้เล่นที่ออนไลน์คนใดคนหนึ่งเป็นคนกดเริ่มเมื่อถึงเวลา (กฎฐานข้อมูลคุมคูลดาวน์/ช่วงค่าให้)
+async function maybeStartAutoEvent() {
+  if (state.autoBusy || state.autoOff || state.nextAuto === undefined || !state.profile || state.profile.banned) return;
+  if (serverNow() - state.sessionStart < 90000 || serverNow() < state.nextAuto) return;
+  state.autoBusy = true;
+  try {
+    await new Promise((r) => setTimeout(r, Math.random() * 8000));   // สุ่มหน่วง กันหลายคนชนกัน
+    if (state.autoOff || serverNow() < state.nextAuto) return;
+    const zones = Object.keys(ZONES).filter((z) => z !== "safe" && !activeEvent(z));
+    if (!zones.length) return;
+    const z = zones[Math.floor(Math.random() * zones.length)];
+    const pool = Object.entries(AUTO_EVENT_WEIGHTS);
+    let r = Math.random() * pool.reduce((t, [, w]) => t + w, 0), type = pool[0][0];
+    for (const [k, w] of pool) { if ((r -= w) < 0) { type = k; break; } }
+    const t = EVENT_TYPES[type], now = serverNow();
+    await update(ref(db), {
+      [`zoneEvents/${z}`]: { type, title: t.name, dmod: t.dmod, zmod: t.zmod, nmod: t.nmod, startedAt: serverTimestamp(), endsAt: now + (5 + Math.floor(Math.random() * 8)) * 60000, by: "auto", auto: true },
+      "eventMeta/nextAuto": now + (15 + Math.floor(Math.random() * 26)) * 60000
+    });
+  } catch (e) { /* มีคนอื่นเริ่มก่อน หรือยังไม่ถึงเวลา — ไม่ต้องแจ้งผู้เล่น */ }
+  finally { state.autoBusy = false; }
+}
+
+async function endEvent(z) {
+  try { await remove(ref(db, "zoneEvents/" + z)); toast("ยุติเหตุการณ์แล้ว"); }
+  catch (e) { toast(errMsg(e)); }
+}
+
+$("adm-ev-type").addEventListener("change", (e) => { $("adm-ev-custom").classList.toggle("hidden", e.target.value !== "custom"); });
+$("adm-ev-start").addEventListener("click", async () => {
+  if (!isStaff()) return;
+  const z = $("adm-ev-zone").value, type = $("adm-ev-type").value, t = EVENT_TYPES[type];
+  const dur = Math.max(1, Math.min(720, parseInt($("adm-ev-dur").value, 10) || 10));
+  const num = (id, lo, hi) => Math.max(lo, Math.min(hi, parseInt($(id).value, 10) || 0));
+  const e = type === "custom"
+    ? { type, title: $("adm-ev-title").value.trim().slice(0, 40) || t.name, dmod: num("adm-ev-dmod", -10, 10), zmod: num("adm-ev-zmod", -100, 100), nmod: num("adm-ev-nmod", -100, 100) }
+    : { type, title: t.name, dmod: t.dmod, zmod: t.zmod, nmod: t.nmod };
+  try {
+    await set(ref(db, "zoneEvents/" + z), { ...e, startedAt: serverTimestamp(), endsAt: serverNow() + dur * 60000, by: state.profile.username, auto: false });
+    toast(`เริ่ม ${e.title} ที่ ${ZONES[z].name} นาน ${dur} นาที`);
+  } catch (ex) { toast(errMsg(ex)); }
+});
+$("adm-ev-end").addEventListener("click", () => endEvent($("adm-ev-zone").value));
+$("adm-ev-auto").addEventListener("change", async (e) => {
+  try { await set(ref(db, "eventMeta/autoOff"), !e.target.checked); toast(e.target.checked ? "เปิดเหตุการณ์สุ่มแล้ว" : "ปิดเหตุการณ์สุ่มแล้ว"); }
+  catch (ex) { toast(errMsg(ex)); e.target.checked = !e.target.checked; }
 });

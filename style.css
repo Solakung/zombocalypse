@@ -379,3 +379,5 @@ textarea#chat-input {
 .danger-line.d0 { color: #6ec07a; } .danger-line.d1 { color: #b5c95a; }
 .danger-line.d2 { color: #e0a030; } .danger-line.d3 { color: #e0742f; } .danger-line.d4 { color: #ff5b47; }
 .list li small.muted { font-size: 12.5px; }
+
+.event-line { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--hazard); }
