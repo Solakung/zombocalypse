@@ -345,7 +345,7 @@ function startGame() {
     state.profile = p;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -1095,6 +1095,7 @@ function buildAdmin() {
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
   itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/พิเศษ)"]);
   fillSelect($("adm-item"), itemOpts);
+  fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
 
 $("btn-admin").addEventListener("click", () => {
@@ -1121,7 +1122,7 @@ $("adm-ann-send").addEventListener("click", async () => {
   } catch (e) { toast(errMsg(e)); }
 });
 
-$("adm-spawn").addEventListener("click", async () => {
+function readAdminItem() {
   const itemId = $("adm-item").value;
   const qty = Math.max(1, Math.min(99, parseInt($("adm-qty").value, 10) || 1));
   const isFood = itemId === "custom_food";
@@ -1142,6 +1143,11 @@ $("adm-spawn").addEventListener("click", async () => {
     def = { name: customData.name, type: customData.type };
   }
   const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
+  return { itemId, qty, isFood, customData, def, single };
+}
+
+$("adm-spawn").addEventListener("click", async () => {
+  const { itemId, qty, isFood, customData, def, single } = readAdminItem();
 
   try {
     if ($("adm-mode").value === "zone") {
@@ -1379,4 +1385,115 @@ $("adm-ev-end").addEventListener("click", () => endEvent($("adm-ev-zone").value)
 $("adm-ev-auto").addEventListener("change", async (e) => {
   try { await set(ref(db, "eventMeta/autoOff"), !e.target.checked); toast(e.target.checked ? "เปิดเหตุการณ์สุ่มแล้ว" : "ปิดเหตุการณ์สุ่มแล้ว"); }
   catch (ex) { toast(errMsg(ex)); e.target.checked = !e.target.checked; }
+});
+
+/* =========================================================
+   12) กระดานภารกิจ (GM โพสต์ → ผู้เล่นรับ/ส่งมอบ → GM ตรวจรับและมอบรางวัล)
+   ========================================================= */
+const NEED_ITEMS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink"];
+const rewardText = (r) => { const d = defOf(r); return `${d?.icon || "🗡️"} ${d?.name || "ไอเทม"}${r.qty > 1 ? " ×" + r.qty : ""}`; };
+const needText = (n) => `${ITEMS[n.id].icon} ${ITEMS[n.id].name} ×${n.qty}`;
+
+function listenQuests() { onValue(ref(db, "quests"), (s) => { state.quests = s.val() || {}; renderQuests(); }); }
+
+function renderQuests() {
+  const ul = $("quest-list"); if (!ul) return; ul.innerHTML = "";
+  Object.entries(state.quests || {}).sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0)).forEach(([id, q]) => {
+    const mine = q.claimer === state.uid;
+    const li = mk("li", "quest");
+    li.append(mk("b", "", q.title));
+    if (q.desc) li.append(mk("small", "muted", q.desc));
+    li.append(mk("small", "", `🎁 ${rewardText(q.reward)}${q.need ? ` • ต้องส่ง ${needText(q.need)}` : ""}`));
+    li.append(mk("small", "muted", q.status === "open" ? "สถานะ: ว่าง" : q.status === "taken" ? `🧍 ${q.claimerName} กำลังทำ` : `⏳ ${q.claimerName} ส่งมอบแล้ว รอ GM ตรวจ`));
+    const row = mk("div", "row-btns");
+    if (q.status === "open") row.append(btn("รับภารกิจ", () => questAccept(id)));
+    if (q.status === "taken" && mine) { row.append(btn("ส่งมอบ", () => questDeliver(id))); row.append(btn("ยกเลิก", () => questAbandon(id), "btn ghost mini")); }
+    if (isStaff()) {
+      if (q.status === "submitted") { row.append(btn("อนุมัติ", () => questApprove(id))); row.append(btn("ปฏิเสธ", () => questReject(id), "btn ghost mini")); }
+      row.append(btn("ลบ", () => { if (confirm("ลบภารกิจนี้?")) remove(ref(db, "quests/" + id)).catch((e) => toast(errMsg(e))); }, "btn danger mini"));
+    }
+    if (row.children.length) li.append(row);
+    ul.append(li);
+  });
+  if (!ul.children.length) ul.append(mk("li", "empty", "ยังไม่มีภารกิจ"));
+}
+
+async function questAccept(id) {
+  const q = state.quests[id]; if (!q || q.status !== "open" || state.busy) return;
+  if (Object.values(state.quests).some((x) => x.claimer === state.uid)) return toast("คุณมีภารกิจค้างอยู่ ทำให้เสร็จหรือยกเลิกก่อน");
+  state.busy = true;
+  try {
+    await update(ref(db), { [`quests/${id}/status`]: "taken", [`quests/${id}/claimer`]: state.uid, [`quests/${id}/claimerName`]: state.profile.username });
+    toast(`รับภารกิจ “${q.title}” แล้ว`); logLine(`📜 คุณรับภารกิจ “${q.title}”`, "info");
+  } catch { toast("มีคนรับภารกิจนี้ไปก่อน หรือภารกิจถูกลบแล้ว"); }
+  finally { state.busy = false; }
+}
+
+async function questDeliver(id) {
+  const q = state.quests[id]; if (!q || q.claimer !== state.uid || q.status !== "taken" || state.busy) return;
+  const u = { [`quests/${id}/status`]: "submitted" };
+  if (q.need) {
+    const have = state.inv[q.need.id]?.qty || 0;
+    if (have < q.need.qty) return toast(`ของไม่พอ ต้องมี ${needText(q.need)}`);
+    if (have > q.need.qty) u[`inventory/${state.uid}/${q.need.id}/qty`] = have - q.need.qty; else u[`inventory/${state.uid}/${q.need.id}`] = null;
+  }
+  state.busy = true;
+  try { await update(ref(db), u); toast("ส่งมอบแล้ว รอ GM ตรวจรับ"); logLine(`📜 คุณส่งมอบภารกิจ “${q.title}” รอ GM ตรวจรับ`, "info"); }
+  catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+async function questAbandon(id) {
+  const q = state.quests[id]; if (!q || q.claimer !== state.uid || q.status !== "taken" || state.busy) return;
+  state.busy = true;
+  try { await update(ref(db), { [`quests/${id}/status`]: "open", [`quests/${id}/claimer`]: null, [`quests/${id}/claimerName`]: null }); toast("ยกเลิกภารกิจแล้ว"); }
+  catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+async function grantItem(target, spec) {
+  if (spec.id === "custom" || spec.id === "custom_food" || ITEMS[spec.id]?.type === "weapon") {
+    const k = push(ref(db, `inventory/${target}`)).key;
+    await set(ref(db, `inventory/${target}/${k}`), spec);
+  } else {
+    await runTransaction(ref(db, `inventory/${target}/${spec.id}`), (cur) => ({ id: spec.id, qty: Math.min(99, (cur?.qty || 0) + spec.qty) }));
+  }
+}
+
+async function questApprove(id) {
+  const q = state.quests[id]; if (!isStaff() || !q || q.status !== "submitted" || state.busy) return;
+  state.busy = true;
+  try {
+    await grantItem(q.claimer, q.reward);
+    await remove(ref(db, "quests/" + id));
+    await push(ref(db, "announcements"), { text: `📜 ${q.claimerName} ทำภารกิจ “${q.title}” สำเร็จ ได้รับ ${rewardText(q.reward)}`.slice(0, 200), zone: "all", by: state.profile.username, ts: serverTimestamp() });
+    toast("อนุมัติและมอบรางวัลแล้ว");
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+async function questReject(id) {
+  if (!isStaff()) return;
+  try { await update(ref(db), { [`quests/${id}/status`]: "taken" }); toast("ส่งกลับให้ผู้เล่นทำต่อแล้ว"); }
+  catch (e) { toast(errMsg(e)); }
+}
+
+$("adm-q-post").addEventListener("click", async () => {
+  const title = $("adm-q-title").value.trim().slice(0, 60);
+  if (!title) return toast("ใส่ชื่อภารกิจก่อน");
+  const { itemId, qty, isFood, customData, def } = readAdminItem();
+  let reward;
+  if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
+  else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
+  else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
+  else reward = { id: itemId, qty };
+  const quest = { title, by: state.profile.username, ts: serverTimestamp(), status: "open", reward };
+  const desc = $("adm-q-desc").value.trim().slice(0, 300); if (desc) quest.desc = desc;
+  const needId = $("adm-q-need").value;
+  if (needId) quest.need = { id: needId, qty: Math.max(1, Math.min(50, parseInt($("adm-q-need-qty").value, 10) || 1)) };
+  try {
+    await push(ref(db, "quests"), quest);
+    ["adm-q-title", "adm-q-desc"].forEach((i) => { $(i).value = ""; });
+    toast(`โพสต์ภารกิจ “${title}” แล้ว`);
+  } catch (e) { toast(errMsg(e)); }
 });
