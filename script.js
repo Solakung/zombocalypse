@@ -44,10 +44,19 @@ const ITEMS = {
   knife: { name: "มีด", icon: "🔪", type: "weapon", dmg: 12, maxDur: 25 },
   crowbar: { name: "ชะแลง", icon: "🔧", type: "weapon", dmg: 10, maxDur: 30 },
   pistol: { name: "ปืนพก", icon: "🔫", type: "weapon", dmg: 25, maxDur: 12 },
+  bread: { name: "ขนมปัง", icon: "🍞", type: "consumable", food: 20 },
+  fruit: { name: "ผลไม้", icon: "🍎", type: "consumable", food: 10, water: 10 },
+  moss: { name: "มอส", icon: "🌿", type: "consumable", heal: 15 },
+  energy_drink: { name: "เครื่องดื่มชูกำลัง", icon: "⚡", type: "consumable", stamina: 30 },
   super_ration: { name: "เสบียงพิเศษ", icon: "🍱", type: "consumable", heal: 50, food: 100, water: 100, gmOnly: true },
   admin_katana: { name: "ดาบคาตานะ", icon: "🗡️", type: "weapon", dmg: 40, maxDur: 60, gmOnly: true },
   scrap: { name: "เศษผ้าและวัสดุ", icon: "🧵", type: "material" }
 };
+
+// อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
+const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: "🍽️", ...x } : ITEMS[x.id]);
+const foodFields = (x) => ({ name: x.name, type: "consumable", ...["food", "water", "heal", "stamina"].reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
+const effectText = (d) => [d.heal && `HP +${d.heal}`, d.food && `อาหาร +${d.food}`, d.water && `น้ำ +${d.water}`, d.stamina && `พลังงาน +${d.stamina}`].filter(Boolean).join(" ");
 
 // สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
 const RECIPES = { bandage: { need: { scrap: 2 }, out: "bandage", qty: 1 } };
@@ -57,17 +66,31 @@ const weaponBonus = (def) => (def.dmg >= 25 ? 3 : def.dmg >= 10 ? 2 : 1);
 
 const FACTION_PERK = {
   human: "มนุษย์: คราฟต์ผ้าพันแผลจากเศษวัสดุที่ Safe Zone ได้ / ซอมบี้ป่าจะโจมตีคุณ ต้องทอยลูกเต๋าสู้หรือหนี",
-  zombie: "ซอมบี้: กินอาหารกระป๋องไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า"
+  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า"
 };
 
+// danger = ระดับอันตราย 0-10 (กำหนดเอง ปรับได้) / โอกาสเจอซอมบี้คำนวณจากตารางดรอปจริง
 const ZONES = {
-  safe: { name: "Safe Zone", icon: "🏕️️", desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 20 }, { id: "water", w: 20 }, { id: "bandage", w: 5 }, { id: "scrap", w: 5 }, { id: null, w: 50 }] },
-  ruins: { name: "เขตเมืองร้าง", icon: "🏚️", desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 15 }, { id: "water", w: 15 }, { id: "wooden_bat", w: 8 }, { id: "knife", w: 6 }, { id: "scrap", w: 12 }, { id: null, w: 29 }] },
-  mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 25 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: "scrap", w: 10 }, { id: null, w: 10 }] },
-  hospital: { name: "โรงพยาบาล", icon: "🏥", desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 20 }, { id: "bandage", w: 20 }, { id: "medkit", w: 12 }, { id: "water", w: 10 }, { id: "scrap", w: 8 }, { id: null, w: 30 }] },
-  police: { name: "สถานีตำรวจ", icon: "🚓", desc: "สถานที่หาอาวุธชั้นดี ถ้าคุณรอดจากฝูงผีได้", drops: [{ id: "zombie", w: 30 }, { id: "pistol", w: 10 }, { id: "knife", w: 15 }, { id: "bandage", w: 5 }, { id: null, w: 40 }] },
-  forest: { name: "ป่าลึก", icon: "🌲", desc: "เงียบสงบ อาจจะเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: "pistol", w: 5 }, { id: "scrap", w: 8 }, { id: null, w: 47 }] }
+  safe: { name: "Safe Zone", icon: "🏕️", danger: 0, desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 15 }, { id: "bread", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 5 }, { id: "bandage", w: 5 }, { id: "scrap", w: 5 }, { id: null, w: 45 }] },
+  ruins: { name: "เขตเมืองร้าง", icon: "🏚️", danger: 4, desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 12 }, { id: "bread", w: 8 }, { id: "water", w: 12 }, { id: "fruit", w: 4 }, { id: "energy_drink", w: 3 }, { id: "wooden_bat", w: 8 }, { id: "knife", w: 6 }, { id: "scrap", w: 12 }, { id: null, w: 20 }] },
+  mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", danger: 6, desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 18 }, { id: "bread", w: 10 }, { id: "water", w: 16 }, { id: "energy_drink", w: 6 }, { id: "crowbar", w: 10 }, { id: "scrap", w: 8 }, { id: null, w: 7 }] },
+  hospital: { name: "โรงพยาบาล", icon: "🏥", danger: 7, desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 28 }, { id: "bandage", w: 15 }, { id: "medkit", w: 10 }, { id: "moss", w: 6 }, { id: "water", w: 10 }, { id: "energy_drink", w: 5 }, { id: "scrap", w: 8 }, { id: null, w: 18 }] },
+  police: { name: "สถานีตำรวจ", icon: "🚓", danger: 9, desc: "สถานที่หาอาวุธชั้นดี ถ้าคุณรอดจากฝูงผีได้", drops: [{ id: "zombie", w: 30 }, { id: "pistol", w: 10 }, { id: "knife", w: 12 }, { id: "bandage", w: 5 }, { id: "bread", w: 5 }, { id: "energy_drink", w: 5 }, { id: null, w: 33 }] },
+  forest: { name: "ป่าลึก", icon: "🌲", danger: 2, desc: "เงียบสงบ ผลไม้และมอสขึ้นชุก อาจเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 18 }, { id: "moss", w: 12 }, { id: "crowbar", w: 8 }, { id: "pistol", w: 4 }, { id: "scrap", w: 8 }, { id: null, w: 25 }] }
 };
+
+function dangerInfo(id) {
+  const z = ZONES[id], total = z.drops.reduce((t, d) => t + d.w, 0);
+  const chance = Math.round((100 * (z.drops.find((d) => d.id === "zombie")?.w || 0)) / total);
+  const tier = z.danger === 0 ? 0 : z.danger <= 3 ? 1 : z.danger <= 6 ? 2 : z.danger <= 8 ? 3 : 4;
+  return { chance, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier] };
+}
+function renderZoneDanger(z) {
+  const el = $("zone-danger"); if (!el) return;
+  const d = dangerInfo(z);
+  el.className = "danger-line d" + d.tier;
+  el.textContent = `ระดับอันตราย ${ZONES[z].danger}/10 (${d.label}) • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${z === "safe" ? "ต่อสู้ระหว่างผู้เล่นไม่ได้" : "ผู้เล่นโจมตีกันได้"}`;
+}
 
 /* =========================================================
    3) State + Helpers
@@ -308,7 +331,10 @@ function buildZoneList() {
   const ul = $("zone-list"); ul.innerHTML = "";
   Object.entries(ZONES).forEach(([id, z]) => {
     const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
-    const b = mk("button", "zone-btn", `${z.icon} ${z.name}`);
+    const b = mk("button", "zone-btn");
+    const dg = dangerInfo(id);
+    b.append(mk("span", "", `${z.icon} ${z.name}`), mk("span", "danger-tag d" + dg.tier, `⚠ ${z.danger}/10`));
+    b.title = `อันตราย ${z.danger}/10 • เจอซอมบี้ ${dg.chance}%`;
     b.dataset.zone = id;
     b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
     li.append(b); ul.append(li);
@@ -326,7 +352,7 @@ async function enterZone(z, initial = false) {
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
     teardownZone(); state.zone = z; state.ground = {};
-    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc;
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft();
 
@@ -564,7 +590,7 @@ function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
   ul.innerHTML = "";
   Object.entries(state.inv).forEach(([slot, it]) => {
-    const def = it.id === "custom" ? it : ITEMS[it.id]; if (!def) return;
+    const def = defOf(it); if (!def) return;
     const li = mk("li");
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
@@ -576,7 +602,9 @@ function renderInv() {
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       li.append(btnGrp);
     } else {
-      li.append(mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`));
+      const lbl = mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`);
+      const fx = effectText(def); if (fx) lbl.append(mk("small", "muted", ` (${fx})`));
+      li.append(lbl);
       
       const btnGrp = mk("div", "row-btns");
       if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)));
@@ -627,7 +655,7 @@ async function dropItem(slot) {
   const it = state.inv[slot]; if (!it) return;
   state.busy = true;
   
-  const def = it.id === "custom" ? it : ITEMS[it.id];
+  const def = defOf(it);
   const p = state.profile;
   const u = {};
 
@@ -637,7 +665,8 @@ async function dropItem(slot) {
   u[`zoneItems/${state.zone}/${key}`] = {
     id: it.id, qty: 1, src: slot,
     ...(it.dur ? { dur: it.dur } : {}),
-    ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {})
+    ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {}),
+    ...(it.id === "custom_food" ? foodFields(it) : {})
   };
 
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
@@ -654,7 +683,7 @@ async function dropItem(slot) {
 function renderGround() {
   const ul = $("ground-list"); ul.innerHTML = "";
   Object.entries(state.ground).forEach(([key, g]) => {
-    const def = g.id === "custom" ? g : ITEMS[g.id]; if (!def) return;
+    const def = defOf(g); if (!def) return;
     const li = mk("li");
     li.append(mk("span", "", `📦 ${def.name}${def.type === "consumable" ? " ×" + g.qty : ""}`));
     li.append(btn("เก็บ", (e) => pickup(key, e.target)));
@@ -667,6 +696,11 @@ function invAddUpdate(u, itemId, qty, src, dur, customData) {
   if (itemId === "custom" && customData) {
     const k = push(ref(db, "inventory/" + state.uid)).key;
     u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {}) };
+    return;
+  }
+  if (itemId === "custom_food" && customData) {
+    const k = push(ref(db, "inventory/" + state.uid)).key;
+    u[`inventory/${state.uid}/${k}`] = { id: "custom_food", qty: 1, ...foodFields(customData), ...(src ? { src } : {}) };
     return;
   }
   const def = ITEMS[itemId];
@@ -683,10 +717,10 @@ async function pickup(key, btnEl) {
   if (btnEl) btnEl.disabled = true;
   const g = state.ground[key]; if (!g) return;
   const u = { [`zoneItems/${state.zone}/${key}`]: null };
-  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : null;
+  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : g.id === "custom_food" ? g : null;
   
   invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData);
-  try { await update(ref(db), u); toast(`เก็บ ${g.id === "custom" ? g.name : ITEMS[g.id].name} แล้ว`); } 
+  try { await update(ref(db), u); toast(`เก็บ ${defOf(g).name} แล้ว`); } 
   catch { toast("มีคนเก็บไปก่อนแล้ว หรือกระเป๋าเต็ม"); if (btnEl) btnEl.disabled = false; }
 }
 
@@ -696,29 +730,25 @@ async function equip(slot, isEquipped) {
 }
 
 async function useItem(slot) {
-  const it = state.inv[slot], def = it && ITEMS[it.id], p = state.profile;
+  const it = state.inv[slot], def = it && defOf(it), p = state.profile;
   if (!def || def.type !== "consumable") return;
-  if (p.faction === "zombie" && it.id === "canned_food") return toast("ซอมบี้กินอาหารกระป๋องไม่ลง… ต้องกัดเหยื่อเท่านั้น");
+  // ซอมบี้ได้อาหารจากการกัดเท่านั้น (ยกเว้นเสบียงพิเศษ/อาหาร custom ของแอดมิน) แต่ยังใช้ส่วนน้ำ/HP/พลังงานของไอเทมได้
+  const zombieNoFood = p.faction === "zombie" && def.food && !def.gmOnly && it.id !== "custom_food";
+  const foodGain = zombieNoFood ? 0 : (def.food || 0);
+  const fd = p.food ?? 100, wt = p.water ?? 100, cur = curStamina();
+  const u = {}, msgs = [];
 
-  const fd = p.food ?? 100, wt = p.water ?? 100;
-  let healed = false; let msgs = [];
-  const u = {};
-
-  if (def.heal && p.hp < HP_MAX) {
-    u["users/" + state.uid + "/hp"] = Math.min(HP_MAX, p.hp + def.heal);
-    msgs.push(`ฟื้น ${def.heal} HP`); healed = true;
-  }
-  if (def.food && fd < 100) {
-    u["users/" + state.uid + "/food"] = Math.min(100, fd + def.food);
-    msgs.push(`อาหาร +${def.food}`); healed = true;
-  }
-  if (def.water && wt < 100) {
-    u["users/" + state.uid + "/water"] = Math.min(100, wt + def.water);
-    msgs.push(`น้ำ +${def.water}`); healed = true;
+  if (def.heal && p.hp < HP_MAX) { const n = Math.min(HP_MAX, p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
+  if (foodGain && fd < 100) { const n = Math.min(100, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร +${n - fd}`); }
+  if (def.water && wt < 100) { const n = Math.min(100, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ +${n - wt}`); }
+  if (def.stamina && cur < STAMINA_MAX) {
+    const n = Math.min(STAMINA_MAX, cur + def.stamina);
+    u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
   }
 
-  if (!healed) return toast("สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
+  if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
+  if (it.id === "custom_food") u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
@@ -1004,7 +1034,7 @@ function buildAdmin() {
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   fillSelect($("adm-clear-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"]);
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างอาหารเอง (Custom)"]);
   fillSelect($("adm-item"), itemOpts);
 }
 
@@ -1018,7 +1048,10 @@ $("adm-mode").addEventListener("change", (e) => {
   $("adm-target-id").classList.toggle("hidden", e.target.value !== "player");
   $("adm-target-zone").classList.toggle("hidden", e.target.value !== "zone");
 });
-$("adm-item").addEventListener("change", (e) => { $("adm-custom-fields").classList.toggle("hidden", e.target.value !== "custom"); });
+$("adm-item").addEventListener("change", (e) => {
+  $("adm-custom-fields").classList.toggle("hidden", e.target.value !== "custom");
+  $("adm-food-fields").classList.toggle("hidden", e.target.value !== "custom_food");
+});
 
 $("adm-ann-send").addEventListener("click", async () => {
   const text = $("adm-ann-text").value.trim().slice(0, 200); if (!text) return;
@@ -1032,6 +1065,7 @@ $("adm-ann-send").addEventListener("click", async () => {
 $("adm-spawn").addEventListener("click", async () => {
   const itemId = $("adm-item").value;
   const qty = Math.max(1, Math.min(99, parseInt($("adm-qty").value, 10) || 1));
+  const isFood = itemId === "custom_food";
   let customData = null, def = ITEMS[itemId];
 
   if (itemId === "custom") {
@@ -1041,16 +1075,24 @@ $("adm-spawn").addEventListener("click", async () => {
     customData = { name: cName, dmg: cDmg, dur: cDur };
     def = { name: cName, type: "weapon", maxDur: cDur };
   }
+  if (isFood) {
+    const num = (id) => Math.max(0, Math.min(100, parseInt($(id).value, 10) || 0));
+    customData = { name: $("adm-food-name").value.trim().slice(0, 40) || "อาหารปริศนา", food: num("adm-food-food"), water: num("adm-food-water"), heal: num("adm-food-hp"), stamina: num("adm-food-st") };
+    if (!customData.food && !customData.water && !customData.heal && !customData.stamina) return toast("ใส่ค่าอย่างน้อย 1 ช่อง (อาหาร/น้ำ/HP/พลังงาน)");
+    def = { name: customData.name, type: "consumable" };
+  }
+  const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
 
   try {
     if ($("adm-mode").value === "zone") {
       const z = $("adm-target-zone").value;
-      const n = def.type === "weapon" ? Math.min(qty, 10) : 1;
+      const n = single ? Math.min(qty, 10) : 1;
       for (let i = 0; i < n; i++) {
         await push(ref(db, "zoneItems/" + z), {
-          id: itemId, qty: def.type === "weapon" ? 1 : qty,
+          id: itemId, qty: single ? 1 : qty,
           ...(def.type === "weapon" ? { dur: def.maxDur } : {}),
-          ...(customData ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon" } : {})
+          ...(itemId === "custom" ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon" } : {}),
+          ...(isFood ? foodFields(customData) : {})
         });
       }
       toast(`วาง ${def.name} ไว้ใน ${ZONES[z].name} แล้ว`);
@@ -1060,7 +1102,10 @@ $("adm-spawn").addEventListener("click", async () => {
       const t = await get(ref(db, "users/" + target));
       if (!t.exists()) return toast("ไม่พบ Player ID นี้");
 
-      if (def.type === "weapon") {
+      if (isFood) {
+        const k = push(ref(db, `inventory/${target}`)).key;
+        await set(ref(db, `inventory/${target}/${k}`), { id: "custom_food", qty, ...foodFields(customData) });
+      } else if (def.type === "weapon") {
         for (let i = 0; i < Math.min(qty, 10); i++) {
           const k = push(ref(db, `inventory/${target}`)).key;
           await update(ref(db), {

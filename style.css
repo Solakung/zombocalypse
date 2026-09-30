@@ -366,3 +366,16 @@ textarea#chat-input {
 /* โหมดลบข้อความ (GM) */
 .chat-log.del-mode .msg { cursor: pointer; }
 .chat-log.del-mode .msg:hover .bubble { outline: 2px dashed var(--danger); }
+
+/* =========================================
+   ระดับอันตรายของโซน
+   ========================================= */
+.zone-btn { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.danger-tag { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 10px; white-space: nowrap; color: #15181b; }
+.danger-tag.d0 { background: #6ec07a; } .danger-tag.d1 { background: #b5c95a; }
+.danger-tag.d2 { background: #e0a030; } .danger-tag.d3 { background: #e0742f; }
+.danger-tag.d4 { background: #d0432f; color: #fff; }
+.danger-line { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.danger-line.d0 { color: #6ec07a; } .danger-line.d1 { color: #b5c95a; }
+.danger-line.d2 { color: #e0a030; } .danger-line.d3 { color: #e0742f; } .danger-line.d4 { color: #ff5b47; }
+.list li small.muted { font-size: 12.5px; }

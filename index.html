@@ -95,6 +95,7 @@
         <div class="chat-head">
           <h2 id="zone-title">—</h2>
           <p id="zone-desc" class="muted"></p>
+          <p id="zone-danger" class="danger-line"></p>
         </div>
         <div id="chat-log" class="chat-log" aria-live="polite"></div>
         <form id="chat-form" class="chat-form" autocomplete="off">
@@ -210,6 +211,14 @@
           <input id="adm-custom-name" placeholder="ชื่ออาวุธ (เช่น ดาบเลเซอร์)">
           <input id="adm-custom-dmg" type="number" min="1" max="999" placeholder="พลังโจมตี (ดาเมจ)">
           <input id="adm-custom-dur" type="number" min="1" max="999" placeholder="ความคงทน (จำนวนครั้งที่ฟันได้)">
+        </div>
+
+        <div id="adm-food-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-food-name" maxlength="40" placeholder="ชื่ออาหาร (เช่น ซุปร้อน)">
+          <input id="adm-food-food" type="number" min="0" max="100" placeholder="เติมอาหาร (0-100)">
+          <input id="adm-food-water" type="number" min="0" max="100" placeholder="เติมน้ำ (0-100)">
+          <input id="adm-food-hp" type="number" min="0" max="100" placeholder="ฟื้น HP (0-100)">
+          <input id="adm-food-st" type="number" min="0" max="100" placeholder="เติมพลังงาน (0-100)">
         </div>
 
         <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน" placeholder="จำนวน (ชิ้น)" style="margin-top: 8px;">
