@@ -91,8 +91,8 @@ const eventIcon = (e) => EVENT_TYPES[e?.type]?.icon || "⚠️";
 const minsLeft = (e) => Math.max(1, Math.ceil((e.endsAt - serverNow()) / 60000));
 const activeEvent = (z) => { const e = state.events?.[z]; return e && e.endsAt > serverNow() ? e : null; };
 // วัฏจักรกลางวัน/กลางคืน: คำนวณจากเวลาเซิร์ฟเวอร์ ทุกคนเห็นตรงกัน ไม่ต้องเก็บข้อมูล
-// รอบละ 60 นาที: นาทีที่ 0-39 = กลางวัน, 40-59 = กลางคืน (ปรับได้ที่ 2 ค่านี้) / Safe Zone ไม่ได้รับผล
-const DAY_CYCLE = 60 * 60000, NIGHT_START = 40 * 60000;
+// รอบละ 100 นาที: นาทีที่ 0-59 = กลางวัน (1 ชม.), 60-99 = กลางคืน (40 นาที) (ปรับได้ที่ 2 ค่านี้) / Safe Zone ไม่ได้รับผล
+const DAY_CYCLE = 100 * 60000, NIGHT_START = 60 * 60000;
 const NIGHT_MOD = { dmod: 2, zmod: 10, nmod: 0 };
 const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
