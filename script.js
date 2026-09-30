@@ -54,8 +54,8 @@ const ITEMS = {
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
-const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: "🍽️", ...x } : ITEMS[x.id]);
-const foodFields = (x) => ({ name: x.name, type: "consumable", ...["food", "water", "heal", "stamina"].reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
+const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : "🍽️", ...x } : ITEMS[x.id]);
+const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...["food", "water", "heal", "stamina"].reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
 const effectText = (d) => [d.heal && `HP +${d.heal}`, d.food && `อาหาร +${d.food}`, d.water && `น้ำ +${d.water}`, d.stamina && `พลังงาน +${d.stamina}`].filter(Boolean).join(" ");
 
 // สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
@@ -1034,7 +1034,7 @@ function buildAdmin() {
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   fillSelect($("adm-clear-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างอาหารเอง (Custom)"]);
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/พิเศษ)"]);
   fillSelect($("adm-item"), itemOpts);
 }
 
@@ -1077,9 +1077,10 @@ $("adm-spawn").addEventListener("click", async () => {
   }
   if (isFood) {
     const num = (id) => Math.max(0, Math.min(100, parseInt($(id).value, 10) || 0));
-    customData = { name: $("adm-food-name").value.trim().slice(0, 40) || "อาหารปริศนา", food: num("adm-food-food"), water: num("adm-food-water"), heal: num("adm-food-hp"), stamina: num("adm-food-st") };
-    if (!customData.food && !customData.water && !customData.heal && !customData.stamina) return toast("ใส่ค่าอย่างน้อย 1 ช่อง (อาหาร/น้ำ/HP/พลังงาน)");
-    def = { name: customData.name, type: "consumable" };
+    customData = { name: $("adm-food-name").value.trim().slice(0, 40) || "ไอเทมปริศนา", icon: [...$("adm-food-icon").value.trim()].slice(0, 2).join(""), food: num("adm-food-food"), water: num("adm-food-water"), heal: num("adm-food-hp"), stamina: num("adm-food-st") };
+    // มีค่าอย่างน้อย 1 ช่อง = ใช้ได้ (อาหาร/น้ำ/ยา/ชูกำลัง) / เว้นว่างหมด = ไอเทมพิเศษ ใช้ไม่ได้ (ของสะสม)
+    customData.type = (customData.food || customData.water || customData.heal || customData.stamina) ? "consumable" : "material";
+    def = { name: customData.name, type: customData.type };
   }
   const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
 
