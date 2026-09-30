@@ -39,10 +39,10 @@
         <span class="label">เลือกฝ่าย</span>
         <div class="faction-pick">
           <button type="button" class="faction-btn human" data-faction="human">
-            <span class="ico">👤</span><b>มนุษย์</b><small>รวมกลุ่ม ค้นหาเสบียง ปกป้องค่าย</small>
+            <span class="ico">👤</span><b>มนุษย์</b><small>ค้นหาเสบียง คราฟต์ผ้าพันแผลที่ค่าย ทอยสู้ซอมบี้ป่า</small>
           </button>
           <button type="button" class="faction-btn zombie" data-faction="zombie">
-            <span class="ico">🧟</span><b>ซอมบี้</b><small>ล่าเหยื่อ แพร่เชื้อ ครองเมือง</small>
+            <span class="ico">🧟</span><b>ซอมบี้</b><small>ล่าเหยื่อ ต้องกัดคนเพื่อเติมอาหาร ซอมบี้ป่าไม่ทำร้าย</small>
           </button>
         </div>
       </div>
@@ -98,7 +98,7 @@
         </div>
         <div id="chat-log" class="chat-log" aria-live="polite"></div>
         <form id="chat-form" class="chat-form" autocomplete="off">
-          <textarea id="chat-input" maxlength="200" rows="1" placeholder="พิมพ์คุยกับคนในโซนนี้…"></textarea>
+          <textarea id="chat-input" maxlength="200" rows="1" placeholder="พิมพ์คุยกับคนในโซนนี้… (/help ดูคำสั่ง)"></textarea>
           <button class="btn primary">ส่ง</button>
         </form>
       </section>
@@ -109,6 +109,11 @@
         <ul id="ground-list" class="list"></ul>
         <h2>กระเป๋า</h2>
         <ul id="inv-list" class="list"></ul>
+        <div id="craft-section" class="hidden">
+          <h2>คราฟต์ (มนุษย์)</h2>
+          <ul id="craft-list" class="list"></ul>
+          <p id="craft-hint" class="muted"></p>
+        </div>
       </aside>
     </main>
 
@@ -143,6 +148,21 @@
           <span class="muted">อาวุธที่ถืออยู่:</span> <b id="prof-val-wpn" style="color: var(--hazard);">มือเปล่า (ดาเมจ 5)</b>
         </div>
       </div>
+      <p id="prof-perk" class="muted"></p>
+      <label for="prof-bio">ประวัติตัวละคร (คนอื่นกดดูได้จากรายชื่อผู้เล่น)</label>
+      <textarea id="prof-bio" maxlength="300" rows="4" placeholder="เล่าที่มาของตัวละครคุณ…"></textarea>
+      <button id="prof-bio-save" class="btn primary wide">บันทึกประวัติ</button>
+    </div>
+  </div>
+
+  <!-- ===== ดูประวัติผู้เล่นคนอื่น ===== -->
+  <div id="bio-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width: 360px;">
+      <div class="modal-head">
+        <h2 id="bio-title">ประวัติ</h2>
+        <button id="bio-close" class="btn ghost mini">ปิด</button>
+      </div>
+      <p id="bio-text" class="bio-text"></p>
     </div>
   </div>
 

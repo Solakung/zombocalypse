@@ -333,3 +333,31 @@ textarea#chat-input {
   font-family: inherit;
   width: 100%;
 }
+
+/* =========================================
+   โรลเพลย์: /me, กระซิบ, ตะโกน, ประวัติ, คราฟต์
+   ========================================= */
+.list li { flex-wrap: wrap; }
+.row-btns { flex-wrap: wrap; }
+
+.msg.emote { align-items: center; }
+.msg.emote .bubble {
+  background: transparent; color: var(--text); font-style: italic;
+  text-align: center; border-radius: 8px; max-width: 95%; padding: 4px 8px;
+}
+
+.msg.whisper .bubble {
+  background: #33284a; color: #e6dcff; font-style: italic;
+  border: 1px dashed #7d62b8;
+}
+.msg.whisper.out { align-items: flex-end; }
+.msg.whisper.out .bubble { border-top-left-radius: 16px; border-top-right-radius: 4px; background: #261e38; }
+
+.msg.shout { align-items: center; }
+.msg.shout .bubble {
+  background: rgba(224, 160, 48, .14); color: var(--hazard); font-weight: 600;
+  border: 1px solid var(--hazard); border-radius: 8px; text-align: center; max-width: 95%;
+}
+
+.bio-text { white-space: pre-wrap; word-break: break-word; margin: 0; }
+#prof-bio { resize: none; }
