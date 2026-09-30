@@ -182,6 +182,27 @@
       </div>
 
       <div class="adm-section">
+        <h3>ควบคุมแชท</h3>
+        <input id="adm-mute-id" placeholder="Player ID ที่จะปิดแชท (หรือกด จัดการ ข้างชื่อผู้เล่น)">
+        <select id="adm-mute-dur">
+          <option value="5">5 นาที</option>
+          <option value="30">30 นาที</option>
+          <option value="60">1 ชั่วโมง</option>
+          <option value="1440">24 ชั่วโมง</option>
+        </select>
+        <div class="row-btns">
+          <button id="adm-mute" class="btn danger">ปิดแชท</button>
+          <button id="adm-unmute" class="btn ghost">เปิดแชท</button>
+        </div>
+        <ul id="adm-mute-list" class="list"></ul>
+        <select id="adm-clear-zone"></select>
+        <button id="adm-clear" class="btn danger">ล้างแชทของโซนนี้</button>
+        <label class="row-btns" style="align-items:center; font-weight:400;">
+          <input id="adm-delmode" type="checkbox" style="width:auto;"> โหมดลบข้อความ (แตะข้อความในแชทเพื่อลบทีละข้อความ)
+        </label>
+      </div>
+
+      <div class="adm-section">
         <h3>เสกไอเทม</h3>
         <select id="adm-item"></select>
         

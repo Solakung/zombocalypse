@@ -361,3 +361,8 @@ textarea#chat-input {
 
 .bio-text { white-space: pre-wrap; word-break: break-word; margin: 0; }
 #prof-bio { resize: none; }
+
+
+/* โหมดลบข้อความ (GM) */
+.chat-log.del-mode .msg { cursor: pointer; }
+.chat-log.del-mode .msg:hover .bubble { outline: 2px dashed var(--danger); }

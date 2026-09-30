@@ -74,7 +74,7 @@ const ZONES = {
    ========================================================= */
 const state = {
   uid: null, profile: null, zone: null, offset: 0, inv: {}, ground: {},
-  unsubs: [], players: {}, claimingBite: false, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve()
+  unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve()
 };
 
 const $ = (id) => document.getElementById(id);
@@ -283,7 +283,7 @@ function startGame() {
     state.profile = p;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); buildAdmin(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites();
+      show("game"); buildZoneList(); buildAdmin(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -373,6 +373,10 @@ function addChat(key, m) {
     el.append(sender, bubble); 
   }
 
+  if (isStaff()) el.addEventListener("click", () => {
+    if (!state.delMode) return;
+    if (confirm("ลบข้อความนี้?")) remove(ref(db, `chats/${state.zone}/${key}`)).catch((e) => toast(errMsg(e)));
+  });
   el.dataset.key = key; log.append(el);
   if (near) log.scrollTop = log.scrollHeight; notifyChat();
 }
@@ -395,8 +399,16 @@ function findZonePlayer(rest) {
   return null;
 }
 
+function muteBlock() {
+  const left = state.mutedUntil - serverNow();
+  if (left <= 0) return false;
+  toast(`คุณถูกปิดแชทอีก ${Math.ceil(left / 60000)} นาที`);
+  return true;
+}
+
 async function sendChat(raw) {
   const p = state.profile;
+  if (!/^\/(help|\?|ช่วยเหลือ)\s*$/i.test(raw) && muteBlock()) return;
   const postZone = async (text, type) => {
     await push(ref(db, "chats/" + state.zone), { uid: state.uid, name: p.username, faction: p.faction, text: text.slice(0, 200), type, ts: serverTimestamp() });
     trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
@@ -516,6 +528,11 @@ function renderPlayers(snap) {
       const grp = mk("div", "row-btns");
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
+      if (isStaff()) grp.append(btn("จัดการ", () => {
+        ["adm-mute-id", "adm-pid", "adm-target-id"].forEach((id) => { $(id).value = c.key; });
+        $("adm-clear-zone").value = state.zone; watchMutes();
+        $("admin-modal").classList.remove("hidden");
+      }, "btn ghost mini"));
       if (state.zone !== "safe") {
         const ab = btn("โจมตี", () => attack(c.key, v.name), "btn danger mini atk-btn");
         ab.dataset.uid = c.key; grp.append(ab);
@@ -985,12 +1002,17 @@ function fillSelect(sel, entries) { sel.innerHTML = ""; entries.forEach(([v, lab
 function buildAdmin() {
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
+  fillSelect($("adm-clear-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
   itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"]);
   fillSelect($("adm-item"), itemOpts);
 }
 
-$("btn-admin").addEventListener("click", () => { if (isStaff()) $("admin-modal").classList.remove("hidden"); });
+$("btn-admin").addEventListener("click", () => {
+  if (!isStaff()) return;
+  $("adm-clear-zone").value = state.zone; watchMutes();
+  $("admin-modal").classList.remove("hidden");
+});
 $("adm-close").addEventListener("click", () => $("admin-modal").classList.add("hidden"));
 $("adm-mode").addEventListener("change", (e) => {
   $("adm-target-id").classList.toggle("hidden", e.target.value !== "player");
@@ -1072,3 +1094,71 @@ async function ownerSet(patch, okMsg) {
 $("adm-setrole").addEventListener("click", () => ownerSet({ role: $("adm-role").value }, "ตั้งสิทธิ์แล้ว"));
 $("adm-ban").addEventListener("click", () => ownerSet({ banned: true }, "แบนแล้ว"));
 $("adm-unban").addEventListener("click", () => ownerSet({ banned: false }, "ปลดแบนแล้ว"));
+
+/* =========================================================
+   13) เครื่องมือ GM: ปิดแชทผู้เล่น / ล้างแชทโซน / ลบทีละข้อความ
+   ========================================================= */
+function listenMyMute() {
+  onValue(ref(db, "mutes/" + state.uid), (snap) => {
+    const until = snap.val()?.until || 0;
+    const was = state.mutedUntil;
+    state.mutedUntil = until;
+    if (until > serverNow()) {
+      const t = new Date(until).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
+      logLine(`🔇 คุณถูกปิดแชทโดยผู้ดูแลจนถึง ${t}`, "system");
+    } else if (was > serverNow()) logLine("🔊 คุณพูดในแชทได้อีกครั้งแล้ว", "system");
+  });
+}
+
+function watchMutes() {
+  if (state.mutesOff) return;
+  state.mutesOff = onValue(ref(db, "mutes"), (snap) => {
+    const ul = $("adm-mute-list"); ul.innerHTML = "";
+    snap.forEach((c) => {
+      const v = c.val(), left = v.until - serverNow();
+      if (left <= 0) return;
+      const li = mk("li"); li.append(mk("span", "", `🔇 ${v.name} (อีก ${Math.ceil(left / 60000)} นาที)`));
+      li.append(btn("เปิดแชท", () => unmute(c.key), "btn ghost mini"));
+      ul.append(li);
+    });
+    if (!ul.children.length) ul.append(mk("li", "empty", "ไม่มีใครถูกปิดแชท"));
+  }, () => { state.mutesOff = null; });
+}
+
+async function unmute(pid) {
+  try { await remove(ref(db, "mutes/" + pid)); toast("เปิดแชทให้แล้ว"); }
+  catch (e) { toast(errMsg(e)); }
+}
+
+$("adm-mute").addEventListener("click", async () => {
+  const pid = $("adm-mute-id").value.trim();
+  if (!pid) return toast("ใส่ Player ID ก่อน");
+  if (pid === state.uid) return toast("ปิดแชทตัวเองไม่ได้");
+  const mins = parseInt($("adm-mute-dur").value, 10) || 5;
+  try {
+    const t = await get(ref(db, "users/" + pid));
+    if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+    await set(ref(db, "mutes/" + pid), { until: serverNow() + mins * 60000, by: state.profile.username, name: t.val().username });
+    toast(`ปิดแชท ${t.val().username} ${mins} นาทีแล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+});
+$("adm-unmute").addEventListener("click", () => {
+  const pid = $("adm-mute-id").value.trim();
+  if (!pid) return toast("ใส่ Player ID ก่อน");
+  unmute(pid);
+});
+
+$("adm-clear").addEventListener("click", async () => {
+  const z = $("adm-clear-zone").value;
+  if (!confirm(`ล้างแชททั้งหมดของ ${ZONES[z].name}?`)) return;
+  try {
+    await remove(ref(db, "chats/" + z));
+    await push(ref(db, "announcements"), { text: "ผู้ดูแลล้างแชทของโซนนี้แล้ว", zone: z, by: state.profile.username, ts: serverTimestamp() });
+    toast("ล้างแชทแล้ว");
+  } catch (e) { toast(errMsg(e)); }
+});
+
+$("adm-delmode").addEventListener("change", (e) => {
+  state.delMode = e.target.checked;
+  $("chat-log").classList.toggle("del-mode", state.delMode);
+});
