@@ -192,7 +192,11 @@ function wearUpdates(u, w) {
 function setTab(t) {
   document.querySelectorAll(".layout .panel").forEach((p) => p.classList.toggle("tab-on", p.dataset.panel === t));
   document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
-  if (t === "chat") document.querySelector('.tabbar [data-tab="chat"]').classList.remove("unread");
+  document.querySelector(`.tabbar [data-tab="${t}"]`)?.classList.remove("unread");
+}
+function notifyTab(t) {
+  const p = document.querySelector(`.layout .panel[data-panel="${t}"]`);
+  if (p && !p.classList.contains("tab-on")) document.querySelector(`.tabbar [data-tab="${t}"]`)?.classList.add("unread");
 }
 function notifyChat() { if (!document.querySelector(".layout .panel.chat").classList.contains("tab-on")) document.querySelector('.tabbar [data-tab="chat"]').classList.add("unread"); }
 document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -348,6 +352,7 @@ function startGame() {
     if (state.wasInfected !== undefined && inf !== state.wasInfected) {
       logLine(inf ? "🦠 คุณถูกกัดและติดเชื้อ! HP จะค่อยๆ ลดลง — รักษาด้วยชุดปฐมพยาบาล 🧰 หรือมอส 🌿" : "💊 อาการติดเชื้อหายแล้ว", inf ? "system" : "info");
     }
+    if (state.wasInfected !== undefined && inf !== state.wasInfected) syncInfectedFlag(inf);
     state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
@@ -403,7 +408,7 @@ async function enterZone(z, initial = false) {
     renderCraft();
 
     const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
-    await set(pRef, { name: state.profile.username, faction: state.profile.faction });
+    await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}) });
     onDisconnect(pRef).remove();
 
     const chatQ = query(ref(db, "chats/" + z), orderByKey(), limitToLast(CHAT_LIMIT));
@@ -595,13 +600,14 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}`));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}`));
+    if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
-        ["adm-mute-id", "adm-pid", "adm-target-id"].forEach((id) => { $(id).value = c.key; });
+        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
         $("admin-modal").classList.remove("hidden");
       }, "btn ghost mini"));
@@ -808,7 +814,7 @@ async function useItem(slot) {
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
   }
 
-  if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; msgs.push("หายจากการติดเชื้อ"); }
+  if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
@@ -1425,7 +1431,20 @@ const NEED_ITEMS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread
 const rewardText = (r) => { const d = defOf(r); return `${d?.icon || "🗡️"} ${d?.name || "ไอเทม"}${r.qty > 1 ? " ×" + r.qty : ""}`; };
 const needText = (n) => `${ITEMS[n.id].icon} ${ITEMS[n.id].name} ×${n.qty}`;
 
-function listenQuests() { onValue(ref(db, "quests"), (s) => { state.quests = s.val() || {}; renderQuests(); }); }
+function listenQuests() {
+  onValue(ref(db, "quests"), (s) => {
+    const next = s.val() || {};
+    if (state.questsSeen) {   // ข้ามรอบโหลดแรก ไม่แจ้งของเก่า
+      Object.entries(next).forEach(([id, q]) => {
+        if (state.questsSeen.has(id) || q.status !== "open") return;
+        logLine(`📜 ภารกิจใหม่บนกระดาน: “${q.title}” — รางวัล ${rewardText(q.reward)}`, "system");
+        notifyTab("map");
+      });
+    }
+    state.questsSeen = new Set(Object.keys(next));
+    state.quests = next; renderQuests();
+  });
+}
 
 function renderQuests() {
   const ul = $("quest-list"); if (!ul) return; ul.innerHTML = "";
@@ -1532,21 +1551,49 @@ $("adm-q-post").addEventListener("click", async () => {
 /* =========================================================
    13) ติดเชื้อ (มนุษย์ที่ถูกซอมบี้ผู้เล่นกัดโดน)
    ========================================================= */
-const INFECT_TICK = 15000, INFECT_DMG = 2;   // เสีย HP 2 ทุก 15 วินาที (ขณะออนไลน์)
+const INFECT_TICK = 15000, INFECT_DMG = 2, INFECT_MAX_TICKS = 40;   // HP −2 ทุก 15 วินาที (ย้อนหลังได้สูงสุด 40 ติ๊ก = 10 นาที)
 
+// เชื้อลุกลามตามเวลาจริง: บันทึกเวลาที่หักล่าสุดไว้ที่ users/{uid}/infectTs
+// ถ้าปิดเกมไปนาน กลับมาจะหักย้อนหลัง แต่ไม่ทำให้ตายตอนไม่อยู่ (เหลืออย่างน้อย 1 HP)
 async function infectionTick() {
   const p = state.profile;
   if (!p || p.banned || !p.infected || p.faction !== "human" || state.busy || state.infBusy) return;
-  if (serverNow() - (state.lastInfectTick || 0) < INFECT_TICK) return;
-  state.infBusy = true; state.lastInfectTick = serverNow();
+  const ticks = Math.min(INFECT_MAX_TICKS, Math.floor((serverNow() - Math.max(p.infected, p.infectTs || 0)) / INFECT_TICK));
+  if (ticks < 1) return;
+  state.infBusy = true;
   try {
-    const left = p.hp - INFECT_DMG;
-    if (left > 0) await update(ref(db), { [`users/${state.uid}/hp`]: left });
-    else {
-      await update(ref(db), { [`users/${state.uid}/hp`]: 50, [`users/${state.uid}/zone`]: "safe", [`users/${state.uid}/infected`]: null });
+    const away = ticks > 2;
+    let left = p.hp - ticks * INFECT_DMG;
+    if (away) left = Math.max(1, left);
+    if (left > 0) {
+      await update(ref(db), { [`users/${state.uid}/hp`]: left, [`users/${state.uid}/infectTs`]: serverTimestamp() });
+      if (away && p.hp - left > 0) logLine(`🦠 ระหว่างที่คุณไม่อยู่ เชื้อลุกลามกินร่างกาย −${p.hp - left} HP`, "system");
+    } else {
+      await update(ref(db), { [`users/${state.uid}/hp`]: 50, [`users/${state.uid}/zone`]: "safe", [`users/${state.uid}/infected`]: null, [`users/${state.uid}/infectTs`]: null });
       logLine("🦠 เชื้อลุกลามจนคุณสลบ… ถูกหามกลับ Safe Zone และอาการติดเชื้อหายไปแล้ว", "system");
       await enterZone("safe");
     }
   } catch (e) { console.error("infection tick", e); }
   finally { state.infBusy = false; }
 }
+
+// ให้ผู้เล่นคนอื่นในโซนเห็นว่าเราติดเชื้อ (🦠 ข้างชื่อในรายชื่อผู้เล่น)
+function syncInfectedFlag(inf) {
+  if (!state.zone) return;
+  const r = ref(db, `zonePlayers/${state.zone}/${state.uid}/infected`);
+  (inf ? set(r, true) : remove(r)).catch(() => {});
+}
+
+// GM: ทำให้ติดเชื้อ / รักษาให้หาย
+async function adminInfect(on) {
+  const id = $("adm-inf-id").value.trim(); if (!id) return toast("ใส่ Player ID ก่อน");
+  try {
+    const t = await get(ref(db, "users/" + id));
+    if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+    if (on && t.val().faction !== "human") return toast("ซอมบี้ติดเชื้อไม่ได้");
+    await update(ref(db), { [`users/${id}/infected`]: on ? serverTimestamp() : null, [`users/${id}/infectTs`]: null });
+    toast(`${on ? "ทำให้ติดเชื้อ" : "รักษาให้"} ${t.val().username} แล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+}
+$("adm-inf-on").addEventListener("click", () => adminInfect(true));
+$("adm-inf-off").addEventListener("click", () => adminInfect(false));
