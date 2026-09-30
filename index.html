@@ -68,12 +68,13 @@
         <b id="me-name">—</b>
         <span id="me-role" class="badge hidden"></span>
       </div>
-      <div class="bars">
+      <div class="bars" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
         <div class="bar hp"><i id="bar-hp"></i><span id="txt-hp">HP</span></div>
         <div class="bar st"><i id="bar-st"></i><span id="txt-st">พลังงาน</span></div>
+        <div class="bar" style="border-color: #b9770e;"><i id="bar-fd" style="background: #f39c12;"></i><span id="txt-fd">อาหาร</span></div>
+        <div class="bar" style="border-color: #21618c;"><i id="bar-wt" style="background: #3498db;"></i><span id="txt-wt">น้ำ</span></div>
       </div>
       <div class="top-actions">
-        <!-- ปุ่มเปิดหน้าโปรไฟล์ -->
         <button id="btn-profile" class="btn primary mini">โปรไฟล์</button>
         <button id="btn-copy-id" class="btn ghost mini" title="คัดลอก Player ID">คัดลอก ID</button>
         <button id="btn-setpw" class="btn ghost mini hidden">ตั้งรหัสผ่าน</button>
@@ -136,6 +137,9 @@
           <span class="muted">พื้นที่ปัจจุบัน:</span> <b id="prof-val-zone">—</b>
         </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">อัตราฟื้นพลังงาน:</span> <b id="prof-val-regen" style="color: var(--primary);">ปกติ</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
           <span class="muted">อาวุธที่ถืออยู่:</span> <b id="prof-val-wpn" style="color: var(--hazard);">มือเปล่า (ดาเมจ 5)</b>
         </div>
       </div>
@@ -161,7 +165,6 @@
         <h3>เสกไอเทม</h3>
         <select id="adm-item"></select>
         
-        <!-- ส่วนสำหรับกรอกสร้างอาวุธเอง (Custom Weapon) -->
         <div id="adm-custom-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
           <input id="adm-custom-name" placeholder="ชื่ออาวุธ (เช่น ดาบเลเซอร์)">
           <input id="adm-custom-dmg" type="number" min="1" max="999" placeholder="พลังโจมตี (ดาเมจ)">

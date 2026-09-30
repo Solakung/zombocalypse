@@ -12,69 +12,49 @@ import {
    1) ตั้งค่า Firebase (เอา Config ของคุณมาแปะทับตรงนี้ได้เลย)
    ========================================================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyD_5ovnQvZrkO8kG1i00dMdkO2rlNTG_Tk",
-  authDomain: "zompocalypse-137a6.firebaseapp.com",
-  databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "zompocalypse-137a6",
-  storageBucket: "zompocalypse-137a6.firebasestorage.app",
-  messagingSenderId: "1032491711291",
-  appId: "1:1032491711291:web:4f6d6d9f3eb7d174a0151e",
-  measurementId: "G-66LKE0WRVB"
+  apiKey: "AIzaSyD_5ovnQvZrkO8kG1i00dMdkO2rlNTG_Tk",
+  authDomain: "zompocalypse-137a6.firebaseapp.com",
+  databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "zompocalypse-137a6",
+  storageBucket: "zompocalypse-137a6.firebasestorage.app",
+  messagingSenderId: "1032491711291",
+  appId: "1:1032491711291:web:4f6d6d9f3eb7d174a0151e",
+  measurementId: "G-66LKE0WRVB"
 };
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
+
 /* =========================================================
    2) ข้อมูลเกม (โซน + ไอเทม)
    ========================================================= */
-const STAMINA_COST = 10, STAMINA_MAX = 100, REGEN_MS = 5000, HP_MAX = 100;
+const STAMINA_COST = 10, STAMINA_MAX = 100, HP_MAX = 100;
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 3000, UNARMED_DMG = 5;
 
-const FACTION = {
-  human: { name: "มนุษย์", icon: "👤" },
-  zombie: { name: "ซอมบี้", icon: "🧟" }
-};
+const FACTION = { human: { name: "มนุษย์", icon: "👤" }, zombie: { name: "ซอมบี้", icon: "🧟" } };
 
+// ปรับไอเทมให้แบ่งหน้าที่ ฟื้นเลือด / ฟื้นอาหาร / ฟื้นน้ำ
 const ITEMS = {
-  canned_food: { name: "อาหารกระป๋อง", icon: "🥫", type: "consumable", heal: 10 },
-  water: { name: "น้ำดื่ม", icon: "💧", type: "consumable", heal: 5 },
+  canned_food: { name: "อาหารกระป๋อง", icon: "🥫", type: "consumable", food: 40 },
+  water: { name: "น้ำดื่ม", icon: "💧", type: "consumable", water: 40 },
   bandage: { name: "ผ้าพันแผล", icon: "🩹", type: "consumable", heal: 20 },
   medkit: { name: "ชุดปฐมพยาบาล", icon: "🧰", type: "consumable", heal: 50 },
   wooden_bat: { name: "ไม้เบสบอล", icon: "🏏", type: "weapon", dmg: 8, maxDur: 20 },
   knife: { name: "มีด", icon: "🔪", type: "weapon", dmg: 12, maxDur: 25 },
   crowbar: { name: "ชะแลง", icon: "🔧", type: "weapon", dmg: 10, maxDur: 30 },
   pistol: { name: "ปืนพก", icon: "🔫", type: "weapon", dmg: 25, maxDur: 12 },
-  super_ration: { name: "เสบียงพิเศษ", icon: "🍱", type: "consumable", heal: 50, gmOnly: true },
+  super_ration: { name: "เสบียงพิเศษ", icon: "🍱", type: "consumable", heal: 50, food: 100, water: 100, gmOnly: true },
   admin_katana: { name: "ดาบคาตานะ", icon: "🗡️", type: "weapon", dmg: 40, maxDur: 60, gmOnly: true }
 };
 
-// เพิ่มโซนใหม่ และเพิ่ม "ซอมบี้" ลงไปในกองดรอป
 const ZONES = {
-  safe: {
-    name: "Safe Zone", icon: "🏕️", desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก",
-    drops: [{ id: "canned_food", w: 20 }, { id: "water", w: 20 }, { id: "bandage", w: 5 }, { id: null, w: 55 }]
-  },
-  ruins: {
-    name: "เขตเมืองร้าง", icon: "🏚️", desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก",
-    drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 15 }, { id: "water", w: 15 }, { id: "wooden_bat", w: 8 }, { id: "knife", w: 6 }, { id: null, w: 41 }]
-  },
-  mall: {
-    name: "ห้างสรรพสินค้าร้าง", icon: "🏬", desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน",
-    drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 25 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: null, w: 20 }]
-  },
-  hospital: {
-    name: "โรงพยาบาล", icon: "🏥", desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก",
-    drops: [{ id: "zombie", w: 20 }, { id: "bandage", w: 20 }, { id: "medkit", w: 12 }, { id: "water", w: 10 }, { id: null, w: 38 }]
-  },
-  police: {
-    name: "สถานีตำรวจ", icon: "🚓", desc: "สถานที่หาอาวุธชั้นดี ถ้าคุณรอดจากฝูงผีได้",
-    drops: [{ id: "zombie", w: 30 }, { id: "pistol", w: 10 }, { id: "knife", w: 15 }, { id: "bandage", w: 5 }, { id: null, w: 40 }]
-  },
-  forest: {
-    name: "ป่าลึก", icon: "🌲", desc: "เงียบสงบ อาจจะเจอของแปลกๆ ซ่อนอยู่",
-    drops: [{ id: "zombie", w: 10 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: "pistol", w: 5 }, { id: null, w: 55 }]
-  }
+  safe: { name: "Safe Zone", icon: "🏕️", desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 20 }, { id: "water", w: 20 }, { id: "bandage", w: 5 }, { id: null, w: 55 }] },
+  ruins: { name: "เขตเมืองร้าง", icon: "🏚️", desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 15 }, { id: "water", w: 15 }, { id: "wooden_bat", w: 8 }, { id: "knife", w: 6 }, { id: null, w: 41 }] },
+  mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 25 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: null, w: 20 }] },
+  hospital: { name: "โรงพยาบาล", icon: "🏥", desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 20 }, { id: "bandage", w: 20 }, { id: "medkit", w: 12 }, { id: "water", w: 10 }, { id: null, w: 38 }] },
+  police: { name: "สถานีตำรวจ", icon: "🚓", desc: "สถานที่หาอาวุธชั้นดี ถ้าคุณรอดจากฝูงผีได้", drops: [{ id: "zombie", w: 30 }, { id: "pistol", w: 10 }, { id: "knife", w: 15 }, { id: "bandage", w: 5 }, { id: null, w: 40 }] },
+  forest: { name: "ป่าลึก", icon: "🌲", desc: "เงียบสงบ อาจจะเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: "pistol", w: 5 }, { id: null, w: 55 }] }
 };
 
 /* =========================================================
@@ -90,31 +70,12 @@ const serverNow = () => Date.now() + state.offset;
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const isStaff = () => ["gm", "owner"].includes(state.profile?.role);
 
-function mk(tag, cls, text) {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text !== undefined) el.textContent = text;
-  return el;
-}
-function btn(label, fn, cls = "btn primary mini") {
-  const b = mk("button", cls, label);
-  b.type = "button";
-  b.addEventListener("click", fn);
-  return b;
-}
-function show(name) {
-  document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
-  $("screen-" + name).classList.add("active");
-}
+function mk(tag, cls, text) { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; }
+function btn(label, fn, cls = "btn primary mini") { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; }
+function show(name) { document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active")); $("screen-" + name).classList.add("active"); }
 let toastTimer;
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
-}
-const errMsg = (e) => (String(e?.code || e).includes("PERMISSION_DENIED") ? "ระบบไม่อนุญาตการกระทำนี้" : "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง");
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2800); }
+const errMsg = (e) => (String(e?.code || e).includes("PERMISSION_DENIED") ? "ระบบไม่อนุญาตการกระทำนี้" : "ทำรายการไม่สำเร็จ");
 
 async function trimList(path, limit) {
   const snap = await get(query(ref(db, path), orderByKey(), limitToLast(limit + 10)));
@@ -124,14 +85,24 @@ async function trimList(path, limit) {
   if (Object.keys(del).length) await update(ref(db), del);
 }
 
+// ลอจิก Dynamic Regen ตามความหิว
+function getRegenRate() {
+  const p = state.profile;
+  if (!p) return 5000;
+  const fd = p.food ?? 100, wt = p.water ?? 100;
+  if (fd > 70 && wt > 70) return 3000; // เร็ว
+  if (fd <= 20 || wt <= 20) return 8000; // ช้า
+  return 5000; // ปกติ
+}
+
 function curStamina() {
   const p = state.profile;
   if (!p) return 0;
-  const regen = Math.max(0, Math.floor((serverNow() - 1500 - p.staminaTs) / REGEN_MS));
+  const rate = getRegenRate();
+  const regen = Math.max(0, Math.floor((serverNow() - 1500 - p.staminaTs) / rate));
   return Math.min(STAMINA_MAX, p.stamina + regen);
 }
 
-// รองรับอาวุธ Custom
 function equippedWeapon() {
   const slot = state.profile?.equipped;
   const it = slot && state.inv[slot];
@@ -141,13 +112,8 @@ function equippedWeapon() {
 
 function wearUpdates(u, w) {
   const left = w.it.dur - 1;
-  if (left <= 0) {
-    u[`inventory/${state.uid}/${w.slot}`] = null;
-    u[`users/${state.uid}/equipped`] = null;
-    toast(`${w.def.name} พังแล้ว!`);
-  } else {
-    u[`inventory/${state.uid}/${w.slot}/dur`] = left;
-  }
+  if (left <= 0) { u[`inventory/${state.uid}/${w.slot}`] = null; u[`users/${state.uid}/equipped`] = null; toast(`${w.def.name} พังแล้ว!`); }
+  else { u[`inventory/${state.uid}/${w.slot}/dur`] = left; }
 }
 
 function setTab(t) {
@@ -155,15 +121,12 @@ function setTab(t) {
   document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
   if (t === "chat") document.querySelector('.tabbar [data-tab="chat"]').classList.remove("unread");
 }
-function notifyChat() {
-  if (!document.querySelector(".layout .panel.chat").classList.contains("tab-on"))
-    document.querySelector('.tabbar [data-tab="chat"]').classList.add("unread");
-}
+function notifyChat() { if (!document.querySelector(".layout .panel.chat").classList.contains("tab-on")) document.querySelector('.tabbar [data-tab="chat"]').classList.add("unread"); }
 document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
 setTab("chat");
 
 /* =========================================================
-   4) หน้าโปรไฟล์ (Profile)
+   4) หน้าโปรไฟล์ & เรนเดอร์หลอดพลัง
    ========================================================= */
 $("btn-profile").addEventListener("click", () => {
   const p = state.profile;
@@ -176,8 +139,34 @@ $("btn-profile").addEventListener("click", () => {
 });
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
+function renderBars() {
+  const p = state.profile;
+  if (!p) return;
+  const st = curStamina();
+  const fd = p.food ?? 100;
+  const wt = p.water ?? 100;
+  
+  $("bar-hp").style.width = (p.hp / HP_MAX) * 100 + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${HP_MAX}`;
+  $("bar-st").style.width = (st / STAMINA_MAX) * 100 + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${STAMINA_MAX}`;
+  $("bar-fd").style.width = (fd / 100) * 100 + "\%"; $("txt-fd").textContent = `อาหาร ${fd}/100`;
+  $("bar-wt").style.width = (wt / 100) * 100 + "\%"; $("txt-wt").textContent = `น้ำ ${wt}/100`;
+
+  const rate = getRegenRate();
+  let rateText = "ปกติ (1 หน่วย/5วิ)";
+  if (rate === 3000) rateText = "ดีมาก (1 หน่วย/3วิ)";
+  if (rate === 8000) rateText = "ช้า (1 หน่วย/8วิ)";
+  if ($("prof-val-regen")) {
+      $("prof-val-regen").textContent = rateText;
+      $("prof-val-regen").style.color = rate === 3000 ? "var(--primary)" : (rate === 8000 ? "var(--hazard)" : "inherit");
+  }
+
+  // ปิดปุ่มค้นหาถ้าพลังงานไม่พอ (แต่ถ้าหิวโซ ให้กดได้โดยใช้เลือดแลกแทน)
+  const starving = (fd === 0 || wt === 0);
+  $("btn-scavenge").disabled = (!starving && st < STAMINA_COST);
+}
+
 /* =========================================================
-   5) ล็อกอิน & สมัครสมาชิก
+   5) ล็อกอิน & สมัครสมาชิก (เพิ่ม Food / Water ค่าเริ่มต้น)
    ========================================================= */
 onValue(ref(db, ".info/serverTimeOffset"), (s) => { state.offset = s.val() || 0; });
 const EMAIL_DOMAIN = "zombocalypse.app";
@@ -190,14 +179,6 @@ async function emailFor(name) {
   return `u${hex.slice(0, 40)}@${EMAIL_DOMAIN}`;
 }
 
-function authError(e) {
-  const c = String(e?.code || e);
-  if (c.includes("email-already-in-use")) return "ชื่อนี้ถูกใช้แล้ว ลองชื่ออื่น";
-  if (c.includes("wrong-password") || c.includes("invalid-credential")) return "ชื่อหรือรหัสผ่านไม่ถูกต้อง";
-  if (c.includes("weak-password")) return "รหัสผ่านสั้นเกินไป";
-  return "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง";
-}
-
 onAuthStateChanged(auth, async (user) => {
   if (state.registering) return;
   try {
@@ -205,12 +186,8 @@ onAuthStateChanged(auth, async (user) => {
     state.uid = user.uid;
     const snap = await get(ref(db, "users/" + user.uid));
     if (snap.exists()) { startGame(); return; }
-    await signOut(auth);
-    show("login");
-    $("login-error").textContent = "ไม่พบตัวละคร กรุณาสร้างใหม่";
-  } catch (e) {
-    show("login"); console.error(e);
-  }
+    await signOut(auth); show("login"); $("login-error").textContent = "ไม่พบตัวละคร กรุณาสร้างใหม่";
+  } catch (e) { show("login"); console.error(e); }
 });
 
 let mode = "login", pickedFaction = null;
@@ -218,8 +195,7 @@ function setMode(m) {
   mode = m;
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
   document.querySelectorAll(".reg-only").forEach((el) => el.classList.toggle("hidden", m !== "register"));
-  $("auth-submit").textContent = m === "login" ? "เข้าสู่ระบบ" : "สร้างตัวละครและเข้าเกม";
-  $("login-error").textContent = "";
+  $("auth-submit").textContent = m === "login" ? "เข้าสู่ระบบ" : "สร้างตัวละครและเข้าเกม"; $("login-error").textContent = "";
 }
 document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 document.querySelectorAll(".faction-btn").forEach((b) => b.addEventListener("click", () => {
@@ -239,37 +215,34 @@ $("auth-form").addEventListener("submit", async (e) => {
     const email = await emailFor(name);
     if (mode === "login") await signInWithEmailAndPassword(auth, email, pw);
     else await register(name, email, pw);
-  } catch (ex) { $("login-error").textContent = authError(ex); }
+  } catch (ex) { $("login-error").textContent = "ทำรายการไม่สำเร็จ กรุณาลองใหม่"; }
   finally { $("auth-submit").disabled = false; }
 });
 
 async function register(name, email, pw) {
-  state.registering = true;
-  let cred;
+  state.registering = true; let cred;
   try {
     cred = await createUserWithEmailAndPassword(auth, email, pw);
     const uid = cred.user.uid;
     await set(ref(db, "usernames/" + nameKey(name)), uid);
     await set(ref(db, "users/" + uid), {
       username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
-      stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX, createdAt: serverTimestamp()
+      stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX,
+      food: 100, water: 100, // ค่าอาหาร น้ำ เริ่มต้น
+      createdAt: serverTimestamp()
     });
-    state.uid = uid;
-    startGame();
-  } catch (e) {
-    if (cred) await deleteUser(cred.user).catch(() => {});
-    throw e;
-  } finally { state.registering = false; }
+    state.uid = uid; startGame();
+  } catch (e) { if (cred) await deleteUser(cred.user).catch(() => {}); throw e; } 
+  finally { state.registering = false; }
 }
 
 $("btn-logout").addEventListener("click", async () => {
   if (state.zone) await remove(ref(db, `zonePlayers/${state.zone}/${state.uid}`));
-  await signOut(auth);
-  location.reload();
+  await signOut(auth); location.reload();
 });
 
 /* =========================================================
-   6) เริ่มเกม & เรนเดอร์ UI
+   6) เริ่มเกม 
    ========================================================= */
 function startGame() {
   if (state.started) return;
@@ -277,46 +250,21 @@ function startGame() {
   state.sessionStart = serverNow() - 30000;
 
   onValue(ref(db, "users/" + state.uid), (snap) => {
-    const p = snap.val();
-    if (!p) return;
+    const p = snap.val(); if (!p) return;
     state.profile = p;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game");
-      buildZoneList();
-      buildAdmin();
-      listenInventory();
-      listenAnnouncements();
-      listenAttacks();
+      show("game"); buildZoneList(); buildAdmin(); listenInventory(); listenAnnouncements(); listenAttacks();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
-    renderProfile();
+    $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
+    $("me-role").className = "badge " + p.role; $("me-role").textContent = p.role;
+    $("me-role").classList.toggle("hidden", p.role === "player");
+    $("btn-admin").classList.toggle("hidden", !isStaff());
+    document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
+    renderBars(); renderInv();
   });
   setInterval(renderBars, 1000);
-}
-
-function renderProfile() {
-  const p = state.profile;
-  $("me-name").textContent = p.username;
-  $("me-faction").textContent = FACTION[p.faction].icon;
-  const badge = $("me-role");
-  badge.className = "badge " + p.role;
-  badge.textContent = p.role;
-  badge.classList.toggle("hidden", p.role === "player");
-  $("btn-admin").classList.toggle("hidden", !isStaff());
-  document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
-  renderBars(); renderInv();
-}
-
-function renderBars() {
-  const p = state.profile;
-  if (!p) return;
-  const st = curStamina();
-  $("bar-hp").style.width = (p.hp / HP_MAX) * 100 + "%";
-  $("txt-hp").textContent = `HP ${p.hp}/${HP_MAX}`;
-  $("bar-st").style.width = (st / STAMINA_MAX) * 100 + "%";
-  $("txt-st").textContent = `พลังงาน ${st}/${STAMINA_MAX}`;
-  $("btn-scavenge").disabled = st < STAMINA_COST;
 }
 
 $("btn-copy-id").addEventListener("click", async () => {
@@ -328,11 +276,9 @@ $("btn-copy-id").addEventListener("click", async () => {
    7) โซน + แชท
    ========================================================= */
 function buildZoneList() {
-  const ul = $("zone-list");
-  ul.innerHTML = "";
+  const ul = $("zone-list"); ul.innerHTML = "";
   Object.entries(ZONES).forEach(([id, z]) => {
-    const li = mk("li");
-    li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
+    const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
     const b = mk("button", "zone-btn", `${z.icon} ${z.name}`);
     b.dataset.zone = id;
     b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
@@ -350,11 +296,8 @@ async function enterZone(z, initial = false) {
       await update(ref(db), { ["users/" + state.uid + "/zone"]: z });
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
-    teardownZone();
-    state.zone = z; state.ground = {};
-    $("chat-log").innerHTML = "";
-    $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`;
-    $("zone-desc").textContent = ZONES[z].desc;
+    teardownZone(); state.zone = z; state.ground = {};
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc;
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
 
     const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
@@ -373,31 +316,22 @@ async function enterZone(z, initial = false) {
 }
 
 function logLine(text, cls = "info") {
-  const log = $("chat-log");
-  const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   log.append(mk("div", "msg " + cls, text));
-  if (near) log.scrollTop = log.scrollHeight;
-  notifyChat();
+  if (near) log.scrollTop = log.scrollHeight; notifyChat();
 }
 
 function addChat(key, m) {
-  const log = $("chat-log");
-  const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   let el;
   if (m.type === "combat") el = mk("div", "msg combat", m.text);
-  else {
-    el = mk("div", "msg");
-    el.append(mk("span", "n " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`), mk("span", "", `: ${m.text}`));
-  }
+  else { el = mk("div", "msg"); el.append(mk("span", "n " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`), mk("span", "", `: ${m.text}`)); }
   el.dataset.key = key; log.append(el);
-  if (near) log.scrollTop = log.scrollHeight;
-  notifyChat();
+  if (near) log.scrollTop = log.scrollHeight; notifyChat();
 }
 
 $("chat-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const text = $("chat-input").value.trim().slice(0, 200);
-  if (!text) return;
+  e.preventDefault(); const text = $("chat-input").value.trim().slice(0, 200); if (!text) return;
   $("chat-input").value = "";
   try {
     await push(ref(db, "chats/" + state.zone), { uid: state.uid, name: state.profile.username, faction: state.profile.faction, text, type: "chat", ts: serverTimestamp() });
@@ -422,14 +356,13 @@ function renderPlayers(snap) {
    ========================================================= */
 function listenAnnouncements() {
   onChildAdded(query(ref(db, "announcements"), limitToLast(10)), (s) => {
-    const a = s.val();
-    if (typeof a.ts === "number" && a.ts < state.sessionStart) return;
+    const a = s.val(); if (typeof a.ts === "number" && a.ts < state.sessionStart) return;
     if (a.zone === "all" || a.zone === state.zone) logLine(`[ประกาศระบบ] ${a.text}`, "system");
   });
 }
 
 /* =========================================================
-   9) กระเป๋า & ของบนพื้น
+   9) กระเป๋า & การกินอาหาร
    ========================================================= */
 function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; renderInv(); }); }
 
@@ -437,8 +370,7 @@ function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
   ul.innerHTML = "";
   Object.entries(state.inv).forEach(([slot, it]) => {
-    const def = it.id === "custom" ? it : ITEMS[it.id];
-    if (!def) return;
+    const def = it.id === "custom" ? it : ITEMS[it.id]; if (!def) return;
     const li = mk("li");
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
@@ -457,8 +389,7 @@ function renderInv() {
 function renderGround() {
   const ul = $("ground-list"); ul.innerHTML = "";
   Object.entries(state.ground).forEach(([key, g]) => {
-    const def = g.id === "custom" ? g : ITEMS[g.id];
-    if (!def) return;
+    const def = g.id === "custom" ? g : ITEMS[g.id]; if (!def) return;
     const li = mk("li");
     li.append(mk("span", "", `📦 ${def.name}${def.type === "consumable" ? " ×" + g.qty : ""}`));
     li.append(btn("เก็บ", (e) => pickup(key, e.target)));
@@ -470,9 +401,7 @@ function renderGround() {
 function invAddUpdate(u, itemId, qty, src, dur, customData) {
   if (itemId === "custom" && customData) {
     const k = push(ref(db, "inventory/" + state.uid)).key;
-    u[`inventory/${state.uid}/${k}`] = {
-      id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {})
-    };
+    u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {}) };
     return;
   }
   const def = ITEMS[itemId];
@@ -492,13 +421,8 @@ async function pickup(key, btnEl) {
   const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : null;
   
   invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData);
-  try {
-    await update(ref(db), u);
-    toast(`เก็บ ${g.id === "custom" ? g.name : ITEMS[g.id].name} แล้ว`);
-  } catch {
-    toast("มีคนเก็บไปก่อนแล้ว หรือกระเป๋าเต็ม");
-    if (btnEl) btnEl.disabled = false;
-  }
+  try { await update(ref(db), u); toast(`เก็บ ${g.id === "custom" ? g.name : ITEMS[g.id].name} แล้ว`); } 
+  catch { toast("มีคนเก็บไปก่อนแล้ว หรือกระเป๋าเต็ม"); if (btnEl) btnEl.disabled = false; }
 }
 
 async function equip(slot, isEquipped) {
@@ -509,16 +433,35 @@ async function equip(slot, isEquipped) {
 async function useItem(slot) {
   const it = state.inv[slot], def = it && ITEMS[it.id], p = state.profile;
   if (!def || def.type !== "consumable") return;
-  if (p.hp >= HP_MAX) return toast("เลือดเต็มอยู่แล้ว");
-  const u = { ["users/" + state.uid + "/hp"]: Math.min(HP_MAX, p.hp + def.heal) };
+
+  const fd = p.food ?? 100, wt = p.water ?? 100;
+  let healed = false; let msgs = [];
+  const u = {};
+
+  if (def.heal && p.hp < HP_MAX) {
+    u["users/" + state.uid + "/hp"] = Math.min(HP_MAX, p.hp + def.heal);
+    msgs.push(`ฟื้น ${def.heal} HP`); healed = true;
+  }
+  if (def.food && fd < 100) {
+    u["users/" + state.uid + "/food"] = Math.min(100, fd + def.food);
+    msgs.push(`อาหาร +${def.food}`); healed = true;
+  }
+  if (def.water && wt < 100) {
+    u["users/" + state.uid + "/water"] = Math.min(100, wt + def.water);
+    msgs.push(`น้ำ +${def.water}`); healed = true;
+  }
+
+  if (!healed) return toast("สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
+
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
-  try { await update(ref(db), u); toast(`ใช้ ${def.name} ฟื้น ${def.heal} HP`); }
+
+  try { await update(ref(db), u); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
   catch (e) { toast(errMsg(e)); }
 }
 
 /* =========================================================
-   10) ค้นหาไอเทม (เจอผี / เจอของ)
+   10) ค้นหาไอเทม (ระบบหิวข้าว/หิวน้ำ)
    ========================================================= */
 function rollDrop(table) {
   const total = table.reduce((s, d) => s + d.w, 0);
@@ -529,21 +472,42 @@ function rollDrop(table) {
 
 $("btn-scavenge").addEventListener("click", async () => {
   if (state.busy) return;
+  const p = state.profile;
   const cur = curStamina();
-  if (cur < STAMINA_COST) return toast("พลังงานไม่พอ");
+  const fd = p.food ?? 100;
+  const wt = p.water ?? 100;
+  const starving = (fd === 0 || wt === 0);
+
+  if (!starving && cur < STAMINA_COST) return toast("พลังงานไม่พอ");
   state.busy = true;
   
   try {
     const found = rollDrop(ZONES[state.zone].drops);
     const u = {
-      [`users/${state.uid}/stamina`]: cur - STAMINA_COST,
-      [`users/${state.uid}/staminaTs`]: serverTimestamp()
+      [`users/${state.uid}/food`]: Math.max(0, fd - 3),
+      [`users/${state.uid}/water`]: Math.max(0, wt - 4)
     };
 
+    let newHp = p.hp;
+    if (starving) {
+      newHp = Math.max(0, p.hp - 5);
+      u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
+      if (newHp === 0) u[`users/${state.uid}/zone`] = "safe";
+    } else {
+      u[`users/${state.uid}/stamina`] = cur - STAMINA_COST;
+      u[`users/${state.uid}/staminaTs`] = serverTimestamp();
+    }
+
+    if (newHp === 0) {
+      await update(ref(db), u);
+      logLine("คุณหิวโซและฝืนร่างกายค้นหาของ จนหมดสติไป... และถูกหามกลับมาที่ Safe Zone", "system");
+      await enterZone("safe");
+      return;
+    }
+
     if (found === "zombie") {
-      // โดนผีกัด ดาเมจสุ่ม 10-24
       const dmg = 10 + Math.floor(Math.random() * 15);
-      const newHp = Math.max(0, state.profile.hp - dmg);
+      newHp = Math.max(0, newHp - dmg);
       u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
       if (newHp === 0) u[`users/${state.uid}/zone`] = "safe";
 
@@ -557,26 +521,45 @@ $("btn-scavenge").addEventListener("click", async () => {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
       logLine(`คุณค้นหา… เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
+      if (starving) logLine("คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด 5 HP", "system");
     } else {
       await update(ref(db), u);
       logLine("คุณค้นหา… ไม่เจออะไรเลย", "info");
+      if (starving) logLine("คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด 5 HP", "system");
     }
   } catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 });
 
 /* =========================================================
-   11) ต่อสู้ (ทอยเต๋า + ลงโทษคนหนี 30 วิ)
+   11) ต่อสู้ (หักความหิว)
    ========================================================= */
 async function attack(targetUid) {
   if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
   if (Date.now() - state.lastAttack < ATTACK_COOLDOWN) return toast("รอสักครู่ก่อนโจมตีอีกครั้ง");
 
-  state.lastAttack = Date.now();
   const p = state.profile;
+  const fd = p.food ?? 100;
+  const wt = p.water ?? 100;
+  const starving = (fd === 0 || wt === 0);
+
+  let newHp = p.hp;
+  let attackerDied = false;
+  const selfUpdate = {
+     [`users/${state.uid}/food`]: Math.max(0, fd - 2),
+     [`users/${state.uid}/water`]: Math.max(0, wt - 2)
+  };
+
+  if (starving) {
+     newHp = Math.max(0, p.hp - 5);
+     selfUpdate[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
+     if (newHp === 0) { selfUpdate[`users/${state.uid}/zone`] = "safe"; attackerDied = true; }
+     toast("คุณฝืนโจมตีขณะหิวโซ เสีย HP 5 หน่วย!");
+  }
+
+  state.lastAttack = Date.now();
   const w = equippedWeapon();
   const roll = d6();
-
   const key = push(ref(db, "attacks/" + targetUid)).key;
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
@@ -584,10 +567,16 @@ async function attack(targetUid) {
   };
 
   try {
-    await update(ref(db), { [`attacks/${targetUid}/${key}`]: attackData });
+    await update(ref(db), { [`attacks/${targetUid}/${key}`]: attackData, ...selfUpdate });
+    
+    if (attackerDied) {
+        logLine("คุณหิวโซและฝืนร่างกายโจมตีศัตรู จนหมดสติไป... ฟื้นอีกทีที่ Safe Zone", "system");
+        await enterZone("safe");
+        return; // ตายก่อน ไม่ต้องรอระบบ Timeout 
+    }
+
     toast(`คุณทอยได้ ${roll} — รอเป้าหมายป้องกัน...`);
 
-    // จับเวลา 30 วิ ถ้าเป้าหมายไม่ตอบสนอง = ตีฟรี
     setTimeout(async () => {
       const snap = await get(ref(db, `attacks/${targetUid}/${key}`));
       if (snap.exists()) {
@@ -596,16 +585,13 @@ async function attack(targetUid) {
         const t = tSnap.val();
 
         const dmg = w ? w.def.dmg : UNARMED_DMG;
-        const newHp = Math.max(0, t.hp - dmg);
+        const targetHp = Math.max(0, t.hp - dmg);
         let text = `🏃‍♂️ ${t.username} ปิดเว็บหนี! ${p.username} เลยฟาดฟรีเข้าเป้า −${dmg} HP`;
 
         const u = { [`attacks/${targetUid}/${key}`]: null };
         if (w) wearUpdates(u, w);
-        u[`users/${targetUid}/hp`] = newHp === 0 ? 50 : newHp;
-        if (newHp === 0) {
-          text += ` — ${t.username} ล้มลง!`;
-          u[`users/${targetUid}/zone`] = "safe";
-        }
+        u[`users/${targetUid}/hp`] = targetHp === 0 ? 50 : targetHp;
+        if (targetHp === 0) { text += ` — ${t.username} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
 
         const chatRef = push(ref(db, "chats/" + state.zone));
         u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
@@ -637,7 +623,7 @@ async function resolveAttack(key, a) {
   const hit = a.roll > defRoll;
   let dmg = 0;
   if (hit) {
-    if (a.wpn === "custom") dmg = 25; // ค่าพื้นฐานถ้าสคริปต์หาดาเมจอาวุธ custom อีกฝั่งไม่เจอ
+    if (a.wpn === "custom") dmg = 25; 
     else dmg = ITEMS[a.wpn]?.dmg || UNARMED_DMG;
   }
   
@@ -663,17 +649,13 @@ async function resolveAttack(key, a) {
 /* =========================================================
    12) Admin Console
    ========================================================= */
-function fillSelect(sel, entries) {
-  sel.innerHTML = "";
-  entries.forEach(([v, label]) => sel.append(new Option(label, v)));
-}
+function fillSelect(sel, entries) { sel.innerHTML = ""; entries.forEach(([v, label]) => sel.append(new Option(label, v))); }
 
 function buildAdmin() {
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
-  
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"]); // ตัวเลือกพิเศษ
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"]);
   fillSelect($("adm-item"), itemOpts);
 }
 
@@ -683,13 +665,10 @@ $("adm-mode").addEventListener("change", (e) => {
   $("adm-target-id").classList.toggle("hidden", e.target.value !== "player");
   $("adm-target-zone").classList.toggle("hidden", e.target.value !== "zone");
 });
-$("adm-item").addEventListener("change", (e) => {
-  $("adm-custom-fields").classList.toggle("hidden", e.target.value !== "custom");
-});
+$("adm-item").addEventListener("change", (e) => { $("adm-custom-fields").classList.toggle("hidden", e.target.value !== "custom"); });
 
 $("adm-ann-send").addEventListener("click", async () => {
-  const text = $("adm-ann-text").value.trim().slice(0, 200);
-  if (!text) return;
+  const text = $("adm-ann-text").value.trim().slice(0, 200); if (!text) return;
   try {
     await push(ref(db, "announcements"), { text, zone: $("adm-ann-zone").value, by: state.profile.username, ts: serverTimestamp() });
     $("adm-ann-text").value = ""; toast("ส่งประกาศแล้ว");
