@@ -440,7 +440,7 @@ async function dropItem(slot) {
 
   const key = push(ref(db, `zoneItems/${state.zone}`)).key;
   u[`zoneItems/${state.zone}/${key}`] = {
-    id: it.id, qty: 1,
+    id: it.id, qty: 1, src: slot,
     ...(it.dur ? { dur: it.dur } : {}),
     ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {})
   };
