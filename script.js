@@ -156,7 +156,7 @@ function curStamina() {
   const p = state.profile;
   if (!p) return 0;
   const rate = getRegenRate();
-  const regen = Math.max(0, Math.floor((serverNow() - 1500 - p.staminaTs) / rate));
+  const regen = Math.max(0, Math.floor((serverNow() - 2500 - p.staminaTs) / rate));
   return Math.min(STAMINA_MAX, p.stamina + regen);
 }
 
@@ -789,8 +789,8 @@ function rollDrop(table) {
   return null;
 }
 
-$("btn-scavenge").addEventListener("click", async () => {
-  if (state.busy) return;
+// ทำการค้นหา 1 ครั้ง (อ่านค่าล่าสุดจาก state ทุกครั้ง) — โยน error ออกไปให้ตัวครอบจัดการ
+async function scavengeOnce() {
   const p = state.profile;
   const cur = curStamina();
   const fd = p.food ?? 100;
@@ -798,9 +798,7 @@ $("btn-scavenge").addEventListener("click", async () => {
   const starving = (fd === 0 || wt === 0);
 
   if (!starving && cur < STAMINA_COST) return toast("พลังงานไม่พอ");
-  state.busy = true;
-  
-  try {
+  {
     let found = rollDrop(effectiveDrops(state.zone));
     const isZombie = p.faction === "zombie";
     const scrapIgnored = isZombie && found === "scrap";
@@ -820,6 +818,7 @@ $("btn-scavenge").addEventListener("click", async () => {
       u[`users/${state.uid}/staminaTs`] = serverTimestamp();
     }
 
+    state.lastPayload = u;
     if (newHp === 0) {
       await update(ref(db), u);
       logLine("คุณหิวโซและฝืนร่างกายค้นหาของ จนหมดสติไป... และถูกหามกลับมาที่ Safe Zone", "system");
@@ -844,8 +843,26 @@ $("btn-scavenge").addEventListener("click", async () => {
       logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : "คุณค้นหา… ไม่เจออะไรเลย", "info");
       if (starving) logLine("คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด 5 HP", "system");
     }
-  } catch (e) { toast(errMsg(e)); }
-  finally { state.busy = false; }
+  }
+}
+
+$("btn-scavenge").addEventListener("click", async () => {
+  if (state.busy) return;
+  state.busy = true;
+  try {
+    try { await scavengeOnce(); }
+    catch (e) {
+      if (!String(e?.code || e).includes("PERMISSION_DENIED")) throw e;
+      // ข้อมูลในเครื่องอาจล้าหลังเซิร์ฟเวอร์เล็กน้อย (โดนตี/เน็ตหน่วง/นาฬิกาเหลื่อม)
+      // การเขียนที่ถูกปฏิเสธไม่มีผลใดๆ และ Firebase จะย้อนค่าในเครื่องกลับเอง จึงรอสักครู่แล้วลองใหม่จากค่าล่าสุด
+      console.warn("scavenge denied (จะลองใหม่ 1 ครั้ง)", { payload: state.lastPayload, profile: state.profile, offset: state.offset });
+      await new Promise((r) => setTimeout(r, 1500));
+      await scavengeOnce();
+    }
+  } catch (e) {
+    console.error("scavenge denied", e?.code, { payload: state.lastPayload, profile: state.profile, inv: state.inv, stamina: curStamina(), offset: state.offset });
+    toast(errMsg(e));
+  } finally { state.busy = false; }
 });
 
 // เจอซอมบี้ตอนค้นหา: ทอย d6 + โบนัสอาวุธ (ทอยได้ 1 คือพลาดหนักเสมอ)
