@@ -865,7 +865,7 @@ async function zombieEncounter(u, hpNow) {
 /* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
-const attackDmg = (id) => (!id ? UNARMED_DMG : id === "custom" ? 25 : (ITEMS[id]?.dmg || UNARMED_DMG));
+const attackDmg = (id, custom) => (!id ? UNARMED_DMG : id === "custom" ? Math.max(1, custom?.dmg || 25) : (ITEMS[id]?.dmg || UNARMED_DMG));
 
 function attackCooldownLeft() {
   const last = state.profile?.lastAttack;
@@ -915,7 +915,8 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
-    ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {})
+    ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {}),
+    ...(w && w.it.id === "custom" ? { wdmg: w.it.dmg } : {})
   };
 
   try {
@@ -963,7 +964,7 @@ async function freeHit(targetUid, targetName, w) {
   const tHp = hpSnap.val();
   if (typeof tHp !== "number") return;
 
-  const dmg = attackDmg(w ? w.it.id : null);
+  const dmg = attackDmg(w ? w.it.id : null, w?.it);
   const left = Math.max(0, tHp - dmg);
   let text = `🏃 ${targetName} ไม่ทันตั้งตัว! ${p.username} ฟาดเข้าเป้า −${dmg} HP`;
 
@@ -997,7 +998,7 @@ async function resolveAttack(key, a) {
   if (w) wearUpdates(u, w);
 
   const hit = a.roll > defRoll;
-  const dmg = hit ? attackDmg(a.wpn) : 0;
+  const dmg = hit ? attackDmg(a.wpn, { dmg: a.wdmg }) : 0;
 
   const newHp = Math.max(0, p.hp - dmg);
   let text = `⚔ ${a.fromName} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
