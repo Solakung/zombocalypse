@@ -261,11 +261,31 @@
 
       <div class="adm-section">
         <h3>กระดานภารกิจ</h3>
-        <p class="muted">รางวัล = ไอเทมที่ตั้งไว้ในหัวข้อ "เสกไอเทม" ด้านบน (เลือกชนิด / จำนวน / ไอเทมสร้างเองได้)</p>
         <input id="adm-q-title" maxlength="60" placeholder="ชื่อภารกิจ (เช่น ตามหายาให้หมอ)">
         <input id="adm-q-desc" maxlength="300" placeholder="รายละเอียด (ไม่ใส่ก็ได้)">
         <select id="adm-q-need"></select>
         <input id="adm-q-need-qty" type="number" min="1" max="50" value="1" placeholder="จำนวนที่ต้องส่ง">
+
+        <p class="label" style="margin-top: 8px;">🎁 รางวัลเมื่อทำภารกิจเสร็จ (GM กดอนุมัติแล้วไอเทมเข้ากระเป๋าผู้เล่นให้อัตโนมัติ)</p>
+        <select id="adm-q-item"></select>
+
+        <div id="adm-q-custom-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-q-custom-name" placeholder="ชื่ออาวุธ (เช่น ดาบเลเซอร์)">
+          <input id="adm-q-custom-dmg" type="number" min="1" max="999" placeholder="พลังโจมตี (ดาเมจ)">
+          <input id="adm-q-custom-dur" type="number" min="1" max="999" placeholder="ความคงทน (จำนวนครั้งที่ฟันได้)">
+        </div>
+
+        <div id="adm-q-food-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-q-food-name" maxlength="40" placeholder="ชื่อไอเทม (เช่น ซุปร้อน / น้ำมนต์ / กุญแจห้องนิรภัย)">
+          <input id="adm-q-food-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ก็ได้ เช่น 🍲)">
+          <p class="muted">ใส่ค่าอย่างน้อย 1 ช่อง = ผู้เล่นกดใช้ได้ / เว้นว่างทั้งหมด = ไอเทมพิเศษ ใช้ไม่ได้ (ของสะสม)</p>
+          <input id="adm-q-food-food" type="number" min="0" max="100" placeholder="เติมอาหาร (0-100)">
+          <input id="adm-q-food-water" type="number" min="0" max="100" placeholder="เติมน้ำ (0-100)">
+          <input id="adm-q-food-hp" type="number" min="0" max="100" placeholder="ฟื้น HP (0-100)">
+          <input id="adm-q-food-st" type="number" min="0" max="100" placeholder="เติมพลังงาน (0-100)">
+        </div>
+
+        <input id="adm-q-qty" type="number" min="1" max="99" value="1" aria-label="จำนวนรางวัล" placeholder="จำนวนรางวัล (ชิ้น)">
         <button id="adm-q-post" class="btn primary">โพสต์ภารกิจ</button>
       </div>
 

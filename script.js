@@ -1132,6 +1132,7 @@ function buildAdmin() {
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
   itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/พิเศษ)"]);
   fillSelect($("adm-item"), itemOpts);
+  fillSelect($("adm-q-item"), itemOpts);
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
 
@@ -1145,10 +1146,10 @@ $("adm-mode").addEventListener("change", (e) => {
   $("adm-target-id").classList.toggle("hidden", e.target.value !== "player");
   $("adm-target-zone").classList.toggle("hidden", e.target.value !== "zone");
 });
-$("adm-item").addEventListener("change", (e) => {
-  $("adm-custom-fields").classList.toggle("hidden", e.target.value !== "custom");
-  $("adm-food-fields").classList.toggle("hidden", e.target.value !== "custom_food");
-});
+["adm-", "adm-q-"].forEach((P) => $(P + "item").addEventListener("change", (e) => {
+  $(P + "custom-fields").classList.toggle("hidden", e.target.value !== "custom");
+  $(P + "food-fields").classList.toggle("hidden", e.target.value !== "custom_food");
+}));
 
 $("adm-ann-send").addEventListener("click", async () => {
   const text = $("adm-ann-text").value.trim().slice(0, 200); if (!text) return;
@@ -1159,22 +1160,23 @@ $("adm-ann-send").addEventListener("click", async () => {
   } catch (e) { toast(errMsg(e)); }
 });
 
-function readAdminItem() {
-  const itemId = $("adm-item").value;
-  const qty = Math.max(1, Math.min(99, parseInt($("adm-qty").value, 10) || 1));
+// P = คำนำหน้า id ของฟอร์ม: "adm-" = เสกไอเทม, "adm-q-" = รางวัลภารกิจ
+function readAdminItem(P = "adm-") {
+  const itemId = $(P + "item").value;
+  const qty = Math.max(1, Math.min(99, parseInt($(P + "qty").value, 10) || 1));
   const isFood = itemId === "custom_food";
   let customData = null, def = ITEMS[itemId];
 
   if (itemId === "custom") {
-    const cName = $("adm-custom-name").value.trim() || "อาวุธปริศนา";
-    const cDmg = parseInt($("adm-custom-dmg").value, 10) || 10;
-    const cDur = parseInt($("adm-custom-dur").value, 10) || 10;
+    const cName = $(P + "custom-name").value.trim() || "อาวุธปริศนา";
+    const cDmg = parseInt($(P + "custom-dmg").value, 10) || 10;
+    const cDur = parseInt($(P + "custom-dur").value, 10) || 10;
     customData = { name: cName, dmg: cDmg, dur: cDur };
     def = { name: cName, type: "weapon", maxDur: cDur };
   }
   if (isFood) {
     const num = (id) => Math.max(0, Math.min(100, parseInt($(id).value, 10) || 0));
-    customData = { name: $("adm-food-name").value.trim().slice(0, 40) || "ไอเทมปริศนา", icon: [...$("adm-food-icon").value.trim()].slice(0, 2).join(""), food: num("adm-food-food"), water: num("adm-food-water"), heal: num("adm-food-hp"), stamina: num("adm-food-st") };
+    customData = { name: $(P + "food-name").value.trim().slice(0, 40) || "ไอเทมปริศนา", icon: [...$(P + "food-icon").value.trim()].slice(0, 2).join(""), food: num(P + "food-food"), water: num(P + "food-water"), heal: num(P + "food-hp"), stamina: num(P + "food-st") };
     // มีค่าอย่างน้อย 1 ช่อง = ใช้ได้ (อาหาร/น้ำ/ยา/ชูกำลัง) / เว้นว่างหมด = ไอเทมพิเศษ ใช้ไม่ได้ (ของสะสม)
     customData.type = (customData.food || customData.water || customData.heal || customData.stamina) ? "consumable" : "material";
     def = { name: customData.name, type: customData.type };
@@ -1531,7 +1533,7 @@ async function questReject(id) {
 $("adm-q-post").addEventListener("click", async () => {
   const title = $("adm-q-title").value.trim().slice(0, 60);
   if (!title) return toast("ใส่ชื่อภารกิจก่อน");
-  const { itemId, qty, isFood, customData, def } = readAdminItem();
+  const { itemId, qty, isFood, customData, def } = readAdminItem("adm-q-");
   let reward;
   if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
   else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
@@ -1544,7 +1546,8 @@ $("adm-q-post").addEventListener("click", async () => {
   try {
     await push(ref(db, "quests"), quest);
     ["adm-q-title", "adm-q-desc"].forEach((i) => { $(i).value = ""; });
-    toast(`โพสต์ภารกิจ “${title}” แล้ว`);
+    ["adm-q-custom-name", "adm-q-food-name"].forEach((i) => { $(i).value = ""; });
+    toast(`โพสต์ภารกิจ “${title}” (รางวัล ${rewardText(reward)}) แล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
 
