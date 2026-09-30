@@ -48,7 +48,7 @@ const ITEMS = {
 };
 
 const ZONES = {
-  safe: { name: "Safe Zone", icon: "🏕️", desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 20 }, { id: "water", w: 20 }, { id: "bandage", w: 5 }, { id: null, w: 55 }] },
+  safe: { name: "Safe Zone", icon: "🏕️️", desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 20 }, { id: "water", w: 20 }, { id: "bandage", w: 5 }, { id: null, w: 55 }] },
   ruins: { name: "เขตเมืองร้าง", icon: "🏚️", desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 15 }, { id: "water", w: 15 }, { id: "wooden_bat", w: 8 }, { id: "knife", w: 6 }, { id: null, w: 41 }] },
   mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 25 }, { id: "water", w: 20 }, { id: "crowbar", w: 10 }, { id: null, w: 20 }] },
   hospital: { name: "โรงพยาบาล", icon: "🏥", desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 20 }, { id: "bandage", w: 20 }, { id: "medkit", w: 12 }, { id: "water", w: 10 }, { id: null, w: 38 }] },
@@ -84,7 +84,6 @@ async function trimList(path, limit) {
   if (Object.keys(del).length) await update(ref(db), del);
 }
 
-// อัตราการฟื้นพลังงาน
 function getRegenRate() {
   const p = state.profile;
   if (!p) return 5000;
@@ -271,7 +270,7 @@ $("btn-copy-id").addEventListener("click", async () => {
 });
 
 /* =========================================================
-   7) โซน + แชท
+   7) โซน + แชท (อัปเดตระบบ Bubble)
    ========================================================= */
 function buildZoneList() {
   const ul = $("zone-list"); ul.innerHTML = "";
@@ -315,15 +314,27 @@ async function enterZone(z, initial = false) {
 
 function logLine(text, cls = "info") {
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  log.append(mk("div", "msg " + cls, text));
+  const el = mk("div", "msg " + cls);
+  el.append(mk("div", "bubble", text));
+  log.append(el);
   if (near) log.scrollTop = log.scrollHeight; notifyChat();
 }
 
 function addChat(key, m) {
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   let el;
-  if (m.type === "combat") el = mk("div", "msg combat", m.text);
-  else { el = mk("div", "msg"); el.append(mk("span", "n " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`), mk("span", "", `: ${m.text}`)); }
+  const isMe = m.uid === state.uid;
+
+  if (m.type === "combat") {
+    el = mk("div", "msg combat");
+    el.append(mk("div", "bubble", m.text));
+  } else { 
+    el = mk("div", isMe ? "msg self" : "msg"); 
+    const sender = mk("div", "sender " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`);
+    const bubble = mk("div", "bubble", m.text);
+    el.append(sender, bubble); 
+  }
+
   el.dataset.key = key; log.append(el);
   if (near) log.scrollTop = log.scrollHeight; notifyChat();
 }
@@ -567,7 +578,7 @@ $("btn-scavenge").addEventListener("click", async () => {
 });
 
 /* =========================================================
-   11) ต่อสู้ (หักความหิว)
+   11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
 async function attack(targetUid) {
   if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
@@ -629,6 +640,7 @@ async function attack(targetUid) {
         if (targetHp === 0) { text += ` — ${t.username} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
 
         const chatRef = push(ref(db, "chats/" + state.zone));
+        // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
         u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
 
         await update(ref(db), u);
@@ -673,8 +685,13 @@ async function resolveAttack(key, a) {
     text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`;
   }
 
+  const chatRef = push(ref(db, "chats/" + state.zone));
+  // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
+  u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
+
   await update(ref(db), u);
-  await sendChat(text, "combat");
+  trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
+
   if (hit && newHp === 0) {
     await enterZone("safe");
     logLine("คุณถูกกำจัด แล้วฟื้นขึ้นที่ Safe Zone", "system");

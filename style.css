@@ -243,3 +243,83 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, .faction-btn:focu
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* =========================================
+   อัปเดตระบบแชทแบบ Messenger (Bubble)
+   ========================================= */
+.chat-log {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  overflow-x: hidden; /* ซ่อนแถบเลื่อนแนวนอน */
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+  align-items: flex-start;
+}
+
+/* แชทของเราให้อยู่ชิดขวา */
+.msg.self {
+  align-items: flex-end;
+}
+
+/* ชื่อคนส่ง */
+.msg .sender {
+  font-size: 13px;
+  margin-bottom: 4px;
+  opacity: 0.7;
+}
+
+/* กรอบข้อความ */
+.msg .bubble {
+  background-color: var(--line, #2a2e33);
+  padding: 10px 14px;
+  border-radius: 16px;
+  border-top-left-radius: 4px;
+  font-size: 15px;
+  line-height: 1.4;
+  word-wrap: break-word;     /* ป้องกันคำยาวทะลุขอบ */
+  word-break: break-word;    /* ป้องกันคำยาวทะลุขอบ */
+  max-width: 85%;            /* ไม่ให้กล่องแชทกว้างเต็มจอ */
+}
+
+/* สีกล่องข้อความของเรา */
+.msg.self .bubble {
+  background-color: var(--primary, #3498db);
+  color: #fff;
+  border-top-left-radius: 16px;
+  border-top-right-radius: 4px;
+}
+
+/* ข้อความระบบและข้อมูล (อยู่ตรงกลาง ไร้กรอบ) */
+.msg.info, .msg.system {
+  align-items: center;
+}
+.msg.info .bubble, .msg.system .bubble {
+  background: transparent;
+  color: var(--muted, #aaa);
+  font-size: 13px;
+  text-align: center;
+  padding: 4px;
+}
+.msg.system .bubble {
+  color: var(--hazard, #f39c12);
+}
+
+/* ข้อความต่อสู้ (สีแดง อยู่ตรงกลาง) */
+.msg.combat {
+  align-items: center;
+}
+.msg.combat .bubble {
+  background-color: rgba(231, 76, 60, 0.15);
+  color: var(--hazard, #ff4757);
+  border: 1px solid var(--hazard, #ff4757);
+  border-radius: 8px;
+  font-size: 14px;
+  text-align: center;
+  padding: 6px 12px;
+}
