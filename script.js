@@ -65,8 +65,8 @@ const RECIPES = { bandage: { need: { scrap: 2 }, out: "bandage", qty: 1 } };
 const weaponBonus = (def) => (def.dmg >= 25 ? 3 : def.dmg >= 10 ? 2 : 1);
 
 const FACTION_PERK = {
-  human: "มนุษย์: คราฟต์ผ้าพันแผลจากเศษวัสดุที่ Safe Zone ได้ / ซอมบี้ป่าจะโจมตีคุณ ต้องทอยลูกเต๋าสู้หรือหนี",
-  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า"
+  human: "มนุษย์: คราฟต์ผ้าพันแผลจากเศษวัสดุที่ Safe Zone ได้ / ซอมบี้ป่าจะโจมตีคุณ ต้องทอยลูกเต๋าสู้หรือหนี / ถ้าถูกซอมบี้ผู้เล่นกัดโดนจะติดเชื้อ HP ค่อยๆ ลด ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส",
+  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า / กัดมนุษย์โดนแล้วเหยื่อจะติดเชื้อ"
 };
 
 // danger = ระดับอันตราย 0-10 (กำหนดเอง ปรับได้) / โอกาสเจอซอมบี้คำนวณจากตารางดรอปจริง
@@ -236,6 +236,7 @@ function renderBars() {
   const st = curStamina();
   const fd = p.food ?? 100;
   const wt = p.water ?? 100;
+  $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
   
   $("bar-hp").style.width = (p.hp / HP_MAX) * 100 + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${HP_MAX}`;
   $("bar-st").style.width = (st / STAMINA_MAX) * 100 + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${STAMINA_MAX}`;
@@ -343,6 +344,11 @@ function startGame() {
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
     state.profile = p;
+    const inf = !!p.infected && p.faction === "human";
+    if (state.wasInfected !== undefined && inf !== state.wasInfected) {
+      logLine(inf ? "🦠 คุณถูกกัดและติดเชื้อ! HP จะค่อยๆ ลดลง — รักษาด้วยชุดปฐมพยาบาล 🧰 หรือมอส 🌿" : "💊 อาการติดเชื้อหายแล้ว", inf ? "system" : "info");
+    }
+    state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
       show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests();
@@ -356,6 +362,7 @@ function startGame() {
     renderBars(); renderInv();
   });
   setInterval(renderBars, 1000);
+  setInterval(infectionTick, 5000);
 }
 
 $("btn-copy-id").addEventListener("click", async () => {
@@ -639,6 +646,7 @@ function renderInv() {
       const btnGrp = mk("div", "row-btns");
       btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
     } else {
       const lbl = mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`);
@@ -648,6 +656,7 @@ function renderInv() {
       const btnGrp = mk("div", "row-btns");
       if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)));
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
     }
     ul.append(li);
@@ -685,6 +694,20 @@ async function craft(id) {
   }
   invAddUpdate(u, r.out, r.qty);
   try { await update(ref(db), u); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name} จากเศษวัสดุ`, "info"); }
+  catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+// ทำลายไอเทมทิ้งถาวร (ไม่ตกลงพื้น ใครก็เก็บไม่ได้) — ใช้เคลียร์กระเป๋าที่ล้น
+async function destroyItem(slot) {
+  if (state.busy) return;
+  const it = state.inv[slot]; if (!it) return;
+  const def = defOf(it);
+  if (!confirm(`ทำลาย ${def.name}${it.qty > 1 ? " ทั้ง " + it.qty + " ชิ้น" : ""} ทิ้งถาวร? เอาคืนไม่ได้`)) return;
+  state.busy = true;
+  const u = { [`inventory/${state.uid}/${slot}`]: null };
+  if (state.profile.equipped === slot) u[`users/${state.uid}/equipped`] = null;
+  try { await update(ref(db), u); toast(`ทำลาย ${def.name} แล้ว`); logLine(`🔥 คุณทำลาย ${def.name}${it.qty > 1 ? " ×" + it.qty : ""} ทิ้ง`, "info"); }
   catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
@@ -784,6 +807,8 @@ async function useItem(slot) {
     const n = Math.min(STAMINA_MAX, cur + def.stamina);
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
   }
+
+  if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
@@ -1028,7 +1053,10 @@ async function freeHit(targetUid, targetName, w) {
   if (w) wearUpdates(u, w);
   u[`users/${targetUid}/hp`] = left === 0 ? 50 : left;
   if (left === 0) { text += ` — ${targetName} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
-  if (p.faction === "zombie") { u[`bites/${state.uid}/${targetUid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷"; }
+  if (p.faction === "zombie") {
+    u[`bites/${state.uid}/${targetUid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
+    if (state.players[targetUid]?.faction === "human") { u[`users/${targetUid}/infected`] = serverTimestamp(); text += " 🦠"; }
+  }
 
   const chatRef = push(ref(db, "chats/" + state.zone));
   u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
@@ -1061,7 +1089,10 @@ async function resolveAttack(key, a) {
   
   if (hit) {
     text += `${a.fromName} โจมตีโดน! −${dmg} HP`;
-    if (state.players[key]?.faction === "zombie") { u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷"; }
+    if (state.players[key]?.faction === "zombie") {
+      u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
+      if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
+    }
     u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
     if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; u[`users/${state.uid}/zone`] = "safe"; }
   } else {
@@ -1497,3 +1528,25 @@ $("adm-q-post").addEventListener("click", async () => {
     toast(`โพสต์ภารกิจ “${title}” แล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
+
+/* =========================================================
+   13) ติดเชื้อ (มนุษย์ที่ถูกซอมบี้ผู้เล่นกัดโดน)
+   ========================================================= */
+const INFECT_TICK = 15000, INFECT_DMG = 2;   // เสีย HP 2 ทุก 15 วินาที (ขณะออนไลน์)
+
+async function infectionTick() {
+  const p = state.profile;
+  if (!p || p.banned || !p.infected || p.faction !== "human" || state.busy || state.infBusy) return;
+  if (serverNow() - (state.lastInfectTick || 0) < INFECT_TICK) return;
+  state.infBusy = true; state.lastInfectTick = serverNow();
+  try {
+    const left = p.hp - INFECT_DMG;
+    if (left > 0) await update(ref(db), { [`users/${state.uid}/hp`]: left });
+    else {
+      await update(ref(db), { [`users/${state.uid}/hp`]: 50, [`users/${state.uid}/zone`]: "safe", [`users/${state.uid}/infected`]: null });
+      logLine("🦠 เชื้อลุกลามจนคุณสลบ… ถูกหามกลับ Safe Zone และอาการติดเชื้อหายไปแล้ว", "system");
+      await enterZone("safe");
+    }
+  } catch (e) { console.error("infection tick", e); }
+  finally { state.infBusy = false; }
+}
