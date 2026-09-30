@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZOMBOCALYPSE — เอาชีวิตรอด</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <!-- ===== หน้าล็อกอิน / เลือกฝ่าย ===== -->
+  <section id="screen-login" class="screen active">
+    <div class="login-card">
+      <h1>ZOMBOCALYPSE</h1>
+      <p class="sub">เมืองล่มสลายแล้ว เลือกฝ่ายของคุณ แล้วอยู่ให้รอด</p>
+
+      <label for="inp-username">ชื่อตัวละคร</label>
+      <input id="inp-username" maxlength="16" autocomplete="off" placeholder="2–16 ตัวอักษร">
+
+      <span class="label">เลือกฝ่าย</span>
+      <div class="faction-pick">
+        <button type="button" class="faction-btn human" data-faction="human">
+          <span class="ico">👤</span><b>มนุษย์</b><small>รวมกลุ่ม ค้นหาเสบียง ปกป้องค่าย</small>
+        </button>
+        <button type="button" class="faction-btn zombie" data-faction="zombie">
+          <span class="ico">🧟</span><b>ซอมบี้</b><small>ล่าเหยื่อ แพร่เชื้อ ครองเมือง</small>
+        </button>
+      </div>
+
+      <button id="btn-start" class="btn primary wide" disabled>เข้าสู่เกม</button>
+      <p id="login-error" class="error"></p>
+    </div>
+  </section>
+
+  <!-- ===== หน้าถูกแบน ===== -->
+  <section id="screen-banned" class="screen">
+    <div class="login-card">
+      <h1>ถูกระงับการเข้าเล่น</h1>
+      <p class="sub">บัญชีนี้ถูกแบนโดยผู้ดูแล หากคิดว่าเป็นความผิดพลาด ให้ติดต่อผู้สร้างเกม</p>
+    </div>
+  </section>
+
+  <!-- ===== หน้าเกมหลัก ===== -->
+  <section id="screen-game" class="screen">
+    <header class="topbar">
+      <div class="who">
+        <span id="me-faction" class="faction-dot"></span>
+        <b id="me-name">—</b>
+        <span id="me-role" class="badge hidden"></span>
+      </div>
+      <div class="bars">
+        <div class="bar hp"><i id="bar-hp"></i><span id="txt-hp">HP</span></div>
+        <div class="bar st"><i id="bar-st"></i><span id="txt-st">พลังงาน</span></div>
+      </div>
+      <div class="top-actions">
+        <button id="btn-copy-id" class="btn ghost" title="คัดลอก Player ID">คัดลอก ID</button>
+        <button id="btn-admin" class="btn danger hidden">Admin Console</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel zones">
+        <h2>โซน</h2>
+        <ul id="zone-list" class="list"></ul>
+        <h2>ผู้เล่นในโซนนี้</h2>
+        <ul id="player-list" class="list"></ul>
+      </aside>
+
+      <section class="panel chat">
+        <div class="chat-head">
+          <h2 id="zone-title">—</h2>
+          <p id="zone-desc" class="muted"></p>
+        </div>
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+        <form id="chat-form" class="chat-form" autocomplete="off">
+          <input id="chat-input" maxlength="200" placeholder="พิมพ์คุยกับคนในโซนนี้…">
+          <button class="btn primary">ส่ง</button>
+        </form>
+      </section>
+
+      <aside class="panel actions">
+        <button id="btn-scavenge" class="btn primary wide">ค้นหาไอเทม (−10 พลังงาน)</button>
+        <h2>ของบนพื้น</h2>
+        <ul id="ground-list" class="list"></ul>
+        <h2>กระเป๋า</h2>
+        <ul id="inv-list" class="list"></ul>
+      </aside>
+    </main>
+  </section>
+
+  <!-- ===== Admin Console (ซ่อนไว้ แสดงเฉพาะ gm / owner) ===== -->
+  <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="adm-title">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="adm-title">Admin Console</h2>
+        <button id="adm-close" class="btn ghost" aria-label="ปิด">ปิด</button>
+      </div>
+
+      <div class="adm-section">
+        <h3>ประกาศระบบ</h3>
+        <select id="adm-ann-zone"></select>
+        <input id="adm-ann-text" maxlength="200" placeholder="ข้อความประกาศ (แสดงเป็นสีแดง)">
+        <button id="adm-ann-send" class="btn danger">ส่งประกาศ</button>
+      </div>
+
+      <div class="adm-section">
+        <h3>เสกไอเทม</h3>
+        <select id="adm-item"></select>
+        <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน">
+        <select id="adm-mode">
+          <option value="player">เข้ากระเป๋าผู้เล่น (ใช้ Player ID)</option>
+          <option value="zone">วางทิ้งไว้กลางโซน</option>
+        </select>
+        <input id="adm-target-id" placeholder="Player ID ของเป้าหมาย">
+        <select id="adm-target-zone" class="hidden"></select>
+        <button id="adm-spawn" class="btn primary">เสกไอเทม</button>
+      </div>
+
+      <div class="adm-section owner-only hidden">
+        <h3>จัดการผู้เล่น (Owner)</h3>
+        <input id="adm-pid" placeholder="Player ID ของผู้เล่น">
+        <select id="adm-role">
+          <option value="player">player</option>
+          <option value="gm">gm</option>
+        </select>
+        <button id="adm-setrole" class="btn primary">ตั้งสิทธิ์</button>
+        <div class="row-btns">
+          <button id="adm-ban" class="btn danger">แบน</button>
+          <button id="adm-unban" class="btn ghost">ปลดแบน</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
