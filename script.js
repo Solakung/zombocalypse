@@ -159,13 +159,14 @@ async function trimList(path, limit) {
   if (Object.keys(del).length) await update(ref(db), del);
 }
 
+const REGEN_FAST_MS = 20000, REGEN_NORMAL_MS = 30000, REGEN_SLOW_MS = 45000;   // อิ่ม / ปกติ / หิว (มิลลิวินาทีต่อ 1 แต้ม)
 function getRegenRate() {
   const p = state.profile;
-  if (!p) return 5000;
+  if (!p) return REGEN_NORMAL_MS;
   const fd = p.food ?? 100, wt = p.water ?? 100;
-  if (fd > 70 && wt > 70) return 3000;
-  if (fd <= 20 || wt <= 20) return 8000;
-  return 5000;
+  if (fd > 70 && wt > 70) return REGEN_FAST_MS;
+  if (fd <= 20 || wt <= 20) return REGEN_SLOW_MS;
+  return REGEN_NORMAL_MS;
 }
 
 function curStamina() {
@@ -248,12 +249,12 @@ function renderBars() {
   $("bar-wt").style.width = (wt / 100) * 100 + "\%"; $("txt-wt").textContent = `น้ำ ${wt}/100`;
 
   const rate = getRegenRate();
-  let rateText = "ปกติ (1 หน่วย/5วิ)";
-  if (rate === 3000) rateText = "ดีมาก (1 หน่วย/3วิ)";
-  if (rate === 8000) rateText = "ช้า (1 หน่วย/8วิ)";
+  let rateText = `ปกติ (1 หน่วย/${REGEN_NORMAL_MS / 1000}วิ)`;
+  if (rate === REGEN_FAST_MS) rateText = `เร็ว (1 หน่วย/${REGEN_FAST_MS / 1000}วิ)`;
+  if (rate === REGEN_SLOW_MS) rateText = `ช้า (1 หน่วย/${REGEN_SLOW_MS / 1000}วิ)`;
   if ($("prof-val-regen")) {
       $("prof-val-regen").textContent = rateText;
-      $("prof-val-regen").style.color = rate === 3000 ? "var(--primary)" : (rate === 8000 ? "var(--hazard)" : "inherit");
+      $("prof-val-regen").style.color = rate === REGEN_FAST_MS ? "var(--primary)" : (rate === REGEN_SLOW_MS ? "var(--hazard)" : "inherit");
   }
 
   const starving = (fd === 0 || wt === 0);
