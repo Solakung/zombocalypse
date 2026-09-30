@@ -340,12 +340,31 @@ function addChat(key, m) {
 }
 
 $("chat-form").addEventListener("submit", async (e) => {
-  e.preventDefault(); const text = $("chat-input").value.trim().slice(0, 200); if (!text) return;
+  e.preventDefault(); 
+  const text = $("chat-input").value.trim().slice(0, 200); 
+  if (!text) return;
+  
   $("chat-input").value = "";
+  $("chat-input").style.height = "auto"; // รีเซ็ตความสูงกลับหลังส่งข้อความ
+  
   try {
     await push(ref(db, "chats/" + state.zone), { uid: state.uid, name: state.profile.username, faction: state.profile.faction, text, type: "chat", ts: serverTimestamp() });
     trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
   } catch (err) { toast(errMsg(err)); }
+});
+
+// กด Enter เพื่อส่งแชท (ใช้ Shift+Enter ถ้าจะขึ้นบรรทัดใหม่)
+$("chat-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    $("chat-form").requestSubmit(); // สั่งส่งฟอร์ม
+  }
+});
+
+// ให้กล่องแชทยืดความสูงอัตโนมัติตามข้อความที่พิมพ์
+$("chat-input").addEventListener("input", function() {
+  this.style.height = "auto";
+  this.style.height = (this.scrollHeight) + "px";
 });
 
 function renderPlayers(snap) {

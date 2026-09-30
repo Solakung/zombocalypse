@@ -323,3 +323,13 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, .faction-btn:focu
   text-align: center;
   padding: 6px 12px;
 }
+
+textarea#chat-input {
+  resize: none; /* ปิดไม่ให้ผู้เล่นดึงยืดกล่องแชทเอง */
+  overflow-y: hidden;
+  line-height: 1.4;
+  padding: 10px 14px;
+  border-radius: 20px;
+  font-family: inherit;
+  width: 100%;
+}
