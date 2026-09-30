@@ -73,10 +73,12 @@
         <div class="bar st"><i id="bar-st"></i><span id="txt-st">พลังงาน</span></div>
       </div>
       <div class="top-actions">
-        <button id="btn-copy-id" class="btn ghost" title="คัดลอก Player ID">คัดลอก ID</button>
-        <button id="btn-setpw" class="btn ghost hidden">ตั้งรหัสผ่าน</button>
-        <button id="btn-logout" class="btn ghost">ออก</button>
-        <button id="btn-admin" class="btn danger hidden">Admin Console</button>
+        <!-- ปุ่มเปิดหน้าโปรไฟล์ -->
+        <button id="btn-profile" class="btn primary mini">โปรไฟล์</button>
+        <button id="btn-copy-id" class="btn ghost mini" title="คัดลอก Player ID">คัดลอก ID</button>
+        <button id="btn-setpw" class="btn ghost mini hidden">ตั้งรหัสผ่าน</button>
+        <button id="btn-logout" class="btn ghost mini">ออก</button>
+        <button id="btn-admin" class="btn danger mini hidden">Admin</button>
       </div>
     </header>
 
@@ -116,12 +118,36 @@
     </nav>
   </section>
 
-  <!-- ===== Admin Console (ซ่อนไว้ แสดงเฉพาะ gm / owner) ===== -->
+  <!-- ===== หน้าต่างโปรไฟล์ตัวละคร ===== -->
+  <div id="profile-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-box" style="max-width: 360px;">
+      <div class="modal-head">
+        <h2>ข้อมูลตัวละคร</h2>
+        <button id="prof-close" class="btn ghost mini">ปิด</button>
+      </div>
+      <div style="display: grid; gap: 12px; margin-top: 16px; font-size: 15px;">
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">ชื่อ:</span> <b id="prof-val-name">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">ฝ่าย:</span> <b id="prof-val-faction">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">พื้นที่ปัจจุบัน:</span> <b id="prof-val-zone">—</b>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">อาวุธที่ถืออยู่:</span> <b id="prof-val-wpn" style="color: var(--hazard);">มือเปล่า (ดาเมจ 5)</b>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Admin Console ===== -->
   <div id="admin-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="adm-title">
     <div class="modal-box">
       <div class="modal-head">
         <h2 id="adm-title">Admin Console</h2>
-        <button id="adm-close" class="btn ghost" aria-label="ปิด">ปิด</button>
+        <button id="adm-close" class="btn ghost">ปิด</button>
       </div>
 
       <div class="adm-section">
@@ -134,7 +160,15 @@
       <div class="adm-section">
         <h3>เสกไอเทม</h3>
         <select id="adm-item"></select>
-        <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน">
+        
+        <!-- ส่วนสำหรับกรอกสร้างอาวุธเอง (Custom Weapon) -->
+        <div id="adm-custom-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-custom-name" placeholder="ชื่ออาวุธ (เช่น ดาบเลเซอร์)">
+          <input id="adm-custom-dmg" type="number" min="1" max="999" placeholder="พลังโจมตี (ดาเมจ)">
+          <input id="adm-custom-dur" type="number" min="1" max="999" placeholder="ความคงทน (จำนวนครั้งที่ฟันได้)">
+        </div>
+
+        <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน" placeholder="จำนวน (ชิ้น)" style="margin-top: 8px;">
         <select id="adm-mode">
           <option value="player">เข้ากระเป๋าผู้เล่น (ใช้ Player ID)</option>
           <option value="zone">วางทิ้งไว้กลางโซน</option>
@@ -160,7 +194,7 @@
     </div>
   </div>
 
-  <!-- ===== ตั้งรหัสผ่านให้ตัวละครเก่าที่ยังไม่มีรหัส ===== -->
+  <!-- ===== ตั้งรหัสผ่าน ===== -->
   <div id="pw-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pw-title">
     <div class="modal-box">
       <div class="modal-head">
