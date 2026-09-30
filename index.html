@@ -13,28 +13,43 @@
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
 
-  <!-- ===== หน้าล็อกอิน / เลือกฝ่าย ===== -->
+  <!-- ===== หน้าล็อกอิน / สร้างตัวละคร ===== -->
   <section id="screen-login" class="screen active">
-    <div class="login-card">
+    <form id="auth-form" class="login-card" novalidate>
       <h1>ZOMBOCALYPSE</h1>
       <p class="sub">เมืองล่มสลายแล้ว เลือกฝ่ายของคุณ แล้วอยู่ให้รอด</p>
 
-      <label for="inp-username">ชื่อตัวละคร</label>
-      <input id="inp-username" maxlength="16" autocomplete="off" placeholder="2–16 ตัวอักษร">
-
-      <span class="label">เลือกฝ่าย</span>
-      <div class="faction-pick">
-        <button type="button" class="faction-btn human" data-faction="human">
-          <span class="ico">👤</span><b>มนุษย์</b><small>รวมกลุ่ม ค้นหาเสบียง ปกป้องค่าย</small>
-        </button>
-        <button type="button" class="faction-btn zombie" data-faction="zombie">
-          <span class="ico">🧟</span><b>ซอมบี้</b><small>ล่าเหยื่อ แพร่เชื้อ ครองเมือง</small>
-        </button>
+      <div class="seg" role="tablist">
+        <button type="button" data-mode="login" class="on">เข้าสู่ระบบ</button>
+        <button type="button" data-mode="register">สร้างตัวละครใหม่</button>
       </div>
 
-      <button id="btn-start" class="btn primary wide" disabled>เข้าสู่เกม</button>
+      <label for="inp-username">ชื่อตัวละคร</label>
+      <input id="inp-username" maxlength="16" autocomplete="username" placeholder="2–16 ตัวอักษร">
+
+      <label for="inp-password">รหัสผ่าน</label>
+      <input id="inp-password" type="password" autocomplete="current-password" placeholder="อย่างน้อย 6 ตัวอักษร">
+
+      <div class="reg-only hidden">
+        <label for="inp-password2">ยืนยันรหัสผ่าน</label>
+        <input id="inp-password2" type="password" autocomplete="new-password">
+      </div>
+
+      <div class="reg-only hidden">
+        <span class="label">เลือกฝ่าย</span>
+        <div class="faction-pick">
+          <button type="button" class="faction-btn human" data-faction="human">
+            <span class="ico">👤</span><b>มนุษย์</b><small>รวมกลุ่ม ค้นหาเสบียง ปกป้องค่าย</small>
+          </button>
+          <button type="button" class="faction-btn zombie" data-faction="zombie">
+            <span class="ico">🧟</span><b>ซอมบี้</b><small>ล่าเหยื่อ แพร่เชื้อ ครองเมือง</small>
+          </button>
+        </div>
+      </div>
+
+      <button id="auth-submit" class="btn primary wide">เข้าสู่ระบบ</button>
       <p id="login-error" class="error"></p>
-    </div>
+    </form>
   </section>
 
   <!-- ===== หน้าถูกแบน ===== -->
@@ -59,6 +74,8 @@
       </div>
       <div class="top-actions">
         <button id="btn-copy-id" class="btn ghost" title="คัดลอก Player ID">คัดลอก ID</button>
+        <button id="btn-setpw" class="btn ghost hidden">ตั้งรหัสผ่าน</button>
+        <button id="btn-logout" class="btn ghost">ออก</button>
         <button id="btn-admin" class="btn danger hidden">Admin Console</button>
       </div>
     </header>
@@ -140,6 +157,20 @@
           <button id="adm-unban" class="btn ghost">ปลดแบน</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== ตั้งรหัสผ่านให้ตัวละครเก่าที่ยังไม่มีรหัส ===== -->
+  <div id="pw-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="pw-title">
+    <div class="modal-box">
+      <div class="modal-head">
+        <h2 id="pw-title">ตั้งรหัสผ่านให้ตัวละครนี้</h2>
+        <button id="pw-close" class="btn ghost">ปิด</button>
+      </div>
+      <p class="muted">ตัวละครนี้ยังไม่มีรหัสผ่าน ตั้งแล้วจะเข้าจากเครื่องอื่นได้ด้วยชื่อ + รหัสผ่าน</p>
+      <input id="pw-1" type="password" autocomplete="new-password" placeholder="รหัสผ่านใหม่ (6 ตัวขึ้นไป)">
+      <input id="pw-2" type="password" autocomplete="new-password" placeholder="ยืนยันรหัสผ่าน">
+      <button id="pw-save" class="btn primary">บันทึกรหัสผ่าน</button>
     </div>
   </div>
 

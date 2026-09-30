@@ -182,6 +182,15 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, .faction-btn:focu
 .adm-section h3 { font-size: 15px; color: var(--hazard); }
 .row-btns { display: flex; gap: 8px; }
 
+/* ---------- login: สลับโหมด ---------- */
+.seg { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.seg button {
+  background: var(--bg); color: var(--muted); border: 0; padding: 10px;
+  font: 600 15px var(--font-body); cursor: pointer;
+}
+.seg button.on { background: var(--hazard); color: #15181b; }
+.reg-only { display: grid; gap: 10px; }
+
 /* ---------- tab bar (มือถือ) ---------- */
 .tabbar { display: none; }
 .tabbar button {

@@ -1,6 +1,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth, signInAnonymously, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import {
+  getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  signOut, deleteUser, linkWithCredential, EmailAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getDatabase, ref, get, set, update, push, remove, onValue, onChildAdded, onChildRemoved,
   onDisconnect, query, orderByKey, limitToLast, runTransaction, serverTimestamp
@@ -160,52 +162,134 @@ document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("c
 setTab("chat");
 
 /* =========================================================
-   4) Auth + สร้างตัวละคร
+   4) ล็อกอินด้วยชื่อผู้ใช้ + รหัสผ่าน
+   Firebase ต้องการอีเมล จึงแปลงชื่อเป็นอีเมลจำลองหลังบ้าน (ผู้เล่นไม่เห็น)
    ========================================================= */
 onValue(ref(db, ".info/serverTimeOffset"), (s) => { state.offset = s.val() || 0; });
 
+const EMAIL_DOMAIN = "zombocalypse.app";
+const nameKey = (name) => name.toLowerCase().replace(/\s+/g, "_");
+const cleanName = (v) => v.replace(/[.#$\[\]\/]/g, "").trim();
+
+async function emailFor(name) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(nameKey(name)));
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `u${hex.slice(0, 40)}@${EMAIL_DOMAIN}`;
+}
+
+function authError(e) {
+  const c = String(e?.code || e);
+  if (c.includes("email-already-in-use") || c.includes("PERMISSION_DENIED")) return "ชื่อนี้ถูกใช้แล้ว ลองชื่ออื่น";
+  if (c.includes("invalid-credential") || c.includes("user-not-found") || c.includes("wrong-password")) return "ชื่อหรือรหัสผ่านไม่ถูกต้อง";
+  if (c.includes("weak-password")) return "รหัสผ่านสั้นเกินไป (อย่างน้อย 6 ตัวอักษร)";
+  if (c.includes("too-many-requests")) return "ลองผิดหลายครั้งเกินไป รอสักครู่แล้วลองใหม่";
+  if (c.includes("network")) return "เชื่อมต่อเครือข่ายไม่ได้";
+  if (c.includes("operation-not-allowed")) return "ยังไม่ได้เปิด Email/Password ใน Firebase Authentication";
+  if (c.includes("requires-recent-login")) return "เซสชันเก่าเกินไป ออกจากระบบแล้วเข้าใหม่";
+  return "ทำรายการไม่สำเร็จ ลองใหม่อีกครั้ง";
+}
+
 onAuthStateChanged(auth, async (user) => {
+  if (state.registering) return;            // กำลังสมัคร: register() จัดการเอง
   try {
-    if (!user) { await signInAnonymously(auth); return; }
+    if (!user) { show("login"); return; }
     state.uid = user.uid;
     const snap = await get(ref(db, "users/" + user.uid));
-    if (snap.exists()) startGame(); else show("login");
+    if (snap.exists()) { startGame(); return; }
+    await signOut(auth);                     // มีบัญชีแต่ไม่มีตัวละคร
+    show("login");
+    $("login-error").textContent = "ไม่พบตัวละครของบัญชีนี้ กรุณาสร้างตัวละครใหม่";
   } catch (e) {
-    $("login-error").textContent = "เชื่อมต่อ Firebase ไม่ได้ — ตรวจ firebaseConfig และเปิด Anonymous Auth";
+    show("login");
+    $("login-error").textContent = "เชื่อมต่อ Firebase ไม่ได้ — ตรวจ firebaseConfig และการตั้งค่า Authentication";
     console.error(e);
   }
 });
 
-let pickedFaction = null;
-function refreshStartBtn() {
-  $("btn-start").disabled = !(pickedFaction && $("inp-username").value.trim().length >= 2);
+let mode = "login", pickedFaction = null;
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+  document.querySelectorAll(".reg-only").forEach((el) => el.classList.toggle("hidden", m !== "register"));
+  $("auth-submit").textContent = m === "login" ? "เข้าสู่ระบบ" : "สร้างตัวละครและเข้าเกม";
+  $("inp-password").autocomplete = m === "login" ? "current-password" : "new-password";
+  $("login-error").textContent = "";
 }
+document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
 document.querySelectorAll(".faction-btn").forEach((b) => b.addEventListener("click", () => {
   pickedFaction = b.dataset.faction;
   document.querySelectorAll(".faction-btn").forEach((x) => x.classList.toggle("selected", x === b));
-  refreshStartBtn();
 }));
-$("inp-username").addEventListener("input", refreshStartBtn);
 
-$("btn-start").addEventListener("click", async () => {
-  const name = $("inp-username").value.replace(/[.#$\[\]\/]/g, "").trim();
-  if (name.length < 2) { $("login-error").textContent = "ชื่อสั้นเกินไป"; return; }
-  const key = name.toLowerCase().replace(/\s+/g, "_");
-  $("btn-start").disabled = true;
+$("auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = (t) => { $("login-error").textContent = t; };
+  const name = cleanName($("inp-username").value), pw = $("inp-password").value;
+  if (name.length < 2) return err("ชื่อต้องยาวอย่างน้อย 2 ตัวอักษร");
+  if (pw.length < 6) return err("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร");
+  if (mode === "register") {
+    if (pw !== $("inp-password2").value) return err("รหัสผ่านสองช่องไม่ตรงกัน");
+    if (!pickedFaction) return err("เลือกฝ่ายก่อน");
+  }
+  err("");
+  $("auth-submit").disabled = true;
   try {
-    // สร้างชื่อ (กันซ้ำ) + โปรไฟล์ในคำสั่งเดียว
+    const email = await emailFor(name);
+    if (mode === "login") await signInWithEmailAndPassword(auth, email, pw);   // แล้ว onAuthStateChanged พาเข้าเกม
+    else await register(name, email, pw);
+  } catch (ex) { err(authError(ex)); }
+  finally { $("auth-submit").disabled = false; }
+});
+
+async function register(name, email, pw) {
+  state.registering = true;
+  let cred;
+  try {
+    cred = await createUserWithEmailAndPassword(auth, email, pw);
+    const uid = cred.user.uid;
+    // จองชื่อ + สร้างตัวละครในคำสั่งเดียว (ชื่อซ้ำ = ทั้งคู่ล้มเหลว)
     await update(ref(db), {
-      ["usernames/" + key]: state.uid,
-      ["users/" + state.uid]: {
+      ["usernames/" + nameKey(name)]: uid,
+      ["users/" + uid]: {
         username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
         stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX, createdAt: serverTimestamp()
       }
     });
+    state.uid = uid;
     startGame();
   } catch (e) {
-    $("login-error").textContent = "ชื่อนี้ถูกใช้แล้ว หรือสร้างตัวละครไม่สำเร็จ";
-    refreshStartBtn();
-  }
+    if (cred) await deleteUser(cred.user).catch(() => {});   // ไม่ให้เหลือบัญชีกำพร้า
+    throw e;
+  } finally { state.registering = false; }
+}
+
+// ออกจากระบบ
+$("btn-logout").addEventListener("click", async () => {
+  try {
+    if (state.zone) {
+      const r = ref(db, `zonePlayers/${state.zone}/${state.uid}`);
+      await onDisconnect(r).cancel();
+      await remove(r);
+    }
+  } catch { /* ไม่เป็นไร */ }
+  await signOut(auth);
+  location.reload();
+});
+
+// ตัวละครเก่าที่สร้างไว้แบบไม่มีรหัสผ่าน (Anonymous) → ตั้งรหัสผ่านให้
+$("btn-setpw").addEventListener("click", () => $("pw-modal").classList.remove("hidden"));
+$("pw-close").addEventListener("click", () => $("pw-modal").classList.add("hidden"));
+$("pw-save").addEventListener("click", async () => {
+  const p1 = $("pw-1").value;
+  if (p1.length < 6) return toast("รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร");
+  if (p1 !== $("pw-2").value) return toast("รหัสผ่านสองช่องไม่ตรงกัน");
+  try {
+    const email = await emailFor(state.profile.username);
+    await linkWithCredential(auth.currentUser, EmailAuthProvider.credential(email, p1));
+    $("pw-modal").classList.add("hidden");
+    $("btn-setpw").classList.add("hidden");
+    toast("ตั้งรหัสผ่านแล้ว ครั้งหน้าเข้าด้วยชื่อ + รหัสผ่าน");
+  } catch (ex) { toast(authError(ex)); }
 });
 
 /* =========================================================
@@ -244,6 +328,7 @@ function renderProfile() {
   badge.textContent = p.role;
   badge.classList.toggle("hidden", p.role === "player");
   $("btn-admin").classList.toggle("hidden", !isStaff());
+  $("btn-setpw").classList.toggle("hidden", !auth.currentUser?.isAnonymous);
   document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
   if (!isStaff()) $("admin-modal").classList.add("hidden");
   renderBars();
