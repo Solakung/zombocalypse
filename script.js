@@ -30,7 +30,7 @@ const db = getDatabase(app);
    2) ข้อมูลเกม (โซน + ไอเทม)
    ========================================================= */
 const STAMINA_COST = 10, STAMINA_MAX = 100, HP_MAX = 100;
-const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 3000, UNARMED_DMG = 5;
+const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
 
 const FACTION = { human: { name: "มนุษย์", icon: "👤" }, zombie: { name: "ซอมบี้", icon: "🧟" } };
 
@@ -61,7 +61,7 @@ const ZONES = {
    ========================================================= */
 const state = {
   uid: null, profile: null, zone: null, offset: 0, inv: {}, ground: {},
-  unsubs: [], started: false, busy: false, lastAttack: 0, sessionStart: 0, attackQueue: Promise.resolve()
+  unsubs: [], started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve()
 };
 
 const $ = (id) => document.getElementById(id);
@@ -160,6 +160,7 @@ function renderBars() {
 
   const starving = (fd === 0 || wt === 0);
   $("btn-scavenge").disabled = (!starving && st < STAMINA_COST);
+  updateAttackButtons();
 }
 
 /* =========================================================
@@ -373,10 +374,14 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     const li = mk("li");
     li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}`));
-    if (!me && state.zone !== "safe") li.append(btn("โจมตี", () => attack(c.key), "btn danger mini"));
+    if (!me && state.zone !== "safe") {
+      const ab = btn("โจมตี", () => attack(c.key, v.name), "btn danger mini atk-btn");
+      ab.dataset.uid = c.key; li.append(ab);
+    }
     ul.append(li);
   });
   if (!ul.children.length) ul.append(mk("li", "empty", "ไม่มีใครอยู่"));
+  updateAttackButtons();
 }
 
 /* =========================================================
@@ -599,9 +604,30 @@ $("btn-scavenge").addEventListener("click", async () => {
 /* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
-async function attack(targetUid) {
+const attackDmg = (id) => (!id ? UNARMED_DMG : id === "custom" ? 25 : (ITEMS[id]?.dmg || UNARMED_DMG));
+
+function attackCooldownLeft() {
+  const last = state.profile?.lastAttack;
+  if (typeof last !== "number") return 0;
+  return Math.max(0, ATTACK_COOLDOWN - (serverNow() - last));
+}
+
+function updateAttackButtons() {
+  const left = Math.ceil(attackCooldownLeft() / 1000);
+  document.querySelectorAll(".atk-btn").forEach((b) => {
+    const pending = state.pending.has(b.dataset.uid);
+    b.disabled = left > 0 || pending;
+    b.textContent = pending ? "รอตอบโต้…" : left > 0 ? `พักแรง ${left}` : "โจมตี";
+  });
+}
+
+async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
-  if (Date.now() - state.lastAttack < ATTACK_COOLDOWN) return toast("รอสักครู่ก่อนโจมตีอีกครั้ง");
+  if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
+  const cd = attackCooldownLeft();
+  if (cd > 0) return toast(`ร่างกายยังล้าจากการปะทะครั้งก่อน พักอีก ${Math.ceil(cd / 1000)} วินาที`);
+
+  state.attacking = true; state.pending.add(targetUid); updateAttackButtons();
 
   const p = state.profile;
   const fd = p.food ?? 100;
@@ -611,63 +637,85 @@ async function attack(targetUid) {
   let newHp = p.hp;
   let attackerDied = false;
   const selfUpdate = {
-     [`users/${state.uid}/food`]: Math.max(0, fd - 2),
-     [`users/${state.uid}/water`]: Math.max(0, wt - 2)
+    [`users/${state.uid}/food`]: Math.max(0, fd - 2),
+    [`users/${state.uid}/water`]: Math.max(0, wt - 2),
+    [`users/${state.uid}/lastAttack`]: serverTimestamp()
   };
 
   if (starving) {
-     newHp = Math.max(0, p.hp - 5);
-     selfUpdate[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-     if (newHp === 0) { selfUpdate[`users/${state.uid}/zone`] = "safe"; attackerDied = true; }
-     toast("คุณฝืนโจมตีขณะหิวโซ เสีย HP 5 หน่วย!");
+    newHp = Math.max(0, p.hp - 5);
+    selfUpdate[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
+    if (newHp === 0) { selfUpdate[`users/${state.uid}/zone`] = "safe"; attackerDied = true; }
+    toast("คุณฝืนโจมตีขณะหิวโซ เสีย HP 5 หน่วย!");
   }
 
-  state.lastAttack = Date.now();
   const w = equippedWeapon();
   const roll = d6();
-  const key = push(ref(db, "attacks/" + targetUid)).key;
+  // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
     ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {})
   };
 
   try {
-    await update(ref(db), { [`attacks/${targetUid}/${key}`]: attackData, ...selfUpdate });
-    
+    await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, ...selfUpdate });
+
     if (attackerDied) {
-        logLine("คุณหิวโซและฝืนร่างกายโจมตีศัตรู จนหมดสติไป... ฟื้นอีกทีที่ Safe Zone", "system");
-        await enterZone("safe");
-        return;
+      state.pending.delete(targetUid);
+      logLine("คุณหิวโซและฝืนร่างกายโจมตีศัตรู จนหมดสติไป... ฟื้นอีกทีที่ Safe Zone", "system");
+      await enterZone("safe");
+      return;
     }
 
-    toast(`คุณทอยได้ ${roll} — รอเป้าหมายป้องกัน...`);
+    toast(`คุณพุ่งเข้าใส่ ${targetName} (ทอยได้ ${roll}) — รอเขาตอบโต้...`);
+    watchAttack(targetUid, targetName, w);
+  } catch (e) {
+    state.pending.delete(targetUid);
+    toast(errMsg(e));
+  } finally {
+    state.attacking = false; updateAttackButtons();
+  }
+}
 
-    setTimeout(async () => {
-      const snap = await get(ref(db, `attacks/${targetUid}/${key}`));
-      if (snap.exists()) {
-        const tSnap = await get(ref(db, `users/${targetUid}`));
-        if (!tSnap.exists()) return;
-        const t = tSnap.val();
+// รอผลการโจมตี: ถ้าเป้าหมายตอบโต้ (ลบคำสั่งโจมตี) ก็จบ ถ้าเงียบเกินเวลาจะฟาดฟรี
+function watchAttack(targetUid, targetName, w) {
+  const aRef = ref(db, `attacks/${targetUid}/${state.uid}`);
+  let seen = false, finished = false, off = null, timer = null;
+  const cleanup = () => {
+    if (finished) return; finished = true;
+    if (off) off(); clearTimeout(timer);
+    state.pending.delete(targetUid); updateAttackButtons();
+  };
+  off = onValue(aRef, (s) => { if (s.exists()) seen = true; else if (seen) cleanup(); });
+  timer = setTimeout(async () => {
+    if (finished) return;
+    try { await freeHit(targetUid, targetName, w); } catch (e) { console.error(e); }
+    cleanup();
+  }, ATTACK_FALLBACK);
+}
 
-        const dmg = w ? w.def.dmg : UNARMED_DMG;
-        const targetHp = Math.max(0, t.hp - dmg);
-        let text = `🏃‍♂️ ${t.username} ปิดเว็บหนี! ${p.username} เลยฟาดฟรีเข้าเป้า −${dmg} HP`;
+async function freeHit(targetUid, targetName, w) {
+  const p = state.profile;
+  const aRef = ref(db, `attacks/${targetUid}/${state.uid}`);
+  if (!(await get(aRef)).exists()) return;
+  const hpSnap = await get(ref(db, `users/${targetUid}/hp`));
+  const tHp = hpSnap.val();
+  if (typeof tHp !== "number") return;
 
-        const u = { [`attacks/${targetUid}/${key}`]: null };
-        if (w) wearUpdates(u, w);
-        u[`users/${targetUid}/hp`] = targetHp === 0 ? 50 : targetHp;
-        if (targetHp === 0) { text += ` — ${t.username} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
+  const dmg = attackDmg(w ? w.it.id : null);
+  const left = Math.max(0, tHp - dmg);
+  let text = `🏃 ${targetName} ไม่ทันตั้งตัว! ${p.username} ฟาดเข้าเป้า −${dmg} HP`;
 
-        const chatRef = push(ref(db, "chats/" + state.zone));
-        // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
-        u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
+  const u = { [`attacks/${targetUid}/${state.uid}`]: null };
+  if (w) wearUpdates(u, w);
+  u[`users/${targetUid}/hp`] = left === 0 ? 50 : left;
+  if (left === 0) { text += ` — ${targetName} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
 
-        await update(ref(db), u);
-        trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
-      }
-    }, 30000);
+  const chatRef = push(ref(db, "chats/" + state.zone));
+  u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
 
-  } catch (e) { toast(errMsg(e)); }
+  await update(ref(db), u);
+  trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
 }
 
 function listenAttacks() {
@@ -687,19 +735,15 @@ async function resolveAttack(key, a) {
   if (w) wearUpdates(u, w);
 
   const hit = a.roll > defRoll;
-  let dmg = 0;
-  if (hit) {
-    if (a.wpn === "custom") dmg = 25; 
-    else dmg = ITEMS[a.wpn]?.dmg || UNARMED_DMG;
-  }
-  
+  const dmg = hit ? attackDmg(a.wpn) : 0;
+
   const newHp = Math.max(0, p.hp - dmg);
   let text = `⚔ ${a.fromName} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
   if (hit) {
     text += `${a.fromName} โจมตีโดน! −${dmg} HP`;
     u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-    if (newHp === 0) text += ` — ${p.username} ล้มลง!`;
+    if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; u[`users/${state.uid}/zone`] = "safe"; }
   } else {
     text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`;
   }
