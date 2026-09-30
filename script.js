@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
   getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword,
-  signOut, deleteUser, linkWithCredential, EmailAuthProvider
+  signOut, deleteUser
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getDatabase, ref, get, set, update, push, remove, onValue, onChildAdded, onChildRemoved,
@@ -9,7 +9,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 
 /* =========================================================
-   1) ตั้งค่า Firebase (เอา Config ของคุณมาแปะทับตรงนี้ได้เลย)
+   1) ตั้งค่า Firebase
    ========================================================= */
 const firebaseConfig = {
   apiKey: "AIzaSyD_5ovnQvZrkO8kG1i00dMdkO2rlNTG_Tk",
@@ -34,7 +34,6 @@ const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 3000, UNARMED_DMG = 5;
 
 const FACTION = { human: { name: "มนุษย์", icon: "👤" }, zombie: { name: "ซอมบี้", icon: "🧟" } };
 
-// ปรับไอเทมให้แบ่งหน้าที่ ฟื้นเลือด / ฟื้นอาหาร / ฟื้นน้ำ
 const ITEMS = {
   canned_food: { name: "อาหารกระป๋อง", icon: "🥫", type: "consumable", food: 40 },
   water: { name: "น้ำดื่ม", icon: "💧", type: "consumable", water: 40 },
@@ -85,14 +84,14 @@ async function trimList(path, limit) {
   if (Object.keys(del).length) await update(ref(db), del);
 }
 
-// ลอจิก Dynamic Regen ตามความหิว
+// อัตราการฟื้นพลังงาน
 function getRegenRate() {
   const p = state.profile;
   if (!p) return 5000;
   const fd = p.food ?? 100, wt = p.water ?? 100;
-  if (fd > 70 && wt > 70) return 3000; // เร็ว
-  if (fd <= 20 || wt <= 20) return 8000; // ช้า
-  return 5000; // ปกติ
+  if (fd > 70 && wt > 70) return 3000;
+  if (fd <= 20 || wt <= 20) return 8000;
+  return 5000;
 }
 
 function curStamina() {
@@ -160,13 +159,12 @@ function renderBars() {
       $("prof-val-regen").style.color = rate === 3000 ? "var(--primary)" : (rate === 8000 ? "var(--hazard)" : "inherit");
   }
 
-  // ปิดปุ่มค้นหาถ้าพลังงานไม่พอ (แต่ถ้าหิวโซ ให้กดได้โดยใช้เลือดแลกแทน)
   const starving = (fd === 0 || wt === 0);
   $("btn-scavenge").disabled = (!starving && st < STAMINA_COST);
 }
 
 /* =========================================================
-   5) ล็อกอิน & สมัครสมาชิก (เพิ่ม Food / Water ค่าเริ่มต้น)
+   5) ล็อกอิน & สมัครสมาชิก
    ========================================================= */
 onValue(ref(db, ".info/serverTimeOffset"), (s) => { state.offset = s.val() || 0; });
 const EMAIL_DOMAIN = "zombocalypse.app";
@@ -228,7 +226,7 @@ async function register(name, email, pw) {
     await set(ref(db, "users/" + uid), {
       username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
       stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX,
-      food: 100, water: 100, // ค่าอาหาร น้ำ เริ่มต้น
+      food: 100, water: 100,
       createdAt: serverTimestamp()
     });
     state.uid = uid; startGame();
@@ -362,7 +360,7 @@ function listenAnnouncements() {
 }
 
 /* =========================================================
-   9) กระเป๋า & การกินอาหาร
+   9) กระเป๋า การกินอาหาร และ การทิ้งของ
    ========================================================= */
 function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; renderInv(); }); }
 
@@ -376,14 +374,51 @@ function renderInv() {
       const eq = state.profile?.equipped === slot;
       if (eq) li.classList.add("equipped");
       li.append(mk("span", "", `🗡️ ${def.name} (${it.dur}/${def.maxDur})`));
-      li.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
+      
+      const btnGrp = mk("div", "row-btns");
+      btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
+      btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      li.append(btnGrp);
     } else {
       li.append(mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`));
-      li.append(btn("ใช้", () => useItem(slot)));
+      
+      const btnGrp = mk("div", "row-btns");
+      btnGrp.append(btn("ใช้", () => useItem(slot)));
+      btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      li.append(btnGrp);
     }
     ul.append(li);
   });
   if (!ul.children.length) ul.append(mk("li", "empty", "กระเป๋าว่างเปล่า"));
+}
+
+async function dropItem(slot) {
+  if (state.busy) return;
+  const it = state.inv[slot]; if (!it) return;
+  state.busy = true;
+  
+  const def = it.id === "custom" ? it : ITEMS[it.id];
+  const p = state.profile;
+  const u = {};
+
+  if (p.equipped === slot) u[`users/${state.uid}/equipped`] = null;
+
+  const key = push(ref(db, `zoneItems/${state.zone}`)).key;
+  u[`zoneItems/${state.zone}/${key}`] = {
+    id: it.id, qty: 1,
+    ...(it.dur ? { dur: it.dur } : {}),
+    ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {})
+  };
+
+  if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
+  else u[`inventory/${state.uid}/${slot}`] = null;
+
+  try { 
+    await update(ref(db), u); 
+    toast(`ทิ้ง ${def.name} ลงพื้นแล้ว`); 
+    logLine(`${p.username} วาง ${def.name} ไว้บนพื้น`, "info");
+  } catch (e) { toast(errMsg(e)); } 
+  finally { state.busy = false; }
 }
 
 function renderGround() {
@@ -572,7 +607,7 @@ async function attack(targetUid) {
     if (attackerDied) {
         logLine("คุณหิวโซและฝืนร่างกายโจมตีศัตรู จนหมดสติไป... ฟื้นอีกทีที่ Safe Zone", "system");
         await enterZone("safe");
-        return; // ตายก่อน ไม่ต้องรอระบบ Timeout 
+        return;
     }
 
     toast(`คุณทอยได้ ${roll} — รอเป้าหมายป้องกัน...`);
