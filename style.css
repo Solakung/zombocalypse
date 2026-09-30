@@ -182,13 +182,54 @@ input:focus-visible, select:focus-visible, .btn:focus-visible, .faction-btn:focu
 .adm-section h3 { font-size: 15px; color: var(--hazard); }
 .row-btns { display: flex; gap: 8px; }
 
+/* ---------- tab bar (มือถือ) ---------- */
+.tabbar { display: none; }
+.tabbar button {
+  position: relative; background: transparent; color: var(--muted);
+  border: 0; border-top: 3px solid transparent;
+  font: 600 14px var(--font-body); min-height: 54px; cursor: pointer;
+}
+.tabbar button.on { color: var(--hazard); border-top-color: var(--hazard); background: var(--panel-2); }
+.tabbar button.unread::after {
+  content: ""; position: absolute; top: 10px; right: 22%;
+  width: 9px; height: 9px; border-radius: 50%; background: var(--danger);
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 900px) {
-  #screen-game.active { display: block; height: auto; }
-  html, body { height: auto; }
-  .layout { grid-template-columns: 1fr; }
-  .chat { height: 60vh; }
-  .panel { overflow: visible; }
+  #screen-game.active {
+    display: grid; height: 100vh; height: 100dvh;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+  .topbar { padding: 8px 12px; gap: 6px 10px; }
+  .who { flex: 1; }
+  .who b { font-size: 17px; }
+  .bars { order: 3; flex-basis: 100%; min-width: 0; }
+  .top-actions .btn { padding: 6px 10px; font-size: 14px; min-height: 36px; }
+
+  .layout { display: flex; flex-direction: column; padding: 8px; min-height: 0; overflow: hidden; }
+  .layout .panel { display: none; flex: 1; min-height: 0; }
+  .layout .panel.tab-on { display: block; }
+  .layout .panel.chat.tab-on { display: grid; }
+
+  .tabbar {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    background: var(--panel); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  input, select, textarea { font-size: 16px; }   /* กัน iOS ซูมเองตอนแตะช่อง */
+  .btn { min-height: 44px; }
+  .btn.mini { min-height: 38px; padding: 6px 14px; }
+  .list li { padding: 8px 10px; }
+  .zone-btn { padding: 13px 12px; font-size: 16px; }
+  .msg { font-size: 16px; }
+  .login-card { padding: 20px; }
+  .login-card h1 { font-size: 34px; }
+  .faction-pick { grid-template-columns: 1fr; }
+  #toast { bottom: calc(76px + env(safe-area-inset-bottom)); }
+  .modal { align-items: end; padding: 0; }
+  .modal-box { max-height: 88vh; border-radius: 12px 12px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

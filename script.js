@@ -146,6 +146,19 @@ function wearUpdates(u, w) {
   }
 }
 
+/* ---------- แท็บสำหรับมือถือ (บนคอมไม่มีผล) ---------- */
+function setTab(t) {
+  document.querySelectorAll(".layout .panel").forEach((p) => p.classList.toggle("tab-on", p.dataset.panel === t));
+  document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+  if (t === "chat") document.querySelector('.tabbar [data-tab="chat"]').classList.remove("unread");
+}
+function notifyChat() {
+  if (!document.querySelector(".layout .panel.chat").classList.contains("tab-on"))
+    document.querySelector('.tabbar [data-tab="chat"]').classList.add("unread");
+}
+document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+setTab("chat");
+
 /* =========================================================
    4) Auth + สร้างตัวละคร
    ========================================================= */
@@ -264,7 +277,7 @@ function buildZoneList() {
     li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
     const b = mk("button", "zone-btn", `${z.icon} ${z.name}`);
     b.dataset.zone = id;
-    b.addEventListener("click", () => enterZone(id));
+    b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
     li.append(b);
     ul.append(li);
   });
@@ -318,6 +331,7 @@ function logLine(text, cls = "info") {
   const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   log.append(mk("div", "msg " + cls, text));
   if (near) log.scrollTop = log.scrollHeight;
+  notifyChat();
 }
 
 function addChat(key, m) {
@@ -333,6 +347,7 @@ function addChat(key, m) {
   el.dataset.key = key;
   log.append(el);
   if (near) log.scrollTop = log.scrollHeight;
+  notifyChat();
 }
 
 $("chat-form").addEventListener("submit", async (e) => {

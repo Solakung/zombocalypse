@@ -2,7 +2,8 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#171a1e">
   <title>ZOMBOCALYPSE — เอาชีวิตรอด</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -63,14 +64,14 @@
     </header>
 
     <main class="layout">
-      <aside class="panel zones">
+      <aside class="panel zones" data-panel="map">
         <h2>โซน</h2>
         <ul id="zone-list" class="list"></ul>
         <h2>ผู้เล่นในโซนนี้</h2>
         <ul id="player-list" class="list"></ul>
       </aside>
 
-      <section class="panel chat">
+      <section class="panel chat" data-panel="chat">
         <div class="chat-head">
           <h2 id="zone-title">—</h2>
           <p id="zone-desc" class="muted"></p>
@@ -82,7 +83,7 @@
         </form>
       </section>
 
-      <aside class="panel actions">
+      <aside class="panel actions" data-panel="bag">
         <button id="btn-scavenge" class="btn primary wide">ค้นหาไอเทม (−10 พลังงาน)</button>
         <h2>ของบนพื้น</h2>
         <ul id="ground-list" class="list"></ul>
@@ -90,6 +91,12 @@
         <ul id="inv-list" class="list"></ul>
       </aside>
     </main>
+
+    <nav class="tabbar" aria-label="เมนูหลัก">
+      <button type="button" data-tab="chat" class="on">แชท</button>
+      <button type="button" data-tab="map">โซน / ผู้เล่น</button>
+      <button type="button" data-tab="bag">กระเป๋า / ค้นหา</button>
+    </nav>
   </section>
 
   <!-- ===== Admin Console (ซ่อนไว้ แสดงเฉพาะ gm / owner) ===== -->
