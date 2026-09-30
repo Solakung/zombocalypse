@@ -90,11 +90,20 @@ const EVENT_TYPES = {
 const eventIcon = (e) => EVENT_TYPES[e?.type]?.icon || "⚠️";
 const minsLeft = (e) => Math.max(1, Math.ceil((e.endsAt - serverNow()) / 60000));
 const activeEvent = (z) => { const e = state.events?.[z]; return e && e.endsAt > serverNow() ? e : null; };
-const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (activeEvent(z)?.dmod || 0)));
+// วัฏจักรกลางวัน/กลางคืน: คำนวณจากเวลาเซิร์ฟเวอร์ ทุกคนเห็นตรงกัน ไม่ต้องเก็บข้อมูล
+// รอบละ 60 นาที: นาทีที่ 0-39 = กลางวัน, 40-59 = กลางคืน (ปรับได้ที่ 2 ค่านี้) / Safe Zone ไม่ได้รับผล
+const DAY_CYCLE = 60 * 60000, NIGHT_START = 40 * 60000;
+const NIGHT_MOD = { dmod: 2, zmod: 10, nmod: 0 };
+const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
+const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
+const nightMod = (z) => (z !== "safe" && isNight() ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
+
+const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (activeEvent(z)?.dmod || 0) + nightMod(z).dmod));
 function effectiveDrops(z) {
-  const e = activeEvent(z);
-  if (!e) return ZONES[z].drops;
-  return ZONES[z].drops.map((d) => d.id === "zombie" ? { ...d, w: Math.max(0, d.w + (e.zmod || 0)) } : d.id === null ? { ...d, w: Math.max(0, d.w + (e.nmod || 0)) } : d);
+  const e = activeEvent(z), n = nightMod(z);
+  const zm = (e?.zmod || 0) + n.zmod, nm = (e?.nmod || 0) + n.nmod;
+  if (!zm && !nm) return ZONES[z].drops;
+  return ZONES[z].drops.map((d) => d.id === "zombie" ? { ...d, w: Math.max(0, d.w + zm) } : d.id === null ? { ...d, w: Math.max(0, d.w + nm) } : d);
 }
 
 function dangerInfo(id) {
@@ -105,10 +114,17 @@ function dangerInfo(id) {
   return { chance, level, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier], ev: activeEvent(id) };
 }
 function renderZoneDanger(z) {
-  const el = $("zone-danger"), evEl = $("zone-event"); if (!el) return;
+  const el = $("zone-danger"), evEl = $("zone-event"), tEl = $("zone-time"); if (!el) return;
   const d = dangerInfo(z), base = ZONES[z].danger;
   el.className = "danger-line d" + d.tier;
   el.textContent = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${z === "safe" ? "ต่อสู้ระหว่างผู้เล่นไม่ได้" : "ผู้เล่นโจมตีกันได้"}`;
+  if (tEl) {
+    const night = isNight();
+    tEl.className = "time-line " + (night ? "night" : "day");
+    tEl.textContent = night
+      ? `🌙 กลางคืน — อีกประมาณ ${phaseMinsLeft()} นาทีจะสว่าง${z === "safe" ? "" : ` • อันตราย +${NIGHT_MOD.dmod} ซอมบี้ชุกขึ้น`}`
+      : `☀️ กลางวัน — อีกประมาณ ${phaseMinsLeft()} นาทีจะมืด`;
+  }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
     if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — อีกประมาณ ${minsLeft(d.ev)} นาที`;
@@ -1308,6 +1324,11 @@ function tickEvents() {
     state.evEnded[z] = e.endsAt;
     if (z === state.zone && e.endsAt > state.sessionStart) logLine(`${e.title} ที่${ZONES[z].name} สิ้นสุดแล้ว สถานการณ์กลับสู่ปกติ`, "info");
   });
+  const night = isNight();
+  if (state.wasNight !== undefined && state.wasNight !== night && state.zone) {
+    logLine(night ? "🌙 ฟ้าเริ่มมืดลง… เสียงคำรามในความมืดดังขึ้น ซอมบี้ออกหากินมากขึ้น" : "🌅 ฟ้าเริ่มสว่างแล้ว ซอมบี้ทยอยกลับที่ซ่อน สถานการณ์คลี่คลายลง", "system");
+  }
+  state.wasNight = night;
   refreshDanger();
   maybeStartAutoEvent();
 }

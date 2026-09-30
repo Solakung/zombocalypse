@@ -381,3 +381,8 @@ textarea#chat-input {
 .list li small.muted { font-size: 12.5px; }
 
 .event-line { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--hazard); }
+
+/* วัฏจักรกลางวัน/กลางคืน */
+.time-line { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+.time-line.day { color: #e8c766; }
+.time-line.night { color: #8fa8ff; }
