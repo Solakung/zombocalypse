@@ -247,14 +247,23 @@ async function register(name, email, pw) {
   try {
     cred = await createUserWithEmailAndPassword(auth, email, pw);
     const uid = cred.user.uid;
-    // จองชื่อ + สร้างตัวละครในคำสั่งเดียว (ชื่อซ้ำ = ทั้งคู่ล้มเหลว)
-    await update(ref(db), {
-      ["usernames/" + nameKey(name)]: uid,
-      ["users/" + uid]: {
-        username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
-        stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX, createdAt: serverTimestamp()
-      }
+    
+    // 1. จองชื่อก่อน (แยกบรรทัดกันเพื่อให้ผ่าน Firebase Rules)
+    await set(ref(db, "usernames/" + nameKey(name)), uid);
+    
+    // 2. สร้างตัวละครใหม่
+    await set(ref(db, "users/" + uid), {
+      username: name, 
+      faction: pickedFaction, 
+      role: "player", 
+      banned: false, 
+      zone: "safe",
+      stamina: STAMINA_MAX, 
+      staminaTs: serverTimestamp(), 
+      hp: HP_MAX, 
+      createdAt: serverTimestamp()
     });
+
     state.uid = uid;
     startGame();
   } catch (e) {
