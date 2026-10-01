@@ -1626,6 +1626,7 @@ async function wbClaim() {
 }
 $("wb-attack").addEventListener("click", () => wbAttack());
 $("wb-claim").addEventListener("click", wbClaim);
+$("wb-title").parentElement.addEventListener("click", () => $("wb-box").classList.toggle("open"));   // มือถือ: แตะหัวกล่องเพื่อดูรายละเอียด/อันดับดาเมจ
 
 function renderAdminWB() {
   const ul = $("adm-wb-list"); if (!ul || !isStaff()) return;
