@@ -1783,10 +1783,11 @@ function renderQuests() {
     li.append(mk("b", "", q.title));
     if (q.desc) li.append(mk("small", "muted", q.desc));
     li.append(mk("small", "", `🎁 ${rewardText(q.reward)}${q.need ? ` • ต้องส่ง ${needText(q.need)}` : ""}`));
+    li.append(mk("small", "muted", q.auto ? "⚡ ได้รับรางวัลทันทีเมื่อส่งมอบ" : "🕵️ รางวัลมอบเมื่อ GM อนุมัติ"));
     li.append(mk("small", "muted", q.status === "open" ? "สถานะ: ว่าง" : q.status === "taken" ? `🧍 ${q.claimerName} กำลังทำ` : `⏳ ${q.claimerName} ส่งมอบแล้ว รอ GM ตรวจ`));
     const row = mk("div", "row-btns");
     if (q.status === "open") row.append(btn("รับภารกิจ", () => questAccept(id)));
-    if (q.status === "taken" && mine) { row.append(btn("ส่งมอบ", () => questDeliver(id))); row.append(btn("ยกเลิก", () => questAbandon(id), "btn ghost mini")); }
+    if (q.status === "taken" && mine) { row.append(btn(q.auto ? "ส่งมอบ + รับรางวัล" : "ส่งมอบ", () => questDeliver(id))); row.append(btn("ยกเลิก", () => questAbandon(id), "btn ghost mini")); }
     if (isStaff()) {
       if (q.status === "submitted") { row.append(btn("อนุมัติ", () => questApprove(id))); row.append(btn("ปฏิเสธ", () => questReject(id), "btn ghost mini")); }
       row.append(btn("ลบ", () => { if (confirm("ลบภารกิจนี้?")) remove(ref(db, "quests/" + id)).catch((e) => toast(errMsg(e))); }, "btn danger mini"));
@@ -1810,6 +1811,7 @@ async function questAccept(id) {
 
 async function questDeliver(id) {
   const q = state.quests[id]; if (!q || q.claimer !== state.uid || q.status !== "taken" || state.busy) return;
+  if (q.auto) return questDeliverAuto(id, q);
   const u = { [`quests/${id}/status`]: "submitted" };
   if (q.need) {
     const have = state.inv[q.need.id]?.qty || 0;
@@ -1819,6 +1821,30 @@ async function questDeliver(id) {
   state.busy = true;
   try { await update(ref(db), u); toast("ส่งมอบแล้ว รอ GM ตรวจรับ"); logLine(`📜 คุณส่งมอบภารกิจ “${q.title}” รอ GM ตรวจรับ`, "info"); }
   catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+// ภารกิจแบบอัตโนมัติ: ส่งมอบแล้วรางวัลเข้ากระเป๋าทันที ภารกิจถูกลบในคำสั่งเดียว (rules ตรวจว่ารางวัลตรงกับที่ GM ตั้งไว้)
+const AUTO_STACK = ["canned_food", "water", "bandage", "medkit", "scrap", "super_ration", "bread", "fruit", "moss", "energy_drink"];
+async function questDeliverAuto(id, q) {
+  const r = q.reward, uid = state.uid, u = {};
+  if (q.need) {
+    if (q.need.id === r.id) return toast("ภารกิจนี้ตั้งค่าไม่ถูกต้อง (ของที่ต้องส่งซ้ำกับรางวัล) แจ้ง GM ด้วย");
+    const have = state.inv[q.need.id]?.qty || 0;
+    if (have < q.need.qty) return toast(`ของไม่พอ ต้องมี ${needText(q.need)}`);
+    if (have > q.need.qty) u[`inventory/${uid}/${q.need.id}/qty`] = have - q.need.qty; else u[`inventory/${uid}/${q.need.id}`] = null;
+  }
+  if (AUTO_STACK.includes(r.id)) u[`inventory/${uid}/${r.id}`] = { id: r.id, qty: Math.min(99, (state.inv[r.id]?.qty || 0) + r.qty) };
+  else u[`inventory/${uid}/q_${id}`] = { ...r };
+  u[`questPayouts/${uid}`] = { qid: id, ts: serverTimestamp() };
+  u[`quests/${id}`] = null;
+  state.busy = true;
+  try {
+    await update(ref(db), u);
+    remove(ref(db, `questPayouts/${uid}`)).catch(() => {});
+    toast(`ภารกิจสำเร็จ! ได้รับ ${rewardText(r)}`);
+    logLine(`📜 คุณทำภารกิจ “${q.title}” สำเร็จ ได้รับ ${rewardText(r)}`, "system");
+  } catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
 
@@ -1866,15 +1892,17 @@ $("adm-q-post").addEventListener("click", async () => {
   else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
   else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
   else reward = { id: itemId, qty };
-  const quest = { title, by: state.profile.username, ts: serverTimestamp(), status: "open", reward };
+  const auto = $("adm-q-mode").value === "auto";
+  const quest = { title, by: state.profile.username, ts: serverTimestamp(), status: "open", reward, auto };
   const desc = $("adm-q-desc").value.trim().slice(0, 300); if (desc) quest.desc = desc;
   const needId = $("adm-q-need").value;
   if (needId) quest.need = { id: needId, qty: Math.max(1, Math.min(50, parseInt($("adm-q-need-qty").value, 10) || 1)) };
+  if (auto && quest.need && quest.need.id === reward.id) return toast("แบบอัตโนมัติ: ของที่ต้องส่งห้ามซ้ำกับรางวัล");
   try {
     await push(ref(db, "quests"), quest);
     ["adm-q-title", "adm-q-desc"].forEach((i) => { $(i).value = ""; });
     ["adm-q-custom-name", "adm-q-food-name"].forEach((i) => { $(i).value = ""; });
-    toast(`โพสต์ภารกิจ “${title}” (รางวัล ${rewardText(reward)}) แล้ว`);
+    toast(`โพสต์ภารกิจ “${title}” (รางวัล ${rewardText(reward)} • ${auto ? "อัตโนมัติ" : "รออนุมัติ"}) แล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
 
