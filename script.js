@@ -455,6 +455,22 @@ function statSummary(faction) {
   return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${baseStat(d.k)}${buffOf(d.k) ? ` (${sgn(buffOf(d.k))})` : ""}`).join(" · ");
 }
 
+const mmss = (ms) => { const s = Math.ceil(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+function deathWaitLeft() { const t = state.profile?.lastDeath; return typeof t === "number" ? Math.max(0, DEATH_COOLDOWN - (serverNow() - t)) : 0; }
+
+// ปุ่มโซน: แสดงต้นทุนเดินทาง และนับถอยหลังคูลดาวน์ (ปุ่มยังกดได้ จะได้ toast บอกสาเหตุ)
+function renderTravelState() {
+  const cd = travelCooldownLeft(), dead = state.profile?.hp === 0;
+  document.querySelectorAll(".zone-btn").forEach((b) => {
+    let t = b.querySelector(".travel-tag");
+    if (!t) { t = mk("span", "travel-tag"); b.insertBefore(t, b.querySelector(".danger-tag")); }
+    const here = b.dataset.zone === state.zone;
+    b.classList.toggle("cooling", !here && (cd > 0 || dead));
+    t.textContent = here ? "" : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
+    t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
+  });
+}
+
 function renderBars() {
   const p = state.profile;
   if (!p) return;
@@ -463,7 +479,8 @@ function renderBars() {
   const wt = curWater();
   $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
   
-  $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${maxHp()}`;
+  $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = p.hp === 0 ? (deathWaitLeft() > 0 ? `💀 ล้มลง • ฟื้นได้ใน ${mmss(deathWaitLeft())}` : "💀 ล้มลง • กำลังฟื้น…") : `HP ${p.hp}/${maxHp()}`;
+  renderTravelState();
   $("bar-st").style.width = Math.min(100, (st / maxStamina()) * 100) + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${maxStamina()}`;
   $("bar-fd").style.width = (fd / 100) * 100 + "\%"; $("txt-fd").textContent = `อาหาร ${fd}/100`;
   $("bar-wt").style.width = (wt / 100) * 100 + "\%"; $("txt-wt").textContent = `น้ำ ${wt}/100`;
@@ -1195,11 +1212,10 @@ function rollDrop(table) {
 async function processDeath(attempt = 0) {
   const p = state.profile;
   if (!p || p.hp !== 0 || p.banned || state.dying || !state.invLoaded || !state.zone) return;
-  const wait = typeof p.lastDeath === "number" ? DEATH_COOLDOWN - (serverNow() - p.lastDeath) : 0;
+  const wait = deathWaitLeft();
   if (wait > 0) {   // ยังอยู่ในช่วงรอฟื้น → นับถอยหลังแล้วค่อยลองใหม่ (ฟื้นก่อนเวลา rules ไม่ยอม)
     if (!state.deathTimer) {
-      const sec = Math.ceil(wait / 1000);
-      logLine(`💀 คุณล้มลง… ร่างกายยังอ่อนล้าจากครั้งก่อน จะฟื้นได้ในอีก ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")} นาที`, "system");
+      logLine(`💀 คุณล้มลง… ร่างกายยังอ่อนล้าจากครั้งก่อน จะฟื้นได้ในอีก ${mmss(wait)} นาที (ดูเวลาที่แถบ HP)`, "system");
       state.deathTimer = setTimeout(() => { state.deathTimer = null; processDeath(); }, wait + 1500);
     }
     return;

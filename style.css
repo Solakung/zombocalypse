@@ -408,3 +408,9 @@ textarea#chat-input {
 .stat-row small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
 .stat-ctl { display: flex; align-items: center; gap: 8px; }
 .stat-ctl span { min-width: 1.6em; text-align: center; font-weight: 600; }
+
+/* ต้นทุน/คูลดาวน์เดินทางบนปุ่มโซน */
+.zone-btn > span:first-child { flex: 1; text-align: left; }
+.travel-tag { font-size: 12px; font-weight: 600; color: var(--muted, #9aa4ad); white-space: nowrap; }
+.zone-btn.cooling .travel-tag { color: var(--hazard, #e0a030); }
+.zone-btn.cooling { opacity: .6; }
