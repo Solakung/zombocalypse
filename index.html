@@ -158,6 +158,9 @@
         <div style="display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
           <span class="muted">สเตตัส:</span> <b id="prof-val-stats" style="text-align: right; font-size: 14px;">—</b>
         </div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">บัฟชั่วคราว:</span> <b id="prof-val-buff" style="text-align: right; font-size: 14px;">ไม่มี</b>
+        </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
           <span class="muted">อาวุธที่ถืออยู่:</span> <b id="prof-val-wpn" style="color: var(--hazard);">มือเปล่า (ดาเมจ 5)</b>
         </div>
@@ -244,6 +247,7 @@
           <input id="adm-food-water" type="number" min="0" max="100" placeholder="เติมน้ำ (0-100)">
           <input id="adm-food-hp" type="number" min="0" max="100" placeholder="ฟื้น HP (0-100)">
           <input id="adm-food-st" type="number" min="0" max="100" placeholder="เติมพลังงาน (0-100)">
+          <div id="adm-stat-box"></div>
         </div>
 
         <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน" placeholder="จำนวน (ชิ้น)" style="margin-top: 8px;">
@@ -301,10 +305,23 @@
           <input id="adm-q-food-water" type="number" min="0" max="100" placeholder="เติมน้ำ (0-100)">
           <input id="adm-q-food-hp" type="number" min="0" max="100" placeholder="ฟื้น HP (0-100)">
           <input id="adm-q-food-st" type="number" min="0" max="100" placeholder="เติมพลังงาน (0-100)">
+          <div id="adm-q-stat-box"></div>
         </div>
 
         <input id="adm-q-qty" type="number" min="1" max="99" value="1" aria-label="จำนวนรางวัล" placeholder="จำนวนรางวัล (ชิ้น)">
         <button id="adm-q-post" class="btn primary">โพสต์ภารกิจ</button>
+      </div>
+
+      <div class="adm-section">
+        <h3>แก้ไขสเตตัสผู้เล่น</h3>
+        <input id="adm-se-id" placeholder="Player ID (หรือกด จัดการ ข้างชื่อผู้เล่น)">
+        <div id="adm-se-box" style="display: grid; gap: 8px;"></div>
+        <div class="row-btns">
+          <button id="adm-se-load" class="btn ghost">โหลดค่าปัจจุบัน</button>
+          <button id="adm-se-save" class="btn primary">บันทึกสเตตัส</button>
+        </div>
+        <button id="adm-se-clearbuff" class="btn ghost">ล้างบัฟชั่วคราวของผู้เล่น</button>
+        <p class="muted">GM แก้ได้เฉพาะผู้เล่นทั่วไป (role player) / Owner แก้ได้ทุกคน — เป็นการแก้สเตตัสถาวร ไม่รวมบัฟชั่วคราว</p>
       </div>
 
       <div class="adm-section">

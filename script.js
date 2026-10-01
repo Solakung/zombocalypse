@@ -47,6 +47,12 @@ const STAT_DEF = {
     { k: "tough", icon: "🛡️", name: "ความคงทน", desc: "−1 ดาเมจที่ได้รับต่อแต้ม (ขั้นต่ำ 1)" }
   ]
 };
+// สเตตัสจากไอเทม: ถาวร (s_*) บวกเข้า stats/{uid} ตรงๆ / ชั่วคราว (b_* + bmin นาที) เก็บที่ buffs/{uid} (มีได้ชุดเดียว ใช้ใหม่จะแทนที่)
+const STAT_KEYS = ["str", "hp", "st", "regen", "agi", "tough"];
+const STAT_LABEL = { str: "💪 พละกำลัง", hp: "❤️ พลังชีวิต", st: "⚡ พลังงาน", regen: "🔋 พลังฟื้นฟู", agi: "💨 ความว่องไว", tough: "🛡️ ความคงทน" };
+const STAT_CAP = 99, ITEM_STAT_CAP = 20, BUFF_MAX_MIN = 720;
+const statFx = (d, pre) => STAT_KEYS.filter((k) => d[pre + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${d[pre + k]}`).join(" ");
+const hasStatFx = (d) => STAT_KEYS.some((k) => d["s_" + k] || d["b_" + k]);
 const SHOUT_COOLDOWN = 30000, BITE_FOOD = 25;
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
 
@@ -71,9 +77,11 @@ const ITEMS = {
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
-const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : "🍽️", ...x } : ITEMS[x.id]);
-const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...["food", "water", "heal", "stamina"].reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
-const effectText = (d) => [d.heal && `HP +${d.heal}`, d.food && `อาหาร +${d.food}`, d.water && `น้ำ +${d.water}`, d.stamina && `พลังงาน +${d.stamina}`].filter(Boolean).join(" ");
+const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
+const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin"];
+const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...ITEM_NUM_KEYS.reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
+const effectText = (d) => [d.heal && `HP +${d.heal}`, d.food && `อาหาร +${d.food}`, d.water && `น้ำ +${d.water}`, d.stamina && `พลังงาน +${d.stamina}`,
+  statFx(d, "s_") && `ถาวร ${statFx(d, "s_")}`, statFx(d, "b_") && `ชั่วคราว ${statFx(d, "b_")} นาน ${d.bmin || 0} นาที`].filter(Boolean).join(" ");
 
 // สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
 const RECIPES = { bandage: { need: { scrap: 2 }, out: "bandage", qty: 1 } };
@@ -152,7 +160,7 @@ function renderZoneDanger(z) {
    3) State + Helpers
    ========================================================= */
 const state = {
-  uid: null, profile: null, stats: null, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
+  uid: null, profile: null, stats: null, buff: null, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
   unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
 };
 
@@ -160,7 +168,12 @@ const $ = (id) => document.getElementById(id);
 const serverNow = () => Date.now() + state.offset;
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const isStaff = () => ["gm", "owner"].includes(state.profile?.role);
-const statOf = (k) => state.stats?.[k] || 0;
+const baseStat = (k) => state.stats?.[k] || 0;
+// บัฟชั่วคราว: หมดก่อนเวลาจริง 1 วิ เพื่อให้ฝั่งเรา "เข้มกว่า" database rules เสมอ (กันเขียนค่าเกินเพดานตอนหมดบัฟ)
+const buffEnd = () => (state.buff && typeof state.buff.bstart === "number" ? state.buff.bstart + (state.buff.mins || 0) * 60000 : 0);
+const buffActive = () => buffEnd() - 1000 > serverNow();
+const buffOf = (k) => (buffActive() ? state.buff[k] || 0 : 0);
+const statOf = (k) => baseStat(k) + buffOf(k);
 const maxHp = () => HP_BASE + 10 * statOf("hp");
 const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
 const regenPerTick = () => 1 + 0.5 * statOf("regen");
@@ -238,6 +251,7 @@ $("btn-profile").addEventListener("click", () => {
   const sb = statOf("str");
   $("prof-val-wpn").textContent = w ? `${w.def.name} (ดาเมจ ${w.def.dmg + sb}, เหลือ ${w.it.dur} ครั้ง)` : `มือเปล่า (ดาเมจ ${UNARMED_DMG + sb})`;
   $("prof-val-stats").textContent = statSummary(p.faction);
+  renderBuffRow();
   $("prof-perk").textContent = FACTION_PERK[p.faction] || "";
   $("prof-bio").value = "";
   get(ref(db, "bios/" + state.uid)).then((s) => { $("prof-bio").value = s.val() || ""; }).catch(() => {});
@@ -260,9 +274,28 @@ async function showBio(uid, name) {
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
+function renderBuffRow() {
+  const el = $("prof-val-buff"); if (!el) return;
+  if (!buffActive()) { el.textContent = "ไม่มี"; return; }
+  const parts = STAT_KEYS.filter((k) => state.buff[k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${state.buff[k]}`);
+  el.textContent = `${parts.join(" ")} (อีก ${Math.max(1, Math.ceil((buffEnd() - serverNow()) / 60000))} นาที)`;
+}
+
+// ถ้าสเตตัสสูงสุดลด (บัฟหมด / GM ลดแต้ม) แล้ว HP/พลังงานที่เก็บไว้เกินเพดาน → ต้องหักลงมาเอง ไม่งั้น rules (validate ≤ max) จะปฏิเสธทุกการเขียนค่าเหล่านั้น
+let clampBusyUntil = 0;
+async function clampToMax() {
+  const p = state.profile; if (!p || Date.now() < clampBusyUntil) return;
+  const u = {};
+  if (typeof p.hp === "number" && p.hp > maxHp()) u[`users/${state.uid}/hp`] = maxHp();
+  if (typeof p.stamina === "number" && p.stamina > maxStamina()) { u[`users/${state.uid}/stamina`] = maxStamina(); u[`users/${state.uid}/staminaTs`] = serverTimestamp(); }
+  if (!Object.keys(u).length) return;
+  clampBusyUntil = Date.now() + 3000;
+  try { await update(ref(db), u); } catch (e) { clampBusyUntil = Date.now() + 30000; console.error(e); }
+}
+
 function statSummary(faction) {
   if (!state.stats) return "ยังไม่ได้แจกแต้ม";
-  return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${statOf(d.k)}`).join(" · ");
+  return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${baseStat(d.k)}${buffOf(d.k) ? ` (+${buffOf(d.k)})` : ""}`).join(" · ");
 }
 
 function renderBars() {
@@ -291,6 +324,7 @@ function renderBars() {
   const starving = (fd === 0 || wt === 0);
   $("btn-scavenge").disabled = (!starving && st < STAMINA_COST);
   updateAttackButtons();
+  renderBuffRow(); clampToMax();
 }
 
 /* =========================================================
@@ -431,6 +465,8 @@ function startGame() {
     if (!s.exists()) openStatModal(); else $("stat-modal").classList.add("hidden");
     renderBars();
   });
+
+  onValue(ref(db, "buffs/" + state.uid), (s) => { state.buff = s.val(); renderBars(); });
 
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
@@ -695,7 +731,7 @@ function renderPlayers(snap) {
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
-        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id"].forEach((id) => { $(id).value = c.key; });
+        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
         $("admin-modal").classList.remove("hidden");
       }, "btn ghost mini"));
@@ -902,8 +938,28 @@ async function useItem(slot) {
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
   }
 
+  // ไอเทมสเตตัส (custom_food ที่มี s_* / b_*): ถาวร = บวกเข้า stats / ชั่วคราว = เขียนทับ buffs
+  const statItem = it.id === "custom_food" && hasStatFx(def);
+  if (statItem) {
+    const mine = (STAT_DEF[p.faction] || []).map((d) => d.k);
+    if (state.stats) {
+      mine.filter((k) => def["s_" + k] > 0 && baseStat(k) < STAT_CAP).forEach((k) => {
+        const n = Math.min(STAT_CAP, baseStat(k) + def["s_" + k]);
+        u[`stats/${state.uid}/${k}`] = n; msgs.push(`${STAT_LABEL[k]} ถาวร +${n - baseStat(k)}`);
+      });
+    }
+    if (def.bmin > 0 && mine.some((k) => def["b_" + k] > 0)) {
+      if (buffActive() && !confirm("คุณมีบัฟชั่วคราวอยู่ การใช้ไอเทมนี้จะแทนที่บัฟเดิมทั้งหมด ต้องการใช้ต่อไหม?")) return;
+      const b = { bstart: serverTimestamp(), mins: def.bmin };
+      STAT_KEYS.forEach((k) => { b[k] = def["b_" + k] || 0; });
+      u[`buffs/${state.uid}`] = b;
+      msgs.push(`บัฟ ${mine.filter((k) => def["b_" + k] > 0).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${def["b_" + k]}`).join(" ")} นาน ${def.bmin} นาที`);
+    }
+  }
+
   if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
+  if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรเต็มเพดานแล้ว");
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
   if (it.id === "custom_food") u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
@@ -1141,9 +1197,11 @@ async function freeHit(targetUid, targetName, w) {
   if (typeof tHp !== "number") return;
 
   const tStats = (await get(ref(db, `stats/${targetUid}`))).val() || {};
+  const tBuff = (await get(ref(db, `buffs/${targetUid}`))).val();
+  const tb = (k) => (tBuff && tBuff.bstart + (tBuff.mins || 0) * 60000 - 1000 > serverNow() ? tBuff[k] || 0 : 0);
   const tIsZombie = state.players[targetUid]?.faction === "zombie";
-  const dodged = tIsZombie && Math.random() < DODGE_PER_POINT * (tStats.agi || 0);
-  const dmg = Math.max(1, myDmg(w) - (tStats.tough || 0));
+  const dodged = tIsZombie && Math.random() < DODGE_PER_POINT * ((tStats.agi || 0) + tb("agi"));
+  const dmg = Math.max(1, myDmg(w) - ((tStats.tough || 0) + tb("tough")));
   const left = Math.max(0, tHp - dmg);
   let text = dodged
     ? `🏃 ${p.username} ฟาดใส่ ${targetName} แต่ถูกหลบได้! 💨`
@@ -1224,6 +1282,18 @@ async function resolveAttack(key, a) {
    ========================================================= */
 function fillSelect(sel, entries) { sel.innerHTML = ""; entries.forEach(([v, label]) => sel.append(new Option(label, v))); }
 
+// ช่องกรอกสเตตัสของไอเทม custom: ถาวร 6 ช่อง + ชั่วคราว 6 ช่อง + ระยะเวลา (P = "adm-" เสกไอเทม / "adm-q-" รางวัลภารกิจ)
+function buildStatInputs(P) {
+  const box = $(P + "stat-box"); if (!box) return;
+  box.innerHTML = ""; box.style.cssText = "display:grid;gap:8px";
+  const num = (id, ph, max) => { const i = document.createElement("input"); i.type = "number"; i.min = 0; i.max = max; i.id = id; i.placeholder = ph; return i; };
+  box.append(mk("p", "muted", `สเตตัสถาวร: กินแล้วบวกเข้าตัวตลอดไป (ช่องละไม่เกิน ${ITEM_STAT_CAP}, รวมแล้วสูงสุด ${STAT_CAP}) — มีผลเฉพาะสเตตัสของฝ่ายผู้ใช้`));
+  STAT_KEYS.forEach((k) => box.append(num(`${P}sp-${k}`, `ถาวร ${STAT_LABEL[k]}`, ITEM_STAT_CAP)));
+  box.append(mk("p", "muted", "สเตตัสชั่วคราว: บัฟมีเวลา (ใช้ชิ้นใหม่จะแทนที่บัฟเดิม)"));
+  STAT_KEYS.forEach((k) => box.append(num(`${P}sb-${k}`, `ชั่วคราว ${STAT_LABEL[k]}`, ITEM_STAT_CAP)));
+  box.append(num(`${P}sb-min`, `ระยะเวลาบัฟ (นาที 1-${BUFF_MAX_MIN} ไม่ใส่ = 10)`, BUFF_MAX_MIN));
+}
+
 function buildAdmin() {
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
@@ -1231,9 +1301,10 @@ function buildAdmin() {
   fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
   fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/พิเศษ)"]);
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
+  buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor();
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
 
@@ -1279,7 +1350,10 @@ function readAdminItem(P = "adm-") {
     const num = (id) => Math.max(0, Math.min(100, parseInt($(id).value, 10) || 0));
     customData = { name: $(P + "food-name").value.trim().slice(0, 40) || "ไอเทมปริศนา", icon: [...$(P + "food-icon").value.trim()].slice(0, 2).join(""), food: num(P + "food-food"), water: num(P + "food-water"), heal: num(P + "food-hp"), stamina: num(P + "food-st") };
     // มีค่าอย่างน้อย 1 ช่อง = ใช้ได้ (อาหาร/น้ำ/ยา/ชูกำลัง) / เว้นว่างหมด = ไอเทมพิเศษ ใช้ไม่ได้ (ของสะสม)
-    customData.type = (customData.food || customData.water || customData.heal || customData.stamina) ? "consumable" : "material";
+    const gi = (id, max) => Math.max(0, Math.min(max, parseInt($(id).value, 10) || 0));
+    STAT_KEYS.forEach((k) => { customData["s_" + k] = gi(`${P}sp-${k}`, ITEM_STAT_CAP); customData["b_" + k] = gi(`${P}sb-${k}`, ITEM_STAT_CAP); });
+    customData.bmin = STAT_KEYS.some((k) => customData["b_" + k]) ? Math.max(1, gi(`${P}sb-min`, BUFF_MAX_MIN) || 10) : 0;
+    customData.type = (customData.food || customData.water || customData.heal || customData.stamina || hasStatFx(customData)) ? "consumable" : "material";
     def = { name: customData.name, type: customData.type };
   }
   const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
@@ -1329,6 +1403,49 @@ $("adm-spawn").addEventListener("click", async () => {
       toast(`เสก ${def.name} ให้ ${t.val().username} แล้ว`);
     }
   } catch (e) { toast(errMsg(e)); }
+});
+
+// แก้สเตตัสถาวรของผู้เล่น (Owner แก้ได้ทุกคน / GM แก้ได้เฉพาะ role = player ตาม database rules)
+function buildStatEditor() {
+  const box = $("adm-se-box"); if (!box) return;
+  box.innerHTML = "";
+  STAT_KEYS.forEach((k) => {
+    const row = mk("label", "", STAT_LABEL[k]); row.style.cssText = "display:grid;gap:4px;font-weight:400";
+    const i = document.createElement("input"); i.type = "number"; i.min = 0; i.max = STAT_CAP; i.id = "adm-se-" + k; i.placeholder = "0-" + STAT_CAP;
+    row.append(i); box.append(row);
+  });
+}
+async function loadStatEditor() {
+  const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
+  try {
+    const s = await get(ref(db, "stats/" + pid));
+    if (!s.exists()) { STAT_KEYS.forEach((k) => { $("adm-se-" + k).value = ""; }); return toast("ผู้เล่นคนนี้ยังไม่ได้แจกแต้มสเตตัส"); }
+    STAT_KEYS.forEach((k) => { $("adm-se-" + k).value = s.val()[k] ?? 0; });
+    const b = (await get(ref(db, "buffs/" + pid))).val();
+    const left = b ? Math.ceil((b.bstart + (b.mins || 0) * 60000 - serverNow()) / 60000) : 0;
+    toast(left > 0 ? `โหลดแล้ว (มีบัฟชั่วคราวอีก ${left} นาที)` : "โหลดสเตตัสแล้ว");
+  } catch (e) { toast(errMsg(e)); }
+}
+$("adm-se-load").addEventListener("click", loadStatEditor);
+$("adm-se-save").addEventListener("click", async () => {
+  const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
+  const vals = {};
+  for (const k of STAT_KEYS) {
+    const n = Number($("adm-se-" + k).value);
+    if ($("adm-se-" + k).value === "" || !Number.isInteger(n) || n < 0 || n > STAT_CAP) return toast(`${STAT_LABEL[k]} ต้องเป็นจำนวนเต็ม 0-${STAT_CAP} (กด "โหลดค่าปัจจุบัน" ก่อนแล้วค่อยแก้)`);
+    vals[k] = n;
+  }
+  try {
+    const t = await get(ref(db, "users/" + pid));
+    if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+    if (!(await get(ref(db, "stats/" + pid))).exists()) return toast("ผู้เล่นยังไม่ได้แจกแต้มสเตตัส แก้ให้ไม่ได้");
+    await set(ref(db, "stats/" + pid), vals);
+    toast(`แก้สเตตัสของ ${t.val().username} แล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+});
+$("adm-se-clearbuff").addEventListener("click", async () => {
+  const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
+  try { await remove(ref(db, "buffs/" + pid)); toast("ล้างบัฟชั่วคราวแล้ว"); } catch (e) { toast(errMsg(e)); }
 });
 
 async function ownerSet(patch, okMsg) {
