@@ -1553,6 +1553,10 @@ function renderWB() {
   if (!b || wbExpired(b) || !p) { box.classList.add("hidden"); return; }
   box.classList.remove("hidden");
   const dead = b.hp <= 0, mine = wbMine(b), claimed = state.wbClaim?.bid === b.startedAt;
+  // บอสล้มแล้ว: คนที่รับรางวัลแล้ว/ไม่ได้ร่วมตี ไม่ต้องเห็นกล่องบอสอีก
+  if (dead && (claimed || !mine)) { box.classList.add("hidden"); return; }
+  // ผู้ร่วมตีที่ยังไม่รับรางวัล → รับให้อัตโนมัติ 1 ครั้งต่อบอส (ถ้าพลาดยังกดปุ่มเองได้)
+  if (dead && mine && !claimed && !state.wbBusy && state.wbAutoClaimed !== b.startedAt) { state.wbAutoClaimed = b.startedAt; setTimeout(wbClaim, 300); }
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
   $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}`;
@@ -1657,7 +1661,7 @@ $("adm-wb-spawn").addEventListener("click", async () => {
   if (!isStaff()) return;
   const z = $("adm-wb-zone").value, name = $("adm-wb-name").value.trim().slice(0, 30);
   if (!name) return toast("ใส่ชื่อบอสก่อน");
-  if (wbOf(z)) return toast("โซนนี้มีบอสโลกอยู่แล้ว — ลบของเดิมก่อน");
+  if (wbAlive(wbOf(z))) return toast("โซนนี้มีบอสโลกอยู่แล้ว — ลบของเดิมก่อน");
   const num = (id, lo, hi, def) => { const n = parseInt($(id).value, 10); return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : def)); };
   const hp = num("adm-wb-hp", 1, 100000, 2000), dlo = num("adm-wb-dlo", 1, 200, 15), dhi = Math.max(dlo, num("adm-wb-dhi", 1, 200, 30));
   const hits = num("adm-wb-hits", 1, 5, 1), acc = num("adm-wb-acc", 10, 100, 75) / 100, mins = num("adm-wb-mins", 0, 700, 0);
