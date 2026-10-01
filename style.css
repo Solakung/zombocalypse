@@ -422,3 +422,11 @@ textarea#chat-input {
 .boss-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .boss-actions .btn { padding: 10px 6px; }
 .boss-actions .btn[disabled] { opacity: .45; }
+
+/* ---------- World Boss ---------- */
+.wb-box { margin-top: 8px; padding: 10px; border: 1px solid #8e2b2b; border-left: 5px solid var(--danger); border-radius: var(--r); background: #2b1d1d; display: grid; gap: 6px; }
+.wb-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.wb-head b { font-family: var(--font-head); font-size: 17px; color: #ffb4a6; }
+.wb-box p { margin: 0; font-size: 13px; }
+.wb-box .bar { height: 24px; }
+.wb-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }

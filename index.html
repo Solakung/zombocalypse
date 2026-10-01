@@ -108,6 +108,16 @@
           <p id="zone-danger" class="danger-line"></p>
           <p id="zone-time" class="time-line"></p>
           <p id="zone-event" class="event-line hidden"></p>
+          <div id="wb-box" class="wb-box hidden">
+            <div class="wb-head"><b id="wb-title">—</b><span id="wb-time" class="muted"></span></div>
+            <p id="wb-tag" class="muted"></p>
+            <div class="bar boss"><i id="bar-wb"></i><span id="txt-wb"></span></div>
+            <p id="wb-top" class="muted"></p>
+            <div class="wb-actions">
+              <button id="wb-attack" class="btn danger" type="button">⚔️ โจมตีบอสโลก</button>
+              <button id="wb-claim" class="btn primary hidden" type="button">🎁 รับรางวัล</button>
+            </div>
+          </div>
         </div>
         <div id="chat-log" class="chat-log" aria-live="polite"></div>
         <form id="chat-form" class="chat-form" autocomplete="off">
@@ -311,6 +321,27 @@
           <input id="adm-ev-auto" type="checkbox" checked style="width:auto;"> เปิดเหตุการณ์สุ่มอัตโนมัติ (ราว 15-40 นาทีครั้ง)
         </label>
         <ul id="adm-ev-list" class="list"></ul>
+      </div>
+
+      <div class="adm-section">
+        <h3>บอสโลก (World Boss)</h3>
+        <select id="adm-wb-zone"></select>
+        <input id="adm-wb-name" maxlength="30" placeholder="ชื่อบอส (เช่น ราชาซอมบี้)">
+        <input id="adm-wb-icon" maxlength="4" placeholder="ไอคอน emoji (เช่น 👹)">
+        <input id="adm-wb-tag" maxlength="80" placeholder="คำโปรย (ไม่ใส่ก็ได้)">
+        <input id="adm-wb-intro" maxlength="120" placeholder="ข้อความประกาศตอนเกิด (ไม่ใส่ก็ได้)">
+        <input id="adm-wb-hp" type="number" min="1" max="100000" value="2000" placeholder="HP บอส (1–100000)">
+        <input id="adm-wb-dlo" type="number" min="1" max="200" value="15" placeholder="ดาเมจต่ำสุดต่อครั้ง">
+        <input id="adm-wb-dhi" type="number" min="1" max="200" value="30" placeholder="ดาเมจสูงสุดต่อครั้ง">
+        <input id="adm-wb-hits" type="number" min="1" max="5" value="1" placeholder="จำนวนครั้งที่ตีต่อรอบ (1–5)">
+        <input id="adm-wb-acc" type="number" min="10" max="100" value="75" placeholder="โอกาสโดน % (10–100)">
+        <p class="label" style="margin-top: 8px;">🎁 รางวัลของผู้ร่วมโจมตี (ทุกคนที่ตีบอสอย่างน้อย 1 ครั้งรับได้คนละครั้ง)</p>
+        <select id="adm-wb-reward"></select>
+        <input id="adm-wb-rqty" type="number" min="1" max="50" value="1" placeholder="จำนวนรางวัล (อาวุธได้ 1 ชิ้นเสมอ)">
+        <input id="adm-wb-rdur" type="number" min="1" max="60" placeholder="ความทนอาวุธรางวัล (เฉพาะอาวุธ)">
+        <input id="adm-wb-mins" type="number" min="0" max="700" value="0" placeholder="หายไปเองใน (นาที) — 0 = ไม่หาย">
+        <button id="adm-wb-spawn" class="btn danger">เรียกบอสโลก</button>
+        <ul id="adm-wb-list" class="list"></ul>
       </div>
 
       <div class="adm-section">

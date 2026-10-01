@@ -254,7 +254,7 @@ function renderZoneDanger(z) {
    ========================================================= */
 const state = {
   uid: null, profile: null, stats: null, buff: null, effects: {}, fxBusy: false, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
-  unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
+  unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, wb: {}, wbHits: {}, wbClaim: null, wbBusy: false, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
 };
 
 const $ = (id) => document.getElementById(id);
@@ -707,7 +707,7 @@ function startGame() {
     state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -770,7 +770,7 @@ async function enterZone(z, initial = false, moved = false) {
       }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
-    teardownZone(); state.zone = z; state.ground = {};
+    teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft();
@@ -784,8 +784,11 @@ async function enterZone(z, initial = false, moved = false) {
       onChildAdded(chatQ, (s) => addChat(s.key, s.val())),
       onChildRemoved(chatQ, (s) => { document.querySelector(`[data-key="${s.key}"]`)?.remove(); }),
       onValue(ref(db, "zonePlayers/" + z), renderPlayers),
-      onValue(ref(db, "zoneItems/" + z), (s) => { state.ground = s.val() || {}; renderGround(); })
+      onValue(ref(db, "zoneItems/" + z), (s) => { state.ground = s.val() || {}; renderGround(); }),
+      onValue(ref(db, "worldBossHits/" + z), (s) => { state.wbHits = s.val() || {}; renderWB(); }),
+      onValue(ref(db, `worldBossClaims/${z}/${state.uid}`), (s) => { state.wbClaim = s.val(); renderWB(); })
     );
+    renderWB();
     if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${travelCost(z)} พลังงาน)`}`, "info");
   } catch (e) { toast(errMsg(e)); }
 }
@@ -1511,6 +1514,160 @@ $("boss-flee").addEventListener("click", () => bossRound("flee"));
 $("boss-claim").addEventListener("click", claimBossReward);
 
 /* =========================================================
+   10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
+   ข้อมูล: worldBosses/{zone} (สถานะบอส) / worldBossHits/{zone}/{uid} (ดาเมจสะสมของแต่ละคน) / worldBossClaims/{zone}/{uid} (รับรางวัลแล้ว)
+   ========================================================= */
+const WB_REWARD_IDS = [...Object.keys(ITEMS).filter((id) => ITEMS[id].type !== "material" || id === "scrap" || id === "chem")].filter((id) => id !== "rotten_meat");
+const wbOf = (z) => { const b = state.wb?.[z]; return b && typeof b.hp === "number" && typeof b.startedAt === "number" ? b : null; };
+const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow();
+const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
+const wbMine = (b) => { const h = state.wbHits?.[state.uid]; return h && h.bid === b.startedAt ? h : null; };
+const wbRewardText = (b) => { const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
+
+function renderWB() {
+  const box = $("wb-box"); if (!box) return;
+  const z = state.zone, b = z && z !== "safe" ? wbOf(z) : null, p = state.profile;
+  if (!b || wbExpired(b) || !p) { box.classList.add("hidden"); return; }
+  box.classList.remove("hidden");
+  const dead = b.hp <= 0, mine = wbMine(b), claimed = state.wbClaim?.bid === b.startedAt;
+  $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
+  $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
+  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}`;
+  $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
+  $("txt-wb").textContent = `HP ${Math.max(0, b.hp)}/${b.max}`;
+  const top = Object.values(state.wbHits || {}).filter((h) => h.bid === b.startedAt).sort((a, c) => c.total - a.total).slice(0, 3);
+  $("wb-top").textContent = (top.length ? "🏅 " + top.map((h, i) => `${i + 1}. ${h.name || "?"} ${h.total}`).join("  ") : "ยังไม่มีใครโจมตี") + (mine ? ` • ของคุณ ${mine.total}` : "");
+  const cd = Math.ceil(attackCooldownLeft() / 1000), stunned = effActive("stun");
+  const atk = $("wb-attack"); atk.classList.toggle("hidden", dead);
+  atk.disabled = !!state.wbBusy || p.hp <= 0 || cd > 0 || stunned;
+  atk.textContent = state.wbBusy ? "กำลังต่อสู้…" : stunned ? "😵 มึนงง" : cd > 0 ? `พักแรง ${cd}` : "⚔️ โจมตีบอสโลก";
+  const cl = $("wb-claim"); cl.classList.toggle("hidden", !dead || !mine || claimed); cl.disabled = !!state.wbBusy;
+  if (dead && !mine) $("wb-top").textContent += " • คุณไม่ได้ร่วมโจมตี จึงไม่มีรางวัล";
+  if (dead && claimed) $("wb-top").textContent += " • รับรางวัลแล้ว";
+}
+
+async function wbAttack(retry = true) {
+  const z = state.zone, p = state.profile; let b = wbOf(z);
+  if (!wbAlive(b) || state.wbBusy || p.hp <= 0 || z === "safe") return;
+  if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้ในตอนนี้");
+  if (attackCooldownLeft() > 0) return toast("ยังพักแรงอยู่");
+  state.wbBusy = true; renderWB();
+  try {
+    const fresh = (await get(ref(db, `worldBosses/${z}`))).val();   // อ่าน HP ล่าสุดก่อนตี (หลายคนตีพร้อมกันได้)
+    b = fresh && typeof fresh.hp === "number" ? { ...b, ...fresh } : b;
+    if (!wbAlive(b)) { toast("บอสโลกล้มไปแล้วหรือหายไปแล้ว"); return; }
+    const uid = state.uid, u = {}, w = equippedWeapon(), r = d6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
+    const dmg = Math.min(b.hp, Math.floor(myDmg(w) * mult));   // floor: ต้องไม่เกินเพดาน ×1.5 ที่ rules ตรวจ
+    u[`users/${uid}/lastAttack`] = serverTimestamp();
+    if (w && r !== 1) wearUpdates(u, w);
+    let line = `🎲 ทอย ${r} — ` + (dmg ? `โจมตี${b.name}โดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
+    let killed = false;
+    if (dmg) {
+      const mine = wbMine(b);
+      u[`worldBossHits/${z}/${uid}`] = { bid: b.startedAt, last: dmg, total: (mine?.total || 0) + dmg, ts: serverTimestamp(), name: p.username, ...(w ? { wpn: w.it.id } : {}) };
+      u[`worldBosses/${z}/hp`] = b.hp - dmg;
+      killed = b.hp - dmg <= 0;
+    }
+    let hp = p.hp;
+    if (!killed) {
+      const s = bossStrike({ hits: b.hits, acc: b.acc, dmg: [b.dmgLo, b.dmgHi], verb: `${b.name}โจมตีกลับ` });
+      hp = Math.max(0, p.hp - s.total); line += ` • ${s.text}`;
+      if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
+    }
+    await update(ref(db), u);
+    logLine(`${b.icon || "👹"} ${line}`, "combat");
+    if (killed) logLine(`🏆 ${b.name}ล้มลงแล้ว! กดรับรางวัลได้เลย`, "system");
+    else if (hp === 0) logLine(`${b.icon || "👹"} ${b.name}สู้คุณจนล้มลง…`, "system");
+  } catch (e) {
+    if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) {
+      state.wbBusy = false; await new Promise((r) => setTimeout(r, 1200)); return wbAttack(false);   // ข้อมูลในเครื่องอาจล้าหลัง/มีคนตีพร้อมกัน ลองใหม่ 1 ครั้ง
+    }
+    toast(errMsg(e));
+  } finally { state.wbBusy = false; renderWB(); }
+}
+
+async function wbClaim() {
+  const z = state.zone, b = wbOf(z);
+  if (!b || b.hp > 0 || state.wbBusy) return;
+  if (!wbMine(b)) return toast("ต้องร่วมโจมตีบอสก่อนถึงจะรับรางวัลได้");
+  if (state.wbClaim?.bid === b.startedAt) return toast("รับรางวัลไปแล้ว");
+  state.wbBusy = true; renderWB();
+  try {
+    const u = { [`worldBossClaims/${z}/${state.uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
+    if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
+    else u[`inventory/${state.uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
+    await update(ref(db), u);
+    logLine(`🏆 รางวัลจาก${b.name}: ${wbRewardText(b)}`, "combat"); toast(`ได้รับ ${wbRewardText(b)}`);
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.wbBusy = false; renderWB(); }
+}
+$("wb-attack").addEventListener("click", () => wbAttack());
+$("wb-claim").addEventListener("click", wbClaim);
+
+function renderAdminWB() {
+  const ul = $("adm-wb-list"); if (!ul || !isStaff()) return;
+  ul.innerHTML = "";
+  Object.entries(state.wb || {}).forEach(([z, b]) => {
+    if (!ZONES[z] || typeof b?.hp !== "number") return;
+    const li = mk("li");
+    li.append(mk("span", "", `${b.icon || "👹"} ${b.name} @ ${ZONES[z].name} — HP ${Math.max(0, b.hp)}/${b.max}${b.hp <= 0 ? " (ล้มแล้ว)" : wbExpired(b) ? " (หมดเวลา)" : ""}`));
+    li.append(btn("ลบ", () => wbRemove(z), "btn ghost mini"));
+    ul.append(li);
+  });
+  if (!ul.children.length) ul.append(mk("li", "empty", "ไม่มีบอสโลก"));
+}
+
+async function wbRemove(z) {
+  try {
+    await update(ref(db), { [`worldBosses/${z}`]: null, [`worldBossHits/${z}`]: null, [`worldBossClaims/${z}`]: null });
+    toast("ลบบอสโลกแล้ว");
+  } catch (e) { toast(errMsg(e)); }
+}
+
+function buildAdminWB() {
+  fillSelect($("adm-wb-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, `${z.icon} ${z.name}`]));
+  fillSelect($("adm-wb-reward"), WB_REWARD_IDS.map((id) => [id, `${ITEMS[id].icon} ${ITEMS[id].name}${ITEMS[id].type === "weapon" ? " (อาวุธ)" : ""}`]));
+}
+
+$("adm-wb-spawn").addEventListener("click", async () => {
+  if (!isStaff()) return;
+  const z = $("adm-wb-zone").value, name = $("adm-wb-name").value.trim().slice(0, 30);
+  if (!name) return toast("ใส่ชื่อบอสก่อน");
+  if (wbOf(z)) return toast("โซนนี้มีบอสโลกอยู่แล้ว — ลบของเดิมก่อน");
+  const num = (id, lo, hi, def) => { const n = parseInt($(id).value, 10); return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : def)); };
+  const hp = num("adm-wb-hp", 1, 100000, 2000), dlo = num("adm-wb-dlo", 1, 200, 15), dhi = Math.max(dlo, num("adm-wb-dhi", 1, 200, 30));
+  const hits = num("adm-wb-hits", 1, 5, 1), acc = num("adm-wb-acc", 10, 100, 75) / 100, mins = num("adm-wb-mins", 0, 700, 0);
+  const rid = $("adm-wb-reward").value, def = ITEMS[rid], isW = def.type === "weapon";
+  const icon = $("adm-wb-icon").value.trim().slice(0, 4), tag = $("adm-wb-tag").value.trim().slice(0, 80), intro = $("adm-wb-intro").value.trim().slice(0, 120);
+  const b = {
+    name, hp, max: hp, zone: z, by: state.profile.username, startedAt: serverTimestamp(), dmgLo: dlo, dmgHi: dhi, hits, acc, rid, rqty: isW ? 1 : num("adm-wb-rqty", 1, 50, 1),
+    ...(isW ? { rdur: num("adm-wb-rdur", 1, 60, Math.min(30, def.maxDur)) } : {}),
+    ...(icon ? { icon } : {}), ...(tag ? { tag } : {}), ...(intro ? { intro } : {}), ...(mins ? { endsAt: serverNow() + mins * 60000 } : {})
+  };
+  try {
+    const annId = push(ref(db, "announcements")).key;
+    await update(ref(db), {
+      [`worldBosses/${z}`]: b, [`worldBossHits/${z}`]: null, [`worldBossClaims/${z}`]: null,
+      [`announcements/${annId}`]: { text: `${icon || "👹"} บอสโลก「${name}」ปรากฏตัวที่${ZONES[z].name}! ไปช่วยกันล้มมัน${intro ? " — " + intro : ""}`.slice(0, 200), zone: "all", by: state.profile.username, ts: serverTimestamp() }
+    });
+    toast(`เรียกบอสโลกที่ ${ZONES[z].name} แล้ว`);
+    trimList("announcements", ANN_LIMIT).catch(() => {});
+  } catch (e) { toast(errMsg(e)); }
+});
+
+function listenWorldBoss() {
+  onValue(ref(db, "worldBosses"), (snap) => {
+    const nu = snap.val() || {};
+    Object.entries(nu).forEach(([z, b]) => {
+      const was = state.wb?.[z];
+      if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0 && z === state.zone) logLine(`🏆 ${b.name}ล้มลงแล้ว! ผู้ที่ร่วมโจมตีกดรับรางวัลได้`, "system");
+    });
+    state.wb = nu; renderWB(); renderAdminWB();
+  });
+  setInterval(() => { renderWB(); renderAdminWB(); }, 1000);
+}
+
+/* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
 const myDmg = (w) => Math.max(1, attackDmg(w ? w.it.id : null, w?.it) + statOf("str"));
@@ -1718,6 +1875,7 @@ function buildStatInputs(P) {
 }
 
 function buildAdmin() {
+  buildAdminWB();
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
   fillSelect($("adm-target-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
   fillSelect($("adm-clear-zone"), Object.entries(ZONES).map(([id, z]) => [id, z.name]));
