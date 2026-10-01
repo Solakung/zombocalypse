@@ -34,6 +34,7 @@ const STAMINA_COST = 10, STAMINA_BASE = 100, HP_BASE = 100;
 const FOOD_DECAY_MS = { human: 150000, zombie: 100000 }, WATER_DECAY_MS = 100000;
 // โทษตาย: ของสิ้นเปลืองเหลือ 70% (ปัดลง) / อาวุธที่ถือเหลือความทนครึ่งเดียว — rules บังคับตามนี้ตอนฟื้น
 const DEATH_KEEP = 0.7, WEAPON_KEEP = 0.5;
+const DEATH_COOLDOWN = 180000;   // ตายซ้ำภายใน 3 นาทีหลังฟื้นครั้งก่อน ต้องรอก่อนฟื้น (กันฆ่าตัวเองเพื่อฟื้น 50 HP) — ต้องตรงกับ rules
 const DEATH_STACK = ["canned_food", "water", "bandage", "medkit", "scrap", "chem", "super_ration", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat"];
 const STARVE_HP = 10;   // HP ที่เสียต่อการค้นหาตอนหิว/กระหาย (ทำได้เฉพาะใน Safe Zone) — ต้องตรงกับ database_rules.json
 const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA = 10, TRAVEL_STAMINA_SAFE = 5;   // ค่าเดินทางข้ามโซน (กลับ Safe Zone ถูกกว่า) — ต้องตรงกับ rules
@@ -995,7 +996,9 @@ async function dropItem(slot) {
 
   if (p.equipped === slot) u[`users/${state.uid}/equipped`] = null;
 
-  const key = push(ref(db, `zoneItems/${state.zone}`)).key;
+  // key ผูกกับ slot + จำนวนปัจจุบัน (rules บังคับ) → กันวางหลายชิ้นจาก slot เดียวในคำสั่งเดียวเพื่อทำของซ้ำ
+  const key = `${state.uid}_${slot}_${it.qty}`;
+  if (state.ground[key]) { state.busy = false; return toast("มีของชิ้นเดียวกันวางรออยู่บนพื้นแล้ว เก็บหรือรอให้มีคนเก็บก่อน"); }
   u[`zoneItems/${state.zone}/${key}`] = {
     id: it.id, qty: 1, src: slot,
     ...(it.dur ? { dur: it.dur } : {}),
@@ -1028,18 +1031,18 @@ function renderGround() {
 
 function invAddUpdate(u, itemId, qty, src, dur, customData) {
   if (itemId === "custom" && customData) {
-    const k = push(ref(db, "inventory/" + state.uid)).key;
+    const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
     u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {}) };
     return;
   }
   if (itemId === "custom_food" && customData) {
-    const k = push(ref(db, "inventory/" + state.uid)).key;
+    const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
     u[`inventory/${state.uid}/${k}`] = { id: "custom_food", qty: 1, ...foodFields(customData), ...(src ? { src } : {}) };
     return;
   }
   const def = ITEMS[itemId];
   if (def.type === "weapon") {
-    const k = push(ref(db, "inventory/" + state.uid)).key;
+    const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
     u[`inventory/${state.uid}/${k}`] = { id: itemId, qty: 1, dur: dur ?? def.maxDur, ...(src ? { src } : {}) };
   } else {
     const total = Math.min(99, (state.inv[itemId]?.qty || 0) + qty);
@@ -1148,6 +1151,15 @@ function rollDrop(table) {
 async function processDeath(attempt = 0) {
   const p = state.profile;
   if (!p || p.hp !== 0 || p.banned || state.dying || !state.invLoaded || !state.zone) return;
+  const wait = typeof p.lastDeath === "number" ? DEATH_COOLDOWN - (serverNow() - p.lastDeath) : 0;
+  if (wait > 0) {   // ยังอยู่ในช่วงรอฟื้น → นับถอยหลังแล้วค่อยลองใหม่ (ฟื้นก่อนเวลา rules ไม่ยอม)
+    if (!state.deathTimer) {
+      const sec = Math.ceil(wait / 1000);
+      logLine(`💀 คุณล้มลง… ร่างกายยังอ่อนล้าจากครั้งก่อน จะฟื้นได้ในอีก ${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")} นาที`, "system");
+      state.deathTimer = setTimeout(() => { state.deathTimer = null; processDeath(); }, wait + 1500);
+    }
+    return;
+  }
   state.dying = true;
   try {
     const u = {}, lost = [], uid = state.uid;
@@ -1165,7 +1177,7 @@ async function processDeath(attempt = 0) {
       else { u[`inventory/${uid}/${ws}/dur`] = nd; lost.push(`${wn} ความทน −${wi.dur - nd}`); }
     }
     if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
-    u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe";
+    u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
     await update(ref(db), u);
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
     await enterZone("safe", false, true);
