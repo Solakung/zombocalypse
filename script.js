@@ -56,6 +56,20 @@ const STAT_MIN = { str: -5, hp: -2, st: -3, regen: -1, agi: -5, tough: -5 };
 const sgn = (n) => (n > 0 ? "+" : "") + n;
 const statFx = (d, pre) => STAT_KEYS.filter((k) => d[pre + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(d[pre + k])}`).join(" ");
 const hasStatFx = (d) => STAT_KEYS.some((k) => d["s_" + k] || d["b_" + k]);
+// สถานะพิเศษ: เก็บที่ effects/{uid}/{type} = { bstart, mins, v, tick } / bleed·poison·hot ทำงานทุก FX_TICK ขณะออนไลน์ (v = HP ต่อรอบ) / stun = โจมตี+ค้นหาไม่ได้ / dice = บวกลบค่าทอยปะทะ
+const FX_TYPES = {
+  bleed: { icon: "🩸", name: "เลือดไหล" }, poison: { icon: "☠️", name: "พิษ" }, hot: { icon: "💚", name: "ฟื้นฟู" },
+  stun: { icon: "😵", name: "มึนงง" }, dice: { icon: "🎯", name: "ทอยลูกเต๋า" }
+};
+const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
+const FX_TICK = 15000, FX_MAX_TICKS = 40, POISON_STAMINA = 2, FX_MAX_MIN = 720;
+const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
+const hasFx = (d) => FX_KEYS.some((t) => d["e_" + t]) || FX_CURE_KEYS.some((t) => d["c_" + t]);
+const fxText = (d) => {
+  const on = FX_KEYS.filter((t) => d["e_" + t]).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(d.e_dice) : t === "stun" ? "" : " " + d["e_" + t] + "/รอบ"}`);
+  const cure = FX_CURE_KEYS.filter((t) => d["c_" + t]).map((t) => FX_TYPES[t].name);
+  return [on.length && `${on.join(" ")} นาน ${d.emin || 0} นาที`, cure.length && `รักษา ${cure.join("/")}`].filter(Boolean).join(" • ");
+};
 const SHOUT_COOLDOWN = 30000, BITE_FOOD = 25;
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
 
@@ -80,11 +94,11 @@ const ITEMS = {
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
-const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
-const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin"];
+const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) || hasFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
+const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin", ...FX_KEYS.map((t) => "e_" + t), "emin", ...FX_CURE_KEYS.map((t) => "c_" + t)];
 const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...ITEM_NUM_KEYS.reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
 const effectText = (d) => [d.heal && `HP ${sgn(d.heal)}`, d.food && `อาหาร ${sgn(d.food)}`, d.water && `น้ำ ${sgn(d.water)}`, d.stamina && `พลังงาน ${sgn(d.stamina)}`,
-  statFx(d, "s_") && `ถาวร ${statFx(d, "s_")}`, statFx(d, "b_") && `ชั่วคราว ${statFx(d, "b_")} นาน ${d.bmin || 0} นาที`].filter(Boolean).join(" ");
+  statFx(d, "s_") && `ถาวร ${statFx(d, "s_")}`, statFx(d, "b_") && `ชั่วคราว ${statFx(d, "b_")} นาน ${d.bmin || 0} นาที`, hasFx(d) && fxText(d)].filter(Boolean).join(" ");
 
 // สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
 const RECIPES = { bandage: { need: { scrap: 2 }, out: "bandage", qty: 1 } };
@@ -163,7 +177,7 @@ function renderZoneDanger(z) {
    3) State + Helpers
    ========================================================= */
 const state = {
-  uid: null, profile: null, stats: null, buff: null, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
+  uid: null, profile: null, stats: null, buff: null, effects: {}, fxBusy: false, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
   unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
 };
 
@@ -177,6 +191,9 @@ const buffEnd = () => (state.buff && typeof state.buff.bstart === "number" ? sta
 const buffActive = () => buffEnd() - 1000 > serverNow();
 const buffOf = (k) => (buffActive() ? state.buff[k] || 0 : 0);
 const statOf = (k) => baseStat(k) + buffOf(k);
+const effEnd = (e) => (e && typeof e.bstart === "number" ? e.bstart + (e.mins || 0) * 60000 : 0);
+const effActive = (t) => { const e = state.effects?.[t]; return !!e && effEnd(e) - 1000 > serverNow(); };
+const effV = (t) => (effActive(t) ? state.effects[t].v || 0 : 0);
 const maxHp = () => HP_BASE + 10 * statOf("hp");
 const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
 const regenPerTick = () => Math.max(0, 1 + 0.5 * statOf("regen"));
@@ -277,6 +294,39 @@ async function showBio(uid, name) {
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
+// เดินเวลาสถานะ: bleed/poison ลด HP (poison ลดพลังงานด้วย) ย้อนหลังได้ไม่เกิน FX_MAX_TICKS รอบ ไม่ทำให้ตาย (เหลือ ≥ 1 HP) / hot ฟื้นรอบละครั้ง / หมดเวลาแล้วลบทิ้ง
+async function effectTick() {
+  const p = state.profile; if (!p || p.banned || state.fxBusy) return;
+  const now = serverNow(), u = {};
+  let hp = p.hp, stam = null;
+  for (const t of FX_KEYS) {
+    const e = state.effects?.[t]; if (!e || typeof e.bstart !== "number") continue;
+    const end = effEnd(e), base = `effects/${state.uid}/${t}`, v = e.v || 0;
+    const expired = now >= end + 1500, live = now < end - 1500;
+    if (!expired && !live) continue;
+    if (t === "bleed" || t === "poison" || t === "hot") {
+      const upto = expired ? end : now - 1500;
+      let ticks = Math.min(FX_MAX_TICKS, Math.floor((upto - (e.tick ?? e.bstart)) / FX_TICK));
+      if (t === "hot") ticks = expired ? 0 : Math.min(1, ticks);
+      if (ticks > 0) {
+        if (t === "hot") { if (hp < maxHp()) { hp = Math.min(maxHp(), hp + v); u[base + "/tick"] = serverTimestamp(); } }
+        else {
+          hp = Math.max(1, hp - v * ticks);
+          if (t === "poison") stam = Math.max(0, (stam ?? curStamina()) - POISON_STAMINA * ticks);
+          if (!expired) u[base + "/tick"] = serverTimestamp();
+        }
+      }
+    }
+    if (expired) u[base] = null;
+  }
+  if (hp !== p.hp) u[`users/${state.uid}/hp`] = hp;
+  if (stam !== null) { u[`users/${state.uid}/stamina`] = stam; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); }
+  if (!Object.keys(u).length) return;
+  state.fxBusy = true;
+  try { await update(ref(db), u); } catch (e) { console.error(e); }
+  finally { state.fxBusy = false; }
+}
+
 function renderBuffRow() {
   const el = $("prof-val-buff"); if (!el) return;
   if (!buffActive()) { el.textContent = "ไม่มี"; return; }
@@ -325,7 +375,12 @@ function renderBars() {
   }
 
   const starving = (fd === 0 || wt === 0);
-  $("btn-scavenge").disabled = (!starving && st < STAMINA_COST);
+  $("btn-scavenge").disabled = (!starving && st < STAMINA_COST) || effActive("stun");
+  const fxEl = $("me-effects");
+  if (fxEl) {
+    fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).join("  ");
+    fxEl.classList.toggle("hidden", !fxEl.textContent);
+  }
   updateAttackButtons();
   renderBuffRow(); clampToMax();
 }
@@ -470,6 +525,7 @@ function startGame() {
   });
 
   onValue(ref(db, "buffs/" + state.uid), (s) => { state.buff = s.val(); renderBars(); });
+  onValue(ref(db, "effects/" + state.uid), (s) => { state.effects = s.val() || {}; renderBars(); });
 
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
@@ -495,6 +551,7 @@ function startGame() {
   });
   setInterval(renderBars, 1000);
   setInterval(infectionTick, 5000);
+  setInterval(effectTick, 5000);
 }
 
 $("btn-copy-id").addEventListener("click", async () => {
@@ -968,12 +1025,24 @@ async function useItem(slot) {
     }
   }
 
+  // สถานะพิเศษ: ไอเทม custom ใส่สถานะ (e_*) หรือรักษา (c_*) / ผ้าพันแผล-ชุดปฐมพยาบาล-มอส รักษาสถานะได้ตาม FX_CURES
+  let usedEat = false;
+  const cure = (t) => { u[`effects/${state.uid}/${t}`] = null; msgs.push(`หาย${FX_TYPES[t].name}`); usedEat = true; };
+  if (it.id === "custom_food") {
+    if (def.emin > 0) FX_KEYS.filter((t) => def["e_" + t]).forEach((t) => {
+      u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins: def.emin, v: def["e_" + t], tick: serverTimestamp() };
+      msgs.push(`${FX_TYPES[t].icon} ${FX_TYPES[t].name}${t === "dice" ? " " + sgn(def.e_dice) : ""} นาน ${def.emin} นาที`); usedEat = true;
+    });
+    FX_CURE_KEYS.filter((t) => def["c_" + t] && !def["e_" + t] && effActive(t)).forEach(cure);
+  }
+  (FX_CURES[it.id] || []).filter(effActive).forEach(cure);
+
   if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
   if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรถึงเพดาน/ขีดต่ำสุดแล้ว");
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
-  if (it.id === "custom_food") u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
+  if (it.id === "custom_food" || usedEat) u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
@@ -994,6 +1063,7 @@ function rollDrop(table) {
 // ทำการค้นหา 1 ครั้ง (อ่านค่าล่าสุดจาก state ทุกครั้ง) — โยน error ออกไปให้ตัวครอบจัดการ
 async function scavengeOnce() {
   const p = state.profile;
+  if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
   const fd = p.food ?? 100;
   const wt = p.water ?? 100;
@@ -1120,13 +1190,15 @@ function updateAttackButtons() {
   const left = Math.ceil(attackCooldownLeft() / 1000);
   document.querySelectorAll(".atk-btn").forEach((b) => {
     const pending = state.pending.has(b.dataset.uid);
-    b.disabled = left > 0 || pending;
-    b.textContent = pending ? "รอตอบโต้…" : left > 0 ? `พักแรง ${left}` : "โจมตี";
+    const stunned = effActive("stun");
+    b.disabled = left > 0 || pending || stunned;
+    b.textContent = pending ? "รอตอบโต้…" : stunned ? "มึนงง" : left > 0 ? `พักแรง ${left}` : "โจมตี";
   });
 }
 
 async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
+  if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้จนกว่าจะหายหรือรักษา");
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
   const cd = attackCooldownLeft();
   if (cd > 0) return toast(`ร่างกายยังล้าจากการปะทะครั้งก่อน พักอีก ${Math.ceil(cd / 1000)} วินาที`);
@@ -1154,7 +1226,8 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   }
 
   const w = equippedWeapon();
-  const roll = d6();
+  const dm = effV("dice");
+  const roll = Math.max(1, Math.min(6 + Math.max(0, dm), d6() + dm));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
@@ -1247,7 +1320,7 @@ async function resolveAttack(key, a) {
   const p = state.profile;
   if (serverNow() - a.ts > 35000 || a.zone !== state.zone) { await remove(aRef); return; }
 
-  const defRoll = d6();
+  const defRoll = d6() + effV("dice");
   const w = equippedWeapon();
   const u = { [`attacks/${state.uid}/${key}`]: null };
   if (w) wearUpdates(u, w);
@@ -1303,6 +1376,16 @@ function buildStatInputs(P) {
   box.append(mk("p", "muted", "สเตตัสชั่วคราว: บัฟ/ดีบัฟมีเวลา (ใช้ชิ้นใหม่จะแทนที่บัฟเดิม)"));
   STAT_KEYS.forEach((k) => box.append(num(`${P}sb-${k}`, `ชั่วคราว ${STAT_LABEL[k]} (${STAT_MIN[k]} ถึง +${ITEM_STAT_CAP})`, STAT_MIN[k], ITEM_STAT_CAP)));
   box.append(num(`${P}sb-min`, `ระยะเวลาบัฟ (นาที 1-${BUFF_MAX_MIN} ไม่ใส่ = 10)`, 1, BUFF_MAX_MIN));
+  box.append(mk("p", "muted", "สถานะพิเศษ: ทำงานทุก 15 วินาทีขณะผู้เล่นออนไลน์ (HP ไม่ลดต่ำกว่า 1) — ใส่ค่า/ติ๊ก = เปิดใช้ ใช้ชิ้นใหม่จะแทนที่สถานะชนิดเดิม"));
+  box.append(num(`${P}fx-bleed`, "🩸 เลือดไหล: เสีย HP ต่อรอบ (1-20)", 1, 20));
+  box.append(num(`${P}fx-poison`, "☠️ พิษ: เสีย HP ต่อรอบ + พลังงาน 2 (1-20)", 1, 20));
+  box.append(num(`${P}fx-hot`, "💚 ฟื้นฟู: ได้ HP ต่อรอบ (1-20)", 1, 20));
+  box.append(num(`${P}fx-dice`, "🎯 บวก/ลบค่าทอยปะทะ (−5 ถึง +5)", -5, 5));
+  const cb = (id, label) => { const l = mk("label", "", ""); l.style.cssText = "display:flex;gap:8px;align-items:center;font-weight:400"; const i = document.createElement("input"); i.type = "checkbox"; i.id = id; i.style.width = "auto"; l.append(i, document.createTextNode(label)); return l; };
+  box.append(cb(`${P}fx-stun`, "😵 มึนงง (โจมตี/ค้นหาไม่ได้)"));
+  box.append(num(`${P}fx-min`, `ระยะเวลาสถานะ (นาที 1-${FX_MAX_MIN} ไม่ใส่ = 5)`, 1, FX_MAX_MIN));
+  box.append(mk("p", "muted", "รักษาสถานะ: กินแล้วล้างสถานะที่ติ๊กออก"));
+  FX_CURE_KEYS.forEach((t) => box.append(cb(`${P}fx-c-${t}`, `รักษา ${FX_TYPES[t].icon} ${FX_TYPES[t].name}`)));
 }
 
 function buildAdmin() {
@@ -1364,7 +1447,12 @@ function readAdminItem(P = "adm-") {
     const gs = (id, k) => Math.max(STAT_MIN[k], Math.min(ITEM_STAT_CAP, parseInt($(id).value, 10) || 0));
     STAT_KEYS.forEach((k) => { customData["s_" + k] = gs(`${P}sp-${k}`, k); customData["b_" + k] = gs(`${P}sb-${k}`, k); });
     customData.bmin = STAT_KEYS.some((k) => customData["b_" + k]) ? Math.max(1, Math.min(BUFF_MAX_MIN, parseInt($(`${P}sb-min`).value, 10) || 10)) : 0;
-    customData.type = (customData.food || customData.water || customData.heal || customData.stamina || hasStatFx(customData)) ? "consumable" : "material";
+    ["bleed", "poison", "hot"].forEach((t) => { customData["e_" + t] = Math.max(0, Math.min(20, parseInt($(`${P}fx-${t}`).value, 10) || 0)); });
+    customData.e_dice = Math.max(-5, Math.min(5, parseInt($(`${P}fx-dice`).value, 10) || 0));
+    customData.e_stun = $(`${P}fx-stun`).checked ? 1 : 0;
+    FX_CURE_KEYS.forEach((t) => { customData["c_" + t] = $(`${P}fx-c-${t}`).checked ? 1 : 0; });
+    customData.emin = FX_KEYS.some((t) => customData["e_" + t]) ? Math.max(1, Math.min(FX_MAX_MIN, parseInt($(`${P}fx-min`).value, 10) || 5)) : 0;
+    customData.type = (customData.food || customData.water || customData.heal || customData.stamina || hasStatFx(customData) || hasFx(customData)) ? "consumable" : "material";
     def = { name: customData.name, type: customData.type };
   }
   const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
@@ -1453,6 +1541,10 @@ $("adm-se-save").addEventListener("click", async () => {
     await set(ref(db, "stats/" + pid), vals);
     toast(`แก้สเตตัสของ ${t.val().username} แล้ว`);
   } catch (e) { toast(errMsg(e)); }
+});
+$("adm-se-cleareff").addEventListener("click", async () => {
+  const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
+  try { await remove(ref(db, "effects/" + pid)); toast("ล้างสถานะพิเศษแล้ว"); } catch (e) { toast(errMsg(e)); }
 });
 $("adm-se-clearbuff").addEventListener("click", async () => {
   const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
