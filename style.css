@@ -414,3 +414,11 @@ textarea#chat-input {
 .travel-tag { font-size: 12px; font-weight: 600; color: var(--muted, #9aa4ad); white-space: nowrap; }
 .zone-btn.cooling .travel-tag { color: var(--hazard, #e0a030); }
 .zone-btn.cooling { opacity: .6; }
+
+/* มินิบอส */
+.bar.boss i { background: #8e2b2b; }
+.boss-log { list-style: none; margin: 8px 0; padding: 8px; height: 130px; overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; font-size: 13px; line-height: 1.5; }
+.boss-log li { padding: 2px 0; border-bottom: 1px dashed var(--line); }
+.boss-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.boss-actions .btn { padding: 10px 6px; }
+.boss-actions .btn[disabled] { opacity: .45; }

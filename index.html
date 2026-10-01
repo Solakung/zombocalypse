@@ -137,6 +137,25 @@
     </nav>
   </section>
 
+  <!-- ===== มินิบอสประจำโซน (ปิดเองไม่ได้ ต้องสู้ หนี หรือรับรางวัล) ===== -->
+  <div id="boss-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="boss-title">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head"><h2 id="boss-title">—</h2></div>
+      <p id="boss-tag" class="muted" style="margin: 6px 0 10px;"></p>
+      <div class="bar boss"><i id="bar-boss"></i><span id="txt-boss"></span></div>
+      <div class="bar hp" style="margin-top: 6px;"><i id="bar-boss-me"></i><span id="txt-boss-me"></span></div>
+      <p id="boss-weapon" class="muted" style="margin: 8px 0 4px; font-size: 13px;"></p>
+      <ul id="boss-log" class="boss-log"></ul>
+      <div class="boss-actions">
+        <button id="boss-attack" class="btn primary">⚔️ โจมตี</button>
+        <button id="boss-bandage" class="btn ghost">🩹 ผ้าพันแผล</button>
+        <button id="boss-medkit" class="btn ghost">🧰 ชุดปฐมพยาบาล</button>
+        <button id="boss-flee" class="btn danger">🏃 หนี</button>
+        <button id="boss-claim" class="btn primary hidden">🎁 รับรางวัล</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== คู่มือวิธีเล่น (เนื้อหาสร้างจากค่าคงที่ใน script.js) ===== -->
   <div id="guide-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="guide-title">
     <div class="modal-box" style="max-width: 440px;">

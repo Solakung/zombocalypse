@@ -37,6 +37,40 @@ const DEATH_KEEP = 0.7, WEAPON_KEEP = 0.5;
 const DEATH_COOLDOWN = 180000;   // ตายซ้ำภายใน 3 นาทีหลังฟื้นครั้งก่อน ต้องรอก่อนฟื้น (กันฆ่าตัวเองเพื่อฟื้น 50 HP) — ต้องตรงกับ rules
 const DEATH_STACK = ["canned_food", "water", "bandage", "medkit", "scrap", "chem", "super_ration", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat"];
 const STARVE_HP = 10;   // HP ที่เสียต่อการค้นหาตอนหิว/กระหาย (ทำได้เฉพาะใน Safe Zone) — ต้องตรงกับ database_rules.json
+// ---- มินิบอสประจำโซน: มนุษย์ค้นหาแล้วสุ่มเจอ (ไอเดียซอมบี้พิเศษแนว Zombicide: Runner / Fatty / ซอมบี้ถืออาวุธ / Abomination) ----
+const BOSS_COOLDOWN = 120000;   // เจอบอสได้ทุก ๆ 2 นาทีอย่างน้อย — ต้องตรงกับ rules (users/lastBoss)
+const BOSS_W = { ruins: 2, mall: 3, hospital: 3, police: 4, forest: 2, factory: 3, port: 3, base: 4, tunnel: 5 };   // น้ำหนักเจอบอสในตารางค้นหา (≈ % ต่อครั้ง)
+// hp: เลือดบอส (rules จำกัด ≤300) / hits: จำนวนครั้งที่โจมตีต่อรอบ / dmg: ช่วงดาเมจต่อครั้ง / acc: โอกาสโดน / flee: โอกาสหนีสำเร็จ
+// loot: ได้ 1 ชิ้น (สุ่มตามน้ำหนัก) / bonus: ของแถม (อาจไม่ได้) — ไอเดมต้องอยู่ใน regex ของ rules และอาวุธต้องมี maxDur ≤ 30
+const BOSSES = {
+  ruins: { name: "นักวิ่งเมืองร้าง", icon: "🏃", tag: "Runner — เร็วมาก ตีสองครั้งต่อรอบแต่เบา", hp: 55, hits: 2, dmg: [5, 9], acc: 0.7, flee: 0.3, verb: "มันพุ่งข่วนรัวๆ",
+    intro: "เสียงฝีเท้ารัวถี่ดังมาจากซอกตึก… ซอมบี้ตัวหนึ่งวิ่งตรงเข้ามาเร็วผิดปกติ!",
+    loot: [{ id: "spiked_bat", w: 3 }, { id: "knife", w: 3 }, { id: "energy_drink", w: 4 }], bonus: [{ id: "bandage", w: 3 }, { id: "water", w: 3 }, { id: null, w: 2 }] },
+  mall: { name: "อ้วนห้างสรรพสินค้า", icon: "🍔", tag: "Fatty — อึดมาก ช้า แต่หนักมือ", hp: 120, hits: 1, dmg: [14, 22], acc: 0.75, flee: 0.65, verb: "มันทุ่มตัวกระแทก",
+    intro: "ชั้นวางของล้มระเนระนาด… ร่างอ้วนใหญ่ยักษ์เดินกระชากทางออกมา!",
+    loot: [{ id: "soup", w: 3 }, { id: "choco_bar", w: 3 }, { id: "energy_drink", w: 3 }, { id: "crowbar", w: 2 }], bonus: [{ id: "canned_food", w: 3 }, { id: "bread", w: 3 }, { id: null, w: 2 }] },
+  hospital: { name: "ศัลยแพทย์ผี", icon: "🩺", tag: "ซอมบี้ถือมีดผ่าตัด — ฟันแม่นและเจ็บ", hp: 90, hits: 1, dmg: [12, 20], acc: 0.8, flee: 0.55, verb: "มีดผ่าตัดกรีดฉับ",
+    intro: "เสียงรถเข็นกลิ้งมาในทางเดิน… หมอในเสื้อกาวน์เปื้อนเลือดชูมีดผ่าตัดขึ้น!",
+    loot: [{ id: "medkit", w: 4 }, { id: "trauma_kit", w: 2 }, { id: "serum", w: 2 }, { id: "antidote", w: 2 }], bonus: [{ id: "bandage", w: 4 }, { id: "moss", w: 2 }, { id: null, w: 2 }] },
+  police: { name: "ตำรวจผีถือกระบอง", icon: "🚔", tag: "ซอมบี้ถืออาวุธ — ตีหนักสม่ำเสมอ", hp: 100, hits: 1, dmg: [13, 20], acc: 0.75, flee: 0.55, verb: "กระบองฟาดเข้าอย่างจัง",
+    intro: "ไฟฉายสาดมาจากห้องควบคุม… เจ้าหน้าที่ผีในเครื่องแบบเดินเข้ามาพร้อมกระบอง!",
+    loot: [{ id: "pistol", w: 3 }, { id: "crowbar", w: 3 }, { id: "knife", w: 3 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "bandage", w: 3 }, { id: "bread", w: 2 }, { id: null, w: 3 }] },
+  forest: { name: "นักวิ่งป่าลึก", icon: "🐺", tag: "Runner — ว่องไว ตีสองครั้งต่อรอบ", hp: 60, hits: 2, dmg: [6, 10], acc: 0.7, flee: 0.3, verb: "มันกระโจนตะปบ",
+    intro: "ใบไม้แหวกเสียงสวบสาบ… บางอย่างวิ่งซิกแซกผ่านต้นไม้เข้ามาหาคุณ!",
+    loot: [{ id: "crossbow", w: 2 }, { id: "pocket_knife", w: 3 }, { id: "moss", w: 4 }], bonus: [{ id: "fruit", w: 4 }, { id: "water", w: 3 }, { id: null, w: 2 }] },
+  factory: { name: "คนงานถือขวาน", icon: "🪓", tag: "Fatty ถืออาวุธ — อึดและตีแรง", hp: 130, hits: 1, dmg: [16, 24], acc: 0.7, flee: 0.6, verb: "ขวานฟาดลงมา",
+    intro: "สายพานหยุดกึก… ร่างกำยำในชุดช่างเดินเข้ามาลากขวานครูดพื้น!",
+    loot: [{ id: "fire_axe", w: 3 }, { id: "spiked_bat", w: 3 }, { id: "chem", w: 3 }], bonus: [{ id: "scrap", w: 4 }, { id: "antidote", w: 2 }, { id: null, w: 2 }] },
+  port: { name: "ยักษ์ท่าเรือ", icon: "⚓", tag: "Fatty — ร่างยักษ์ ช้าแต่ทุ่มหนัก", hp: 150, hits: 1, dmg: [15, 24], acc: 0.75, flee: 0.65, verb: "กำปั้นยักษ์ทุบลงมา",
+    intro: "ตู้คอนเทนเนอร์สั่นสะเทือน… ร่างใหญ่เท่าตู้เหล็กก้าวออกมาจากเงา!",
+    loot: [{ id: "army_meal", w: 3 }, { id: "water_jug", w: 3 }, { id: "crossbow", w: 2 }, { id: "pocket_knife", w: 2 }], bonus: [{ id: "canned_food", w: 3 }, { id: "choco_bar", w: 3 }, { id: null, w: 2 }] },
+  base: { name: "ทหารผีถือปืน", icon: "🪖", tag: "ซอมบี้ถืออาวุธปืน — ยิงสองนัดต่อรอบ", hp: 110, hits: 2, dmg: [8, 14], acc: 0.7, flee: 0.45, verb: "กระสุนซอยเข้าใส่",
+    intro: "เสียงลั่นไกดังก้องค่ายร้าง… ทหารผีในชุดเกราะยกปืนขึ้นเล็งคุณ!",
+    loot: [{ id: "shotgun", w: 2 }, { id: "pistol", w: 3 }, { id: "trauma_kit", w: 2 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "army_meal", w: 3 }, { id: "medkit", w: 2 }, { id: null, w: 2 }] },
+  tunnel: { name: "อสุรกายอุโมงค์", icon: "👹", tag: "Abomination — บอสใหญ่สุดของเมือง", hp: 220, hits: 1, dmg: [22, 34], acc: 0.8, flee: 0.5, verb: "กรงเล็บมหึมาฉีกอกเข้าอย่างจัง",
+    intro: "พื้นสะเทือนเป็นจังหวะ… สิ่งที่ไม่ควรมีอยู่ลากร่างออกมาจากความมืดของอุโมงค์!",
+    loot: [{ id: "samurai_sword", w: 3 }, { id: "shotgun", w: 2 }, { id: "serum", w: 3 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "medkit", w: 3 }, { id: "antidote", w: 2 }, { id: "trauma_kit", w: 2 }] }
+};
 const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA = 10, TRAVEL_STAMINA_SAFE = 5;   // ค่าเดินทางข้ามโซน (กลับ Safe Zone ถูกกว่า) — ต้องตรงกับ rules
 
 // ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
@@ -187,6 +221,7 @@ function effectiveDrops(z) {
 
 // เนื้อเน่า: น้ำหนักดรอปเพิ่มเฉพาะฝั่งซอมบี้ (นอก Safe Zone)
 const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10 };
+function humanDrops(z) { const d = effectiveDrops(z), w = BOSS_W[z]; return w ? [...d, { id: "boss", w }] : d; }   // ตารางค้นหาของมนุษย์ = ตารางโซน + โอกาสเจอบอส
 function zombieDrops(z) { const d = effectiveDrops(z), w = ZOMBIE_EXTRA[z]; return w ? [...d, { id: "rotten_meat", w }] : d; }
 
 function dangerInfo(id) {
@@ -385,6 +420,12 @@ function openGuide() {
     "โทษคิดเฉพาะของที่อยู่ในกระเป๋าและอาวุธที่ถือ ณ ตอนล้ม",
     `ถ้าล้มซ้ำภายใน ${fmtDur(DEATH_COOLDOWN)} หลังฟื้นครั้งก่อน ต้องรอจนครบเวลาก่อนจึงฟื้นได้`
   ]);
+  sec("มินิบอสประจำโซน (ฝ่ายมนุษย์)", [
+    "ค้นหานอก Safe Zone มีโอกาสน้อยๆ เจอซอมบี้พิเศษประจำโซน เช่น Runner (เร็ว ตีสองครั้ง) Fatty (อึดมาก) ซอมบี้ถืออาวุธ และบอสใหญ่ในอุโมงค์",
+    "สู้เป็นรอบ: โจมตี (ทอยลูกเต๋า ทอย 1 พลาด ทอย 6 คริติคอล) ใช้ผ้าพันแผล/ชุดปฐมพยาบาล หรือหนี (ไม่แน่ว่าจะพ้น ถ้าไม่พ้นบอสโจมตีต่อ)",
+    "ระหว่างสู้ย้ายโซนและค้นหาไม่ได้ และปิดเกมหนีไม่ได้ กลับมาเปิดใหม่จะต้องสู้ต่อ ถ้า HP หมดจะโดนโทษตายตามปกติ",
+    `ชนะได้ของหายากประจำโซน 1 ชิ้น + ของแถมบางครั้ง เจอบอสได้ทุก ๆ ${fmtDur(BOSS_COOLDOWN)} อย่างน้อย`
+  ]);
   sec("ฝ่ายซอมบี้", [
     "กินอาหารคนทั่วไปไม่ได้ ต้องหาอาหารจากการกัดผู้เล่นหรือเก็บ 🥩 เนื้อเน่า (+20) ที่ค้นเจอนอก Safe Zone",
     "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง"
@@ -480,7 +521,7 @@ function renderBars() {
   $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
   
   $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = p.hp === 0 ? (deathWaitLeft() > 0 ? `💀 ล้มลง • ฟื้นได้ใน ${mmss(deathWaitLeft())}` : "💀 ล้มลง • กำลังฟื้น…") : `HP ${p.hp}/${maxHp()}`;
-  renderTravelState();
+  renderTravelState(); renderBoss();
   $("bar-st").style.width = Math.min(100, (st / maxStamina()) * 100) + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${maxStamina()}`;
   $("bar-fd").style.width = (fd / 100) * 100 + "\%"; $("txt-fd").textContent = `อาหาร ${fd}/100`;
   $("bar-wt").style.width = (wt / 100) * 100 + "\%"; $("txt-wt").textContent = `น้ำ ${wt}/100`;
@@ -666,7 +707,7 @@ function startGame() {
     state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -718,6 +759,7 @@ async function enterZone(z, initial = false, moved = false) {
     if (!initial) {
       if (!moved) {
         if (state.profile.hp <= 0) return;
+        if (state.boss) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
         const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
         if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
         if (cur < cost) return toast(`พลังงานไม่พอเดินทาง (ต้องใช้ ${cost})`);
@@ -1237,6 +1279,7 @@ async function processDeath(attempt = 0) {
       else { u[`inventory/${uid}/${ws}/dur`] = nd; lost.push(`${wn} ความทน −${wi.dur - nd}`); }
     }
     if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
+    if (state.boss) u[`bossFights/${uid}`] = null;
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
     await update(ref(db), u);
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
@@ -1252,6 +1295,7 @@ async function processDeath(attempt = 0) {
 async function scavengeOnce() {
   const p = state.profile;
   if (p.hp <= 0) return;
+  if (state.boss) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
   if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
   const fd = curFood();
@@ -1263,7 +1307,8 @@ async function scavengeOnce() {
   if (!starving && cur < STAMINA_COST) return toast("พลังงานไม่พอ");
   {
     const isZombie = p.faction === "zombie";
-    let found = rollDrop(isZombie ? zombieDrops(state.zone) : effectiveDrops(state.zone));
+    let found = rollDrop(isZombie ? zombieDrops(state.zone) : humanDrops(state.zone));
+    if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
     const u = {};
@@ -1286,6 +1331,8 @@ async function scavengeOnce() {
       } else {
         await zombieEncounter(u, newHp);
       }
+    } else if (found === "boss") {
+      await startBoss(u);
     } else if (found) {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
@@ -1350,6 +1397,118 @@ async function zombieEncounter(u, hpNow) {
   logLine(`🧟 ${rollTxt} — ${verdict}`, "combat");
   if (newHp === 0) logLine("คุณบาดเจ็บสาหัสจนล้มลง…", "system");
 }
+
+/* =========================================================
+   10.5) มินิบอสประจำโซน (สู้เป็นรอบ: โจมตี / ใช้ยา / หนี)
+   ========================================================= */
+const bossCooldownLeft = () => { const t = state.profile?.lastBoss; return typeof t === "number" ? Math.max(0, BOSS_COOLDOWN - (serverNow() - t)) : 0; };
+
+function bossLog(t) {
+  const ul = $("boss-log"); ul.append(mk("li", "", t));
+  while (ul.children.length > 30) ul.firstChild.remove();
+  ul.scrollTop = ul.scrollHeight;
+}
+
+// เจอบอส: ต้นทุนการค้นหาจ่ายไปแล้วใน u / บันทึกสถานะสู้ที่ bossFights/{uid} เพื่อให้รีเฟรชแล้วต้องสู้ต่อ (หนีด้วยการปิดเกมไม่ได้)
+async function startBoss(u) {
+  const id = state.zone, b = BOSSES[id];
+  if (!b) { await update(ref(db), u); return logLine("คุณค้นหา… ไม่เจออะไรเลย", "info"); }
+  u[`users/${state.uid}/lastBoss`] = serverTimestamp();
+  u[`bossFights/${state.uid}`] = { boss: id, hp: b.hp, max: b.hp, zone: id, ts: serverTimestamp() };
+  await update(ref(db), u);
+  $("boss-log").textContent = "";
+  logLine(`${b.icon} ${b.intro}`, "combat");
+  bossLog(b.intro);
+}
+
+function listenBoss() { onValue(ref(db, "bossFights/" + state.uid), (s) => { state.boss = s.val(); renderBoss(); }); }
+
+function renderBoss() {
+  const m = $("boss-modal"), p = state.profile, bs = state.boss, b = bs && BOSSES[bs.boss];
+  const open = !!(b && p && p.hp > 0 && p.faction === "human");
+  m.classList.toggle("hidden", !open);
+  if (!open) return;
+  const won = bs.hp <= 0, busy = !!state.bossBusy, w = equippedWeapon();
+  $("boss-title").textContent = `${b.icon} ${b.name}`;
+  $("boss-tag").textContent = b.tag;
+  $("bar-boss").style.width = Math.max(0, (bs.hp / bs.max) * 100) + "%"; $("txt-boss").textContent = `บอส ${Math.max(0, bs.hp)}/${bs.max}`;
+  $("bar-boss-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-boss-me").textContent = `HP ${p.hp}/${maxHp()}`;
+  $("boss-weapon").textContent = w ? `ถืออยู่: ${w.def.icon} ${w.def.name} (ทน ${w.it.dur})` : "ถืออยู่: มือเปล่า (ดาเมจต่ำมาก — แนะนำให้หนี)";
+  const bd = state.inv.bandage?.qty || 0, kit = state.inv.medkit?.qty || 0;
+  $("boss-attack").classList.toggle("hidden", won); $("boss-attack").disabled = busy;
+  $("boss-bandage").classList.toggle("hidden", won); $("boss-bandage").disabled = busy || !bd; $("boss-bandage").textContent = `🩹 ผ้าพันแผล ×${bd}`;
+  $("boss-medkit").classList.toggle("hidden", won); $("boss-medkit").disabled = busy || !kit; $("boss-medkit").textContent = `🧰 ชุดปฐมพยาบาล ×${kit}`;
+  $("boss-flee").classList.toggle("hidden", won); $("boss-flee").disabled = busy;
+  $("boss-claim").classList.toggle("hidden", !won); $("boss-claim").disabled = busy;
+}
+
+// การโจมตีของบอส 1 รอบ (ทอยโดน/พลาดแต่ละครั้ง)
+function bossStrike(b) {
+  let total = 0; const parts = [];
+  for (let i = 0; i < b.hits; i++) {
+    if (Math.random() < b.acc) { const d = b.dmg[0] + Math.floor(Math.random() * (b.dmg[1] - b.dmg[0] + 1)); total += d; parts.push(`−${d}`); }
+    else parts.push("พลาด");
+  }
+  return { total, text: `${b.verb} (${parts.join(", ")})` };
+}
+
+async function bossRound(action) {
+  const bs = state.boss, b = bs && BOSSES[bs.boss], p = state.profile;
+  if (!b || state.bossBusy || p.hp <= 0 || bs.hp <= 0) return;
+  state.bossBusy = true; renderBoss();
+  let killed = false;
+  try {
+    const u = {}, uid = state.uid; let hp = p.hp, strike = true, line = "";
+    if (action === "attack") {
+      const w = equippedWeapon(), r = d6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
+      const dmg = Math.round(myDmg(w) * mult), left = Math.max(0, bs.hp - dmg);
+      line = `🎲 ทอย ${r} — ` + (dmg ? `โจมตีโดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
+      if (w && r !== 1) wearUpdates(u, w);
+      if (dmg) u[`bossFights/${uid}/hp`] = left;
+      if (left === 0) { strike = false; killed = true; }
+    } else if (action === "bandage" || action === "medkit") {
+      const it = state.inv[action]; if (!it || !(it.qty > 0)) return;
+      const heal = ITEMS[action].heal;
+      if (it.qty > 1) u[`inventory/${uid}/${action}/qty`] = it.qty - 1; else u[`inventory/${uid}/${action}`] = null;
+      hp = Math.min(maxHp(), hp + heal);
+      line = `${ITEMS[action].icon} ใช้${ITEMS[action].name} +${heal} HP`;
+    } else if (action === "flee") {
+      if (Math.random() < b.flee) { u[`bossFights/${uid}`] = null; strike = false; line = "🏃 คุณวิ่งหนีออกมาได้!"; }
+      else line = "🏃 หนีไม่พ้น! มันขวางทางไว้";
+    }
+    if (strike) { const s = bossStrike(b); hp = Math.max(0, hp - s.total); line += ` • ${s.text}`; }
+    if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
+    if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
+    await update(ref(db), u);
+    bossLog(line);
+    if (killed) { logLine(`${b.icon} คุณล้ม${b.name}ได้สำเร็จ!`, "combat"); bossLog(`🏆 ${b.name}ล้มลงแล้ว!`); }
+    else if (hp === 0) logLine(`${b.icon} ${b.name}สู้คุณจนล้มลง…`, "system");
+    else if (action === "flee" && !state.boss?.hp) logLine(`คุณหนี${b.name}มาได้`, "info");
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.bossBusy = false; renderBoss(); }
+  if (killed) await claimBossReward();
+}
+
+async function claimBossReward() {
+  const bs = state.boss, b = bs && BOSSES[bs.boss];
+  if (!b || bs.hp > 0 || state.bossBusy) return;
+  state.bossBusy = true; renderBoss();
+  try {
+    const main = rollDrop(b.loot); let bonus = rollDrop(b.bonus); if (bonus === main) bonus = null;
+    const u = { [`bossFights/${state.uid}`]: null };
+    [main, bonus].forEach((id) => id && invAddUpdate(u, id, 1));
+    await update(ref(db), u);
+    const got = [main, bonus].filter(Boolean).map((id) => `${ITEMS[id].icon} ${ITEMS[id].name}`).join(" + ");
+    logLine(`🏆 รางวัลจาก${b.name}: ${got}`, "combat"); toast(`ได้รับ ${got}`);
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.bossBusy = false; renderBoss(); }
+}
+
+$("boss-attack").addEventListener("click", () => bossRound("attack"));
+$("boss-bandage").addEventListener("click", () => bossRound("bandage"));
+$("boss-medkit").addEventListener("click", () => bossRound("medkit"));
+$("boss-flee").addEventListener("click", () => bossRound("flee"));
+$("boss-claim").addEventListener("click", claimBossReward);
 
 /* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
