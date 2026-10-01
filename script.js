@@ -1573,6 +1573,18 @@ function renderWB() {
   if (dead && claimed) $("wb-top").textContent += " • รับรางวัลแล้ว";
 }
 
+// [DEBUG บอสโลก] เมื่อ Firebase ปฏิเสธ จะพิมพ์ข้อมูลที่ส่ง + สถานะผู้เล่น/บอส ลง Console เพื่อใช้วิเคราะห์ (ลบได้เมื่อแก้เสร็จ)
+function wbDebug(tag, e, u, b) {
+  try {
+    const p = state.profile || {};
+    console.error("[WB-DEBUG]", tag, e?.code || e, JSON.stringify({
+      update: u, boss: b, now: serverNow(), zone: state.zone,
+      me: { uid: state.uid, role: p.role, hp: p.hp, zone: p.zone, equipped: p.equipped, lastAttack: p.lastAttack },
+      stats: state.stats, buff: state.buff, effects: state.effects,
+      weapon: equippedWeapon()?.it || null, myHits: state.wbHits?.[state.uid] || null, myClaim: state.wbClaim
+    }, null, 1));
+  } catch (x) { console.error("[WB-DEBUG] failed", x); }
+}
 async function wbAttack(retry = true) {
   const z = state.zone, p = state.profile; let b = wbOf(z);
   if (!wbAlive(b) || state.wbBusy || p.hp <= 0 || z === "safe") return;
@@ -1601,11 +1613,13 @@ async function wbAttack(retry = true) {
       hp = Math.max(0, p.hp - s.total); line += ` • ${s.text}`;
       if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     }
+    state.wbDbgU = u;
     await update(ref(db), u);
     logLine(`${b.icon || "👹"} ${line}`, "combat");
     if (killed) logLine(`🏆 ${b.name}ล้มลงแล้ว! กดรับรางวัลได้เลย`, "system");
     else if (hp === 0) logLine(`${b.icon || "👹"} ${b.name}สู้คุณจนล้มลง…`, "system");
   } catch (e) {
+    if (String(e?.code || e).includes("PERMISSION_DENIED")) wbDebug(retry ? "attack" : "attack-retry", e, state.wbDbgU, b);
     if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) {
       state.wbBusy = false; await new Promise((r) => setTimeout(r, 1200)); return wbAttack(false);   // ข้อมูลในเครื่องอาจล้าหลัง/มีคนตีพร้อมกัน ลองใหม่ 1 ครั้ง
     }
@@ -1623,9 +1637,10 @@ async function wbClaim() {
     const u = { [`worldBossClaims/${z}/${state.uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
     if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
     else u[`inventory/${state.uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
+    state.wbDbgU = u;
     await update(ref(db), u);
     logLine(`🏆 รางวัลจาก${b.name}: ${wbRewardText(b)}`, "combat"); toast(`ได้รับ ${wbRewardText(b)}`);
-  } catch (e) { toast(errMsg(e)); }
+  } catch (e) { wbDebug("claim", e, state.wbDbgU, b); toast(errMsg(e)); }
   finally { state.wbBusy = false; renderWB(); }
 }
 $("wb-attack").addEventListener("click", () => wbAttack());
