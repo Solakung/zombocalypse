@@ -51,7 +51,10 @@ const STAT_DEF = {
 const STAT_KEYS = ["str", "hp", "st", "regen", "agi", "tough"];
 const STAT_LABEL = { str: "💪 พละกำลัง", hp: "❤️ พลังชีวิต", st: "⚡ พลังงาน", regen: "🔋 พลังฟื้นฟู", agi: "💨 ความว่องไว", tough: "🛡️ ความคงทน" };
 const STAT_CAP = 99, ITEM_STAT_CAP = 20, BUFF_MAX_MIN = 720;
-const statFx = (d, pre) => STAT_KEYS.filter((k) => d[pre + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${d[pre + k]}`).join(" ");
+// ค่าต่ำสุดของสเตตัสถาวร และของบัฟ (แยกกัน) — ตั้งไว้ให้ HP/พลังงานสูงสุดไม่ต่ำกว่า 60/40 และฟื้นพลังงานไม่ติดลบ (ต้องตรงกับ database_rules.json)
+const STAT_MIN = { str: -5, hp: -2, st: -3, regen: -1, agi: -5, tough: -5 };
+const sgn = (n) => (n > 0 ? "+" : "") + n;
+const statFx = (d, pre) => STAT_KEYS.filter((k) => d[pre + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(d[pre + k])}`).join(" ");
 const hasStatFx = (d) => STAT_KEYS.some((k) => d["s_" + k] || d["b_" + k]);
 const SHOUT_COOLDOWN = 30000, BITE_FOOD = 25;
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
@@ -80,7 +83,7 @@ const ITEMS = {
 const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
 const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin"];
 const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...ITEM_NUM_KEYS.reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
-const effectText = (d) => [d.heal && `HP +${d.heal}`, d.food && `อาหาร +${d.food}`, d.water && `น้ำ +${d.water}`, d.stamina && `พลังงาน +${d.stamina}`,
+const effectText = (d) => [d.heal && `HP ${sgn(d.heal)}`, d.food && `อาหาร ${sgn(d.food)}`, d.water && `น้ำ ${sgn(d.water)}`, d.stamina && `พลังงาน ${sgn(d.stamina)}`,
   statFx(d, "s_") && `ถาวร ${statFx(d, "s_")}`, statFx(d, "b_") && `ชั่วคราว ${statFx(d, "b_")} นาน ${d.bmin || 0} นาที`].filter(Boolean).join(" ");
 
 // สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
@@ -176,8 +179,8 @@ const buffOf = (k) => (buffActive() ? state.buff[k] || 0 : 0);
 const statOf = (k) => baseStat(k) + buffOf(k);
 const maxHp = () => HP_BASE + 10 * statOf("hp");
 const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
-const regenPerTick = () => 1 + 0.5 * statOf("regen");
-const dodgeChance = () => DODGE_PER_POINT * statOf("agi");
+const regenPerTick = () => Math.max(0, 1 + 0.5 * statOf("regen"));
+const dodgeChance = () => Math.max(0, DODGE_PER_POINT * statOf("agi"));
 
 function mk(tag, cls, text) { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; }
 function btn(label, fn, cls = "btn primary mini") { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; }
@@ -249,7 +252,7 @@ $("btn-profile").addEventListener("click", () => {
   $("prof-val-zone").textContent = ZONES[p.zone].name;
   const w = equippedWeapon();
   const sb = statOf("str");
-  $("prof-val-wpn").textContent = w ? `${w.def.name} (ดาเมจ ${w.def.dmg + sb}, เหลือ ${w.it.dur} ครั้ง)` : `มือเปล่า (ดาเมจ ${UNARMED_DMG + sb})`;
+  $("prof-val-wpn").textContent = w ? `${w.def.name} (ดาเมจ ${Math.max(1, w.def.dmg + sb)}, เหลือ ${w.it.dur} ครั้ง)` : `มือเปล่า (ดาเมจ ${Math.max(1, UNARMED_DMG + sb)})`;
   $("prof-val-stats").textContent = statSummary(p.faction);
   renderBuffRow();
   $("prof-perk").textContent = FACTION_PERK[p.faction] || "";
@@ -277,7 +280,7 @@ $("prof-close").addEventListener("click", () => $("profile-modal").classList.add
 function renderBuffRow() {
   const el = $("prof-val-buff"); if (!el) return;
   if (!buffActive()) { el.textContent = "ไม่มี"; return; }
-  const parts = STAT_KEYS.filter((k) => state.buff[k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${state.buff[k]}`);
+  const parts = STAT_KEYS.filter((k) => state.buff[k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(state.buff[k])}`);
   el.textContent = `${parts.join(" ")} (อีก ${Math.max(1, Math.ceil((buffEnd() - serverNow()) / 60000))} นาที)`;
 }
 
@@ -295,7 +298,7 @@ async function clampToMax() {
 
 function statSummary(faction) {
   if (!state.stats) return "ยังไม่ได้แจกแต้ม";
-  return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${baseStat(d.k)}${buffOf(d.k) ? ` (+${buffOf(d.k)})` : ""}`).join(" · ");
+  return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${baseStat(d.k)}${buffOf(d.k) ? ` (${sgn(buffOf(d.k))})` : ""}`).join(" · ");
 }
 
 function renderBars() {
@@ -925,17 +928,25 @@ async function useItem(slot) {
   const it = state.inv[slot], def = it && defOf(it), p = state.profile;
   if (!def || def.type !== "consumable") return;
   // ซอมบี้ได้อาหารจากการกัดเท่านั้น (ยกเว้นเสบียงพิเศษ/อาหาร custom ของแอดมิน) แต่ยังใช้ส่วนน้ำ/HP/พลังงานของไอเทมได้
-  const zombieNoFood = p.faction === "zombie" && def.food && !def.gmOnly && it.id !== "custom_food";
+  const zombieNoFood = p.faction === "zombie" && def.food > 0 && !def.gmOnly && it.id !== "custom_food";
   const foodGain = zombieNoFood ? 0 : (def.food || 0);
   const fd = p.food ?? 100, wt = p.water ?? 100, cur = curStamina();
   const u = {}, msgs = [];
 
-  if (def.heal && p.hp < maxHp()) { const n = Math.min(maxHp(), p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
-  if (foodGain && fd < 100) { const n = Math.min(100, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร +${n - fd}`); }
-  if (def.water && wt < 100) { const n = Math.min(100, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ +${n - wt}`); }
-  if (def.stamina && cur < maxStamina()) {
+  // ค่าบวก = เติม / ค่าลบ = ลด (HP ลดได้ต่ำสุด 1 ไม่ถึงตาย)
+  if (def.heal > 0 && p.hp < maxHp()) { const n = Math.min(maxHp(), p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
+  if (def.heal < 0 && p.hp > 1) { const n = Math.max(1, p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`เสีย ${p.hp - n} HP`); }
+  if (foodGain > 0 && fd < 100) { const n = Math.min(100, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร +${n - fd}`); }
+  if (foodGain < 0 && fd > 0) { const n = Math.max(0, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร −${fd - n}`); }
+  if (def.water > 0 && wt < 100) { const n = Math.min(100, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ +${n - wt}`); }
+  if (def.water < 0 && wt > 0) { const n = Math.max(0, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ −${wt - n}`); }
+  if (def.stamina > 0 && cur < maxStamina()) {
     const n = Math.min(maxStamina(), cur + def.stamina);
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
+  }
+  if (def.stamina < 0 && cur > 0) {
+    const n = Math.max(0, cur + def.stamina);
+    u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน −${cur - n}`);
   }
 
   // ไอเทมสเตตัส (custom_food ที่มี s_* / b_*): ถาวร = บวกเข้า stats / ชั่วคราว = เขียนทับ buffs
@@ -943,23 +954,23 @@ async function useItem(slot) {
   if (statItem) {
     const mine = (STAT_DEF[p.faction] || []).map((d) => d.k);
     if (state.stats) {
-      mine.filter((k) => def["s_" + k] > 0 && baseStat(k) < STAT_CAP).forEach((k) => {
-        const n = Math.min(STAT_CAP, baseStat(k) + def["s_" + k]);
-        u[`stats/${state.uid}/${k}`] = n; msgs.push(`${STAT_LABEL[k]} ถาวร +${n - baseStat(k)}`);
+      mine.filter((k) => (def["s_" + k] > 0 && baseStat(k) < STAT_CAP) || (def["s_" + k] < 0 && baseStat(k) > STAT_MIN[k])).forEach((k) => {
+        const n = Math.max(STAT_MIN[k], Math.min(STAT_CAP, baseStat(k) + def["s_" + k]));
+        u[`stats/${state.uid}/${k}`] = n; msgs.push(`${STAT_LABEL[k]} ถาวร ${sgn(n - baseStat(k))}`);
       });
     }
-    if (def.bmin > 0 && mine.some((k) => def["b_" + k] > 0)) {
+    if (def.bmin > 0 && mine.some((k) => def["b_" + k])) {
       if (buffActive() && !confirm("คุณมีบัฟชั่วคราวอยู่ การใช้ไอเทมนี้จะแทนที่บัฟเดิมทั้งหมด ต้องการใช้ต่อไหม?")) return;
       const b = { bstart: serverTimestamp(), mins: def.bmin };
       STAT_KEYS.forEach((k) => { b[k] = def["b_" + k] || 0; });
       u[`buffs/${state.uid}`] = b;
-      msgs.push(`บัฟ ${mine.filter((k) => def["b_" + k] > 0).map((k) => `${STAT_LABEL[k].split(" ")[0]}+${def["b_" + k]}`).join(" ")} นาน ${def.bmin} นาที`);
+      msgs.push(`${mine.some((k) => def["b_" + k] < 0) ? "บัฟ/ดีบัฟ" : "บัฟ"} ${mine.filter((k) => def["b_" + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(def["b_" + k])}`).join(" ")} นาน ${def.bmin} นาที`);
     }
   }
 
   if (p.infected && p.faction === "human" && (it.id === "medkit" || it.id === "moss")) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
-  if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรเต็มเพดานแล้ว");
+  if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรถึงเพดาน/ขีดต่ำสุดแล้ว");
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
   if (it.id === "custom_food") u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
@@ -1096,7 +1107,7 @@ async function zombieEncounter(u, hpNow) {
 /* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
-const myDmg = (w) => attackDmg(w ? w.it.id : null, w?.it) + statOf("str");
+const myDmg = (w) => Math.max(1, attackDmg(w ? w.it.id : null, w?.it) + statOf("str"));
 const attackDmg = (id, custom) => (!id ? UNARMED_DMG : id === "custom" ? Math.max(1, custom?.dmg || 25) : (ITEMS[id]?.dmg || UNARMED_DMG));
 
 function attackCooldownLeft() {
@@ -1200,8 +1211,8 @@ async function freeHit(targetUid, targetName, w) {
   const tBuff = (await get(ref(db, `buffs/${targetUid}`))).val();
   const tb = (k) => (tBuff && tBuff.bstart + (tBuff.mins || 0) * 60000 - 1000 > serverNow() ? tBuff[k] || 0 : 0);
   const tIsZombie = state.players[targetUid]?.faction === "zombie";
-  const dodged = tIsZombie && Math.random() < DODGE_PER_POINT * ((tStats.agi || 0) + tb("agi"));
-  const dmg = Math.max(1, myDmg(w) - ((tStats.tough || 0) + tb("tough")));
+  const dodged = tIsZombie && Math.random() < Math.max(0, DODGE_PER_POINT * ((tStats.agi || 0) + tb("agi")));
+  const dmg = Math.min(myDmg(w), Math.max(1, myDmg(w) - ((tStats.tough || 0) + tb("tough"))));
   const left = Math.max(0, tHp - dmg);
   let text = dodged
     ? `🏃 ${p.username} ฟาดใส่ ${targetName} แต่ถูกหลบได้! 💨`
@@ -1286,12 +1297,12 @@ function fillSelect(sel, entries) { sel.innerHTML = ""; entries.forEach(([v, lab
 function buildStatInputs(P) {
   const box = $(P + "stat-box"); if (!box) return;
   box.innerHTML = ""; box.style.cssText = "display:grid;gap:8px";
-  const num = (id, ph, max) => { const i = document.createElement("input"); i.type = "number"; i.min = 0; i.max = max; i.id = id; i.placeholder = ph; return i; };
-  box.append(mk("p", "muted", `สเตตัสถาวร: กินแล้วบวกเข้าตัวตลอดไป (ช่องละไม่เกิน ${ITEM_STAT_CAP}, รวมแล้วสูงสุด ${STAT_CAP}) — มีผลเฉพาะสเตตัสของฝ่ายผู้ใช้`));
-  STAT_KEYS.forEach((k) => box.append(num(`${P}sp-${k}`, `ถาวร ${STAT_LABEL[k]}`, ITEM_STAT_CAP)));
-  box.append(mk("p", "muted", "สเตตัสชั่วคราว: บัฟมีเวลา (ใช้ชิ้นใหม่จะแทนที่บัฟเดิม)"));
-  STAT_KEYS.forEach((k) => box.append(num(`${P}sb-${k}`, `ชั่วคราว ${STAT_LABEL[k]}`, ITEM_STAT_CAP)));
-  box.append(num(`${P}sb-min`, `ระยะเวลาบัฟ (นาที 1-${BUFF_MAX_MIN} ไม่ใส่ = 10)`, BUFF_MAX_MIN));
+  const num = (id, ph, min, max) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.id = id; i.placeholder = ph; return i; };
+  box.append(mk("p", "muted", `สเตตัสถาวร: ใส่ค่าบวก = เพิ่ม / ค่าลบ = ลด (สูงสุด +${ITEM_STAT_CAP}, ลดได้ไม่เกินขีดต่ำสุดของแต่ละช่อง) — มีผลเฉพาะสเตตัสของฝ่ายผู้ใช้`));
+  STAT_KEYS.forEach((k) => box.append(num(`${P}sp-${k}`, `ถาวร ${STAT_LABEL[k]} (${STAT_MIN[k]} ถึง +${ITEM_STAT_CAP})`, STAT_MIN[k], ITEM_STAT_CAP)));
+  box.append(mk("p", "muted", "สเตตัสชั่วคราว: บัฟ/ดีบัฟมีเวลา (ใช้ชิ้นใหม่จะแทนที่บัฟเดิม)"));
+  STAT_KEYS.forEach((k) => box.append(num(`${P}sb-${k}`, `ชั่วคราว ${STAT_LABEL[k]} (${STAT_MIN[k]} ถึง +${ITEM_STAT_CAP})`, STAT_MIN[k], ITEM_STAT_CAP)));
+  box.append(num(`${P}sb-min`, `ระยะเวลาบัฟ (นาที 1-${BUFF_MAX_MIN} ไม่ใส่ = 10)`, 1, BUFF_MAX_MIN));
 }
 
 function buildAdmin() {
@@ -1347,12 +1358,12 @@ function readAdminItem(P = "adm-") {
     def = { name: cName, type: "weapon", maxDur: cDur };
   }
   if (isFood) {
-    const num = (id) => Math.max(0, Math.min(100, parseInt($(id).value, 10) || 0));
+    const num = (id) => Math.max(-100, Math.min(100, parseInt($(id).value, 10) || 0));
     customData = { name: $(P + "food-name").value.trim().slice(0, 40) || "ไอเทมปริศนา", icon: [...$(P + "food-icon").value.trim()].slice(0, 2).join(""), food: num(P + "food-food"), water: num(P + "food-water"), heal: num(P + "food-hp"), stamina: num(P + "food-st") };
     // มีค่าอย่างน้อย 1 ช่อง = ใช้ได้ (อาหาร/น้ำ/ยา/ชูกำลัง) / เว้นว่างหมด = ไอเทมพิเศษ ใช้ไม่ได้ (ของสะสม)
-    const gi = (id, max) => Math.max(0, Math.min(max, parseInt($(id).value, 10) || 0));
-    STAT_KEYS.forEach((k) => { customData["s_" + k] = gi(`${P}sp-${k}`, ITEM_STAT_CAP); customData["b_" + k] = gi(`${P}sb-${k}`, ITEM_STAT_CAP); });
-    customData.bmin = STAT_KEYS.some((k) => customData["b_" + k]) ? Math.max(1, gi(`${P}sb-min`, BUFF_MAX_MIN) || 10) : 0;
+    const gs = (id, k) => Math.max(STAT_MIN[k], Math.min(ITEM_STAT_CAP, parseInt($(id).value, 10) || 0));
+    STAT_KEYS.forEach((k) => { customData["s_" + k] = gs(`${P}sp-${k}`, k); customData["b_" + k] = gs(`${P}sb-${k}`, k); });
+    customData.bmin = STAT_KEYS.some((k) => customData["b_" + k]) ? Math.max(1, Math.min(BUFF_MAX_MIN, parseInt($(`${P}sb-min`).value, 10) || 10)) : 0;
     customData.type = (customData.food || customData.water || customData.heal || customData.stamina || hasStatFx(customData)) ? "consumable" : "material";
     def = { name: customData.name, type: customData.type };
   }
@@ -1411,7 +1422,7 @@ function buildStatEditor() {
   box.innerHTML = "";
   STAT_KEYS.forEach((k) => {
     const row = mk("label", "", STAT_LABEL[k]); row.style.cssText = "display:grid;gap:4px;font-weight:400";
-    const i = document.createElement("input"); i.type = "number"; i.min = 0; i.max = STAT_CAP; i.id = "adm-se-" + k; i.placeholder = "0-" + STAT_CAP;
+    const i = document.createElement("input"); i.type = "number"; i.min = STAT_MIN[k]; i.max = STAT_CAP; i.id = "adm-se-" + k; i.placeholder = `${STAT_MIN[k]} ถึง ${STAT_CAP}`;
     row.append(i); box.append(row);
   });
 }
@@ -1432,7 +1443,7 @@ $("adm-se-save").addEventListener("click", async () => {
   const vals = {};
   for (const k of STAT_KEYS) {
     const n = Number($("adm-se-" + k).value);
-    if ($("adm-se-" + k).value === "" || !Number.isInteger(n) || n < 0 || n > STAT_CAP) return toast(`${STAT_LABEL[k]} ต้องเป็นจำนวนเต็ม 0-${STAT_CAP} (กด "โหลดค่าปัจจุบัน" ก่อนแล้วค่อยแก้)`);
+    if ($("adm-se-" + k).value === "" || !Number.isInteger(n) || n < STAT_MIN[k] || n > STAT_CAP) return toast(`${STAT_LABEL[k]} ต้องเป็นจำนวนเต็ม ${STAT_MIN[k]} ถึง ${STAT_CAP} (กด "โหลดค่าปัจจุบัน" ก่อนแล้วค่อยแก้)`);
     vals[k] = n;
   }
   try {
