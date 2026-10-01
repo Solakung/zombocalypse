@@ -394,3 +394,17 @@ textarea#chat-input {
 
 /* ติดเชื้อ */
 .badge.infected { background: #8a3d7a; color: #fff; }
+
+/* =========================================
+   แต้มสเตตัส
+   ========================================= */
+.stat-box { display: grid; gap: 6px; }
+.stat-left { margin: 0; font-weight: 600; font-size: 14px; color: var(--hazard); }
+.stat-row {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px;
+}
+.stat-row b { font-size: 14.5px; }
+.stat-row small { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+.stat-ctl { display: flex; align-items: center; gap: 8px; }
+.stat-ctl span { min-width: 1.6em; text-align: center; font-weight: 600; }

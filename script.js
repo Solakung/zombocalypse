@@ -29,7 +29,24 @@ const db = getDatabase(app);
 /* =========================================================
    2) ข้อมูลเกม (โซน + ไอเทม)
    ========================================================= */
-const STAMINA_COST = 10, STAMINA_MAX = 100, HP_MAX = 100;
+const STAMINA_COST = 10, STAMINA_BASE = 100, HP_BASE = 100;
+
+// ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
+const STAT_POINTS = 7, DODGE_PER_POINT = 0.03;
+const STAT_DEF = {
+  human: [
+    { k: "str", icon: "💪", name: "พละกำลัง", desc: "+1 ดาเมจต่อแต้ม" },
+    { k: "hp", icon: "❤️", name: "พลังชีวิต", desc: "+10 HP สูงสุดต่อแต้ม" },
+    { k: "st", icon: "⚡", name: "พลังงาน", desc: "+10 พลังงานสูงสุดต่อแต้ม" },
+    { k: "regen", icon: "🔋", name: "พลังฟื้นฟู", desc: "+0.5 พลังงานต่อรอบที่ฟื้น ต่อแต้ม" }
+  ],
+  zombie: [
+    { k: "str", icon: "💪", name: "พละกำลัง", desc: "+1 ดาเมจต่อแต้ม" },
+    { k: "hp", icon: "❤️", name: "พลังชีวิต", desc: "+10 HP สูงสุดต่อแต้ม" },
+    { k: "agi", icon: "💨", name: "ความว่องไว", desc: "+3% โอกาสหลบ (โดนตีแล้วไม่โดนเลย)" },
+    { k: "tough", icon: "🛡️", name: "ความคงทน", desc: "−1 ดาเมจที่ได้รับต่อแต้ม (ขั้นต่ำ 1)" }
+  ]
+};
 const SHOUT_COOLDOWN = 30000, BITE_FOOD = 25;
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
 
@@ -135,7 +152,7 @@ function renderZoneDanger(z) {
    3) State + Helpers
    ========================================================= */
 const state = {
-  uid: null, profile: null, zone: null, offset: 0, inv: {}, ground: {},
+  uid: null, profile: null, stats: null, statsLoaded: false, zone: null, offset: 0, inv: {}, ground: {},
   unsubs: [], players: {}, claimingBite: false, mutedUntil: 0, delMode: false, mutesOff: null, started: false, busy: false, attacking: false, pending: new Set(), sessionStart: 0, attackQueue: Promise.resolve(), events: {}, evSeen: {}, evEnded: {}, nextAuto: undefined, autoOff: false, autoBusy: false
 };
 
@@ -143,6 +160,11 @@ const $ = (id) => document.getElementById(id);
 const serverNow = () => Date.now() + state.offset;
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const isStaff = () => ["gm", "owner"].includes(state.profile?.role);
+const statOf = (k) => state.stats?.[k] || 0;
+const maxHp = () => HP_BASE + 10 * statOf("hp");
+const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
+const regenPerTick = () => 1 + 0.5 * statOf("regen");
+const dodgeChance = () => DODGE_PER_POINT * statOf("agi");
 
 function mk(tag, cls, text) { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; }
 function btn(label, fn, cls = "btn primary mini") { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; }
@@ -173,8 +195,9 @@ function curStamina() {
   const p = state.profile;
   if (!p) return 0;
   const rate = getRegenRate();
-  const regen = Math.max(0, Math.floor((serverNow() - 2500 - p.staminaTs) / rate));
-  return Math.min(STAMINA_MAX, p.stamina + regen);
+  const ticks = Math.max(0, Math.floor((serverNow() - 2500 - p.staminaTs) / rate));
+  const regen = Math.floor(ticks * regenPerTick());
+  return Math.min(maxStamina(), p.stamina + regen);
 }
 
 function equippedWeapon() {
@@ -212,7 +235,9 @@ $("btn-profile").addEventListener("click", () => {
   $("prof-val-faction").textContent = FACTION[p.faction].name;
   $("prof-val-zone").textContent = ZONES[p.zone].name;
   const w = equippedWeapon();
-  $("prof-val-wpn").textContent = w ? `${w.def.name} (ดาเมจ ${w.def.dmg}, เหลือ ${w.it.dur} ครั้ง)` : "มือเปล่า (ดาเมจ 5)";
+  const sb = statOf("str");
+  $("prof-val-wpn").textContent = w ? `${w.def.name} (ดาเมจ ${w.def.dmg + sb}, เหลือ ${w.it.dur} ครั้ง)` : `มือเปล่า (ดาเมจ ${UNARMED_DMG + sb})`;
+  $("prof-val-stats").textContent = statSummary(p.faction);
   $("prof-perk").textContent = FACTION_PERK[p.faction] || "";
   $("prof-bio").value = "";
   get(ref(db, "bios/" + state.uid)).then((s) => { $("prof-bio").value = s.val() || ""; }).catch(() => {});
@@ -235,6 +260,11 @@ async function showBio(uid, name) {
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
+function statSummary(faction) {
+  if (!state.stats) return "ยังไม่ได้แจกแต้ม";
+  return (STAT_DEF[faction] || []).map((d) => `${d.icon}${d.name} ${statOf(d.k)}`).join(" · ");
+}
+
 function renderBars() {
   const p = state.profile;
   if (!p) return;
@@ -243,15 +273,16 @@ function renderBars() {
   const wt = p.water ?? 100;
   $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
   
-  $("bar-hp").style.width = (p.hp / HP_MAX) * 100 + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${HP_MAX}`;
-  $("bar-st").style.width = (st / STAMINA_MAX) * 100 + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${STAMINA_MAX}`;
+  $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${maxHp()}`;
+  $("bar-st").style.width = Math.min(100, (st / maxStamina()) * 100) + "\%"; $("txt-st").textContent = `พลังงาน ${st}/${maxStamina()}`;
   $("bar-fd").style.width = (fd / 100) * 100 + "\%"; $("txt-fd").textContent = `อาหาร ${fd}/100`;
   $("bar-wt").style.width = (wt / 100) * 100 + "\%"; $("txt-wt").textContent = `น้ำ ${wt}/100`;
 
   const rate = getRegenRate();
-  let rateText = `ปกติ (1 หน่วย/${REGEN_NORMAL_MS / 1000}วิ)`;
-  if (rate === REGEN_FAST_MS) rateText = `เร็ว (1 หน่วย/${REGEN_FAST_MS / 1000}วิ)`;
-  if (rate === REGEN_SLOW_MS) rateText = `ช้า (1 หน่วย/${REGEN_SLOW_MS / 1000}วิ)`;
+  const per = regenPerTick();
+  let rateText = `ปกติ (${per} หน่วย/${REGEN_NORMAL_MS / 1000}วิ)`;
+  if (rate === REGEN_FAST_MS) rateText = `เร็ว (${per} หน่วย/${REGEN_FAST_MS / 1000}วิ)`;
+  if (rate === REGEN_SLOW_MS) rateText = `ช้า (${per} หน่วย/${REGEN_SLOW_MS / 1000}วิ)`;
   if ($("prof-val-regen")) {
       $("prof-val-regen").textContent = rateText;
       $("prof-val-regen").style.color = rate === REGEN_FAST_MS ? "var(--primary)" : (rate === REGEN_SLOW_MS ? "var(--hazard)" : "inherit");
@@ -287,7 +318,7 @@ onAuthStateChanged(auth, async (user) => {
   } catch (e) { show("login"); console.error(e); }
 });
 
-let mode = "login", pickedFaction = null;
+let mode = "login", pickedFaction = null, regPicker = null;
 function setMode(m) {
   mode = m;
   document.querySelectorAll(".seg button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
@@ -298,6 +329,7 @@ document.querySelectorAll(".seg button").forEach((b) => b.addEventListener("clic
 document.querySelectorAll(".faction-btn").forEach((b) => b.addEventListener("click", () => {
   pickedFaction = b.dataset.faction;
   document.querySelectorAll(".faction-btn").forEach((x) => x.classList.toggle("selected", x === b));
+  regPicker = buildStatPicker($("reg-stats"), pickedFaction);
 }));
 
 $("auth-form").addEventListener("submit", async (e) => {
@@ -306,6 +338,7 @@ $("auth-form").addEventListener("submit", async (e) => {
   if (name.length < 2) return $("login-error").textContent = "ชื่อต้องยาวอย่างน้อย 2 ตัว";
   if (pw.length < 6) return $("login-error").textContent = "รหัสผ่านอย่างน้อย 6 ตัว";
   if (mode === "register" && (!pickedFaction || pw !== $("inp-password2").value)) return $("login-error").textContent = "ข้อมูลไม่ครบหรือรหัสไม่ตรงกัน";
+  if (mode === "register" && (!regPicker || regPicker.left() !== 0)) return $("login-error").textContent = `แจกแต้มสเตตัสให้ครบ ${STAT_POINTS} แต้มก่อน`;
   
   $("auth-submit").disabled = true;
   try {
@@ -316,17 +349,64 @@ $("auth-form").addEventListener("submit", async (e) => {
   finally { $("auth-submit").disabled = false; }
 });
 
+/* =========================================================
+   5.1) ตัวแจกแต้มสเตตัส (ใช้ทั้งตอนสมัครและตอนผู้เล่นเก่าแจกครั้งแรก)
+   ========================================================= */
+function buildStatPicker(box, faction, onChange) {
+  const vals = { str: 0, hp: 0, st: 0, regen: 0, agi: 0, tough: 0 };
+  const left = () => STAT_POINTS - Object.values(vals).reduce((a, b) => a + b, 0);
+  box.innerHTML = ""; box.classList.add("stat-box");
+  const head = mk("p", "stat-left"); box.append(head);
+  const nums = {};
+  const refresh = () => {
+    head.textContent = `แต้มคงเหลือ ${left()} / ${STAT_POINTS}`;
+    STAT_DEF[faction].forEach((d) => { nums[d.k].textContent = vals[d.k]; });
+    if (onChange) onChange(left());
+  };
+  STAT_DEF[faction].forEach((d) => {
+    const row = mk("div", "stat-row");
+    const num = mk("span", "", "0"); nums[d.k] = num;
+    const ctl = mk("div", "stat-ctl");
+    ctl.append(
+      btn("−", () => { if (vals[d.k] > 0) { vals[d.k]--; refresh(); } }, "btn ghost mini"), num,
+      btn("+", () => { if (left() > 0) { vals[d.k]++; refresh(); } }, "btn ghost mini")
+    );
+    row.append(mk("b", "", `${d.icon} ${d.name}`), ctl, mk("small", "", d.desc));
+    box.append(row);
+  });
+  refresh();
+  return { vals, left };
+}
+
+let modalPicker = null;
+function openStatModal() {
+  const m = $("stat-modal");
+  if (!state.profile || !m.classList.contains("hidden")) return;
+  modalPicker = buildStatPicker($("stat-modal-box"), state.profile.faction, (left) => { $("stat-save").disabled = left !== 0; });
+  m.classList.remove("hidden");
+}
+$("stat-save").addEventListener("click", async () => {
+  if (!modalPicker || modalPicker.left() !== 0) return;
+  $("stat-save").disabled = true;
+  try { await set(ref(db, "stats/" + state.uid), { ...modalPicker.vals }); toast("บันทึกแต้มสเตตัสแล้ว"); }
+  catch (e) { toast(errMsg(e)); $("stat-save").disabled = false; }
+});
+
 async function register(name, email, pw) {
   state.registering = true; let cred;
   try {
     cred = await createUserWithEmailAndPassword(auth, email, pw);
     const uid = cred.user.uid;
     await set(ref(db, "usernames/" + nameKey(name)), uid);
-    await set(ref(db, "users/" + uid), {
-      username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
-      stamina: STAMINA_MAX, staminaTs: serverTimestamp(), hp: HP_MAX,
-      food: 100, water: 100,
-      createdAt: serverTimestamp()
+    const stats = { ...regPicker.vals };
+    await update(ref(db), {
+      ["users/" + uid]: {
+        username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
+        stamina: STAMINA_BASE + 10 * stats.st, staminaTs: serverTimestamp(), hp: HP_BASE + 10 * stats.hp,
+        food: 100, water: 100,
+        createdAt: serverTimestamp()
+      },
+      ["stats/" + uid]: stats
     });
     state.uid = uid; startGame();
   } catch (e) { if (cred) await deleteUser(cred.user).catch(() => {}); throw e; } 
@@ -345,6 +425,12 @@ function startGame() {
   if (state.started) return;
   state.started = true;
   state.sessionStart = serverNow() - 30000;
+
+  onValue(ref(db, "stats/" + state.uid), (s) => {
+    state.stats = s.val(); state.statsLoaded = true;
+    if (!s.exists()) openStatModal(); else $("stat-modal").classList.add("hidden");
+    renderBars();
+  });
 
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
@@ -365,6 +451,7 @@ function startGame() {
     $("me-role").classList.toggle("hidden", p.role === "player");
     $("btn-admin").classList.toggle("hidden", !isStaff());
     document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
+    if (state.statsLoaded && !state.stats) openStatModal();
     renderBars(); renderInv();
   });
   setInterval(renderBars, 1000);
@@ -807,11 +894,11 @@ async function useItem(slot) {
   const fd = p.food ?? 100, wt = p.water ?? 100, cur = curStamina();
   const u = {}, msgs = [];
 
-  if (def.heal && p.hp < HP_MAX) { const n = Math.min(HP_MAX, p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
+  if (def.heal && p.hp < maxHp()) { const n = Math.min(maxHp(), p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
   if (foodGain && fd < 100) { const n = Math.min(100, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร +${n - fd}`); }
   if (def.water && wt < 100) { const n = Math.min(100, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ +${n - wt}`); }
-  if (def.stamina && cur < STAMINA_MAX) {
-    const n = Math.min(STAMINA_MAX, cur + def.stamina);
+  if (def.stamina && cur < maxStamina()) {
+    const n = Math.min(maxStamina(), cur + def.stamina);
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
   }
 
@@ -953,6 +1040,7 @@ async function zombieEncounter(u, hpNow) {
 /* =========================================================
    11) ต่อสู้ (หักความหิว และแก้ไขแชทต่อสู้)
    ========================================================= */
+const myDmg = (w) => attackDmg(w ? w.it.id : null, w?.it) + statOf("str");
 const attackDmg = (id, custom) => (!id ? UNARMED_DMG : id === "custom" ? Math.max(1, custom?.dmg || 25) : (ITEMS[id]?.dmg || UNARMED_DMG));
 
 function attackCooldownLeft() {
@@ -1004,7 +1092,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
     ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {}),
-    ...(w && w.it.id === "custom" ? { wdmg: w.it.dmg } : {})
+    wdmg: myDmg(w)
   };
 
   try {
@@ -1052,15 +1140,22 @@ async function freeHit(targetUid, targetName, w) {
   const tHp = hpSnap.val();
   if (typeof tHp !== "number") return;
 
-  const dmg = attackDmg(w ? w.it.id : null, w?.it);
+  const tStats = (await get(ref(db, `stats/${targetUid}`))).val() || {};
+  const tIsZombie = state.players[targetUid]?.faction === "zombie";
+  const dodged = tIsZombie && Math.random() < DODGE_PER_POINT * (tStats.agi || 0);
+  const dmg = Math.max(1, myDmg(w) - (tStats.tough || 0));
   const left = Math.max(0, tHp - dmg);
-  let text = `🏃 ${targetName} ไม่ทันตั้งตัว! ${p.username} ฟาดเข้าเป้า −${dmg} HP`;
+  let text = dodged
+    ? `🏃 ${p.username} ฟาดใส่ ${targetName} แต่ถูกหลบได้! 💨`
+    : `🏃 ${targetName} ไม่ทันตั้งตัว! ${p.username} ฟาดเข้าเป้า −${dmg} HP`;
 
   const u = { [`attacks/${targetUid}/${state.uid}`]: null };
   if (w) wearUpdates(u, w);
-  u[`users/${targetUid}/hp`] = left === 0 ? 50 : left;
-  if (left === 0) { text += ` — ${targetName} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
-  if (p.faction === "zombie") {
+  if (!dodged) {
+    u[`users/${targetUid}/hp`] = left === 0 ? 50 : left;
+    if (left === 0) { text += ` — ${targetName} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
+  }
+  if (p.faction === "zombie" && !dodged) {
     u[`bites/${state.uid}/${targetUid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
     if (state.players[targetUid]?.faction === "human") { u[`users/${targetUid}/infected`] = serverTimestamp(); text += " 🦠"; }
   }
@@ -1089,12 +1184,15 @@ async function resolveAttack(key, a) {
   if (w) wearUpdates(u, w);
 
   const hit = a.roll > defRoll;
-  const dmg = hit ? attackDmg(a.wpn, { dmg: a.wdmg }) : 0;
+  const dodged = hit && p.faction === "zombie" && Math.random() < dodgeChance();
+  const landed = hit && !dodged;
+  const rawDmg = a.wdmg ?? attackDmg(a.wpn, { dmg: a.wdmg });
+  const dmg = landed ? Math.max(1, rawDmg - statOf("tough")) : 0;
 
   const newHp = Math.max(0, p.hp - dmg);
   let text = `⚔ ${a.fromName} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
-  if (hit) {
+  if (landed) {
     text += `${a.fromName} โจมตีโดน! −${dmg} HP`;
     if (state.players[key]?.faction === "zombie") {
       u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
@@ -1102,6 +1200,8 @@ async function resolveAttack(key, a) {
     }
     u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
     if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; u[`users/${state.uid}/zone`] = "safe"; }
+  } else if (dodged) {
+    text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`;
   } else {
     text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`;
   }
@@ -1113,7 +1213,7 @@ async function resolveAttack(key, a) {
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
 
-  if (hit && newHp === 0) {
+  if (landed && newHp === 0) {
     await enterZone("safe");
     logLine("คุณถูกกำจัด แล้วฟื้นขึ้นที่ Safe Zone", "system");
   }
@@ -1243,6 +1343,12 @@ async function ownerSet(patch, okMsg) {
   } catch (e) { toast(errMsg(e)); }
 }
 $("adm-setrole").addEventListener("click", () => ownerSet({ role: $("adm-role").value }, "ตั้งสิทธิ์แล้ว"));
+$("adm-reset-stats").addEventListener("click", async () => {
+  const pid = $("adm-pid").value.trim();
+  if (!pid) return toast("ใส่ Player ID ก่อน");
+  try { await remove(ref(db, "stats/" + pid)); toast("รีเซ็ตแต้มสเตตัสแล้ว ผู้เล่นจะได้แจกแต้มใหม่ตอนเข้าเกม"); }
+  catch (e) { toast(errMsg(e)); }
+});
 $("adm-ban").addEventListener("click", () => ownerSet({ banned: true }, "แบนแล้ว"));
 $("adm-unban").addEventListener("click", () => ownerSet({ banned: false }, "ปลดแบนแล้ว"));
 

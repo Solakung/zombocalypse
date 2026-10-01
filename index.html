@@ -47,6 +47,11 @@
         </div>
       </div>
 
+      <div class="reg-only hidden">
+        <span class="label">แจกแต้มสเตตัส (7 แต้ม)</span>
+        <div id="reg-stats"><p class="muted">เลือกฝ่ายก่อน แล้วจะแจกแต้มได้</p></div>
+      </div>
+
       <button id="auth-submit" class="btn primary wide">เข้าสู่ระบบ</button>
       <p id="login-error" class="error"></p>
     </form>
@@ -150,6 +155,9 @@
         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
           <span class="muted">อัตราฟื้นพลังงาน:</span> <b id="prof-val-regen" style="color: var(--primary);">ปกติ</b>
         </div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
+          <span class="muted">สเตตัส:</span> <b id="prof-val-stats" style="text-align: right; font-size: 14px;">—</b>
+        </div>
         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 8px;">
           <span class="muted">อาวุธที่ถืออยู่:</span> <b id="prof-val-wpn" style="color: var(--hazard);">มือเปล่า (ดาเมจ 5)</b>
         </div>
@@ -158,6 +166,16 @@
       <label for="prof-bio">ประวัติตัวละคร (คนอื่นกดดูได้จากรายชื่อผู้เล่น)</label>
       <textarea id="prof-bio" maxlength="300" rows="4" placeholder="เล่าที่มาของตัวละครคุณ…"></textarea>
       <button id="prof-bio-save" class="btn primary wide">บันทึกประวัติ</button>
+    </div>
+  </div>
+
+  <!-- ===== แจกแต้มสเตตัส (ผู้เล่นเก่าที่ยังไม่เคยแจก) ===== -->
+  <div id="stat-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="stat-title">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-head"><h2 id="stat-title">แจกแต้มสเตตัส</h2></div>
+      <p class="muted">มีระบบสเตตัสใหม่! แจกให้ครบ 7 แต้ม แจกแล้วเปลี่ยนเองไม่ได้ (ต้องให้ Owner รีเซ็ตให้)</p>
+      <div id="stat-modal-box"></div>
+      <button id="stat-save" class="btn primary wide" disabled>ยืนยันแต้ม</button>
     </div>
   </div>
 
@@ -310,6 +328,7 @@
           <button id="adm-ban" class="btn danger">แบน</button>
           <button id="adm-unban" class="btn ghost">ปลดแบน</button>
         </div>
+        <button id="adm-reset-stats" class="btn ghost">รีเซ็ตแต้มสเตตัส (ให้แจกใหม่)</button>
       </div>
     </div>
   </div>
