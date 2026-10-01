@@ -338,6 +338,7 @@ function equippedWeapon() {
 }
 
 function wearUpdates(u, w) {
+  if (w.it.dur > 999) return;   // อาวุธค่าสูงเกินเพดาน rules (dur ≤ 999) → ไม่หักความทน ไม่งั้นอัปเดตโดนปฏิเสธ
   const left = w.it.dur - 1;
   if (left <= 0) { u[`inventory/${state.uid}/${w.slot}`] = null; u[`users/${state.uid}/equipped`] = null; toast(`${w.def.name} พังแล้ว!`); }
   else { u[`inventory/${state.uid}/${w.slot}/dur`] = left; }
