@@ -82,6 +82,7 @@
         <div class="bar" style="border-color: #21618c;"><i id="bar-wt" style="background: #3498db;"></i><span id="txt-wt">น้ำ</span></div>
       </div>
       <div class="top-actions">
+        <button id="btn-guide" class="btn ghost mini">วิธีเล่น</button>
         <button id="btn-profile" class="btn primary mini">โปรไฟล์</button>
         <button id="btn-copy-id" class="btn ghost mini" title="คัดลอก Player ID">คัดลอก ID</button>
         <button id="btn-setpw" class="btn ghost mini hidden">ตั้งรหัสผ่าน</button>
@@ -135,6 +136,17 @@
       <button type="button" data-tab="bag">กระเป๋า / ค้นหา</button>
     </nav>
   </section>
+
+  <!-- ===== คู่มือวิธีเล่น (เนื้อหาสร้างจากค่าคงที่ใน script.js) ===== -->
+  <div id="guide-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="guide-title">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-head">
+        <h2 id="guide-title">วิธีเล่น</h2>
+        <button id="guide-close" class="btn ghost mini">ปิด</button>
+      </div>
+      <div id="guide-body" style="margin-top: 12px; font-size: 14px; line-height: 1.55;"></div>
+    </div>
+  </div>
 
   <!-- ===== หน้าต่างโปรไฟล์ตัวละคร ===== -->
   <div id="profile-modal" class="modal hidden" role="dialog" aria-modal="true">

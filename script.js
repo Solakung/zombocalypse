@@ -356,6 +356,48 @@ async function showBio(uid, name) {
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
+// ---- คู่มือวิธีเล่น: ตัวเลขดึงจากค่าคงที่ด้านบน เลยไม่ต้องแก้ข้อความซ้ำเมื่อปรับบาลานซ์ ----
+const fmtDur = (ms) => { const s = Math.round(ms / 1000), m = Math.floor(s / 60), r = s % 60; return m ? (r ? `${m} นาที ${r} วินาที` : `${m} นาที`) : `${s} วินาที`; };
+function openGuide() {
+  const body = $("guide-body"); body.textContent = "";
+  const sec = (title, lines) => {
+    body.append(mk("h3", "", title));
+    const ul = mk("ul"); ul.style.cssText = "margin: 4px 0 14px; padding-left: 20px;";
+    lines.forEach((t) => ul.append(mk("li", "", t))); body.append(ul);
+  };
+  sec("พื้นฐาน", [
+    `ค้นหาไอเทมใช้พลังงาน ${STAMINA_COST} ต่อครั้ง พลังงานฟื้นเองตามเวลา`,
+    "Safe Zone ต่อสู้ไม่ได้และมีเสบียงแค่พอเสมอตัว ส่วนใหญ่เป็นวัสดุคราฟต์ อยากได้ของดีต้องออกไปโซนข้างนอก ซึ่งมีซอมบี้และผู้เล่นอื่น",
+    "กดชื่อผู้เล่นในโซนเพื่อดูประวัติ กระซิบ หรือโจมตี (นอก Safe Zone เท่านั้น)"
+  ]);
+  sec("หิวและกระหาย", [
+    `อาหารของมนุษย์ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.human)} ซอมบี้หิวเร็วกว่า ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.zombie)}`,
+    `น้ำลด 1 ทุก ${fmtDur(WATER_DECAY_MS)} ลดต่อเนื่องแม้ปิดเกม`,
+    "ถ้าอาหารหรือน้ำเหลือ 0 นอก Safe Zone จะค้นหาไม่ได้เลย",
+    `ใน Safe Zone ยังค้นหาได้เพื่อไม่ให้ติดตาย แต่เสีย HP ${STARVE_HP} ต่อครั้ง`
+  ]);
+  sec("การเดินทาง", [
+    `ย้ายโซนเสียพลังงาน ${TRAVEL_STAMINA} (กลับ Safe Zone เสีย ${TRAVEL_STAMINA_SAFE})`,
+    `หลังเดินทางต้องรอ ${fmtDur(TRAVEL_COOLDOWN)} ก่อนย้ายโซนอีกครั้ง`
+  ]);
+  sec("เมื่อ HP หมด", [
+    `คุณจะฟื้นที่ Safe Zone ด้วย 50 HP แต่ของสิ้นเปลืองเหลือ ${Math.round(DEATH_KEEP * 100)}% (ปัดลง) และอาวุธที่ถืออยู่เสียความทนไปครึ่งหนึ่ง`,
+    "โทษคิดเฉพาะของที่อยู่ในกระเป๋าและอาวุธที่ถือ ณ ตอนล้ม",
+    `ถ้าล้มซ้ำภายใน ${fmtDur(DEATH_COOLDOWN)} หลังฟื้นครั้งก่อน ต้องรอจนครบเวลาก่อนจึงฟื้นได้`
+  ]);
+  sec("ฝ่ายซอมบี้", [
+    "กินอาหารคนทั่วไปไม่ได้ ต้องหาอาหารจากการกัดผู้เล่นหรือเก็บ 🥩 เนื้อเน่า (+20) ที่ค้นเจอนอก Safe Zone",
+    "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง"
+  ]);
+  sec("ของบนพื้น", [
+    "กดวางไอเทมลงพื้นเพื่อแบ่งให้คนในโซนเดียวกัน ใครอยู่ในโซนก็เก็บได้",
+    "วางของชิ้นเดียวจาก slot เดิมซ้ำไม่ได้จนกว่าชิ้นก่อนหน้าจะถูกเก็บ"
+  ]);
+  $("guide-modal").classList.remove("hidden");
+}
+$("btn-guide").addEventListener("click", openGuide);
+$("guide-close").addEventListener("click", () => $("guide-modal").classList.add("hidden"));
+
 // เดินเวลาสถานะ: bleed/poison ลด HP (poison ลดพลังงานด้วย) ย้อนหลังได้ไม่เกิน FX_MAX_TICKS รอบ ไม่ทำให้ตาย (เหลือ ≥ 1 HP) / hot ฟื้นรอบละครั้ง / หมดเวลาแล้วลบทิ้ง
 async function effectTick() {
   const p = state.profile; if (!p || p.banned || state.fxBusy) return;
@@ -730,7 +772,8 @@ const HELP_LINES = [
   "/me ท่าทาง — บรรยายท่าทาง เช่น /me หยิบไม้เบสบอลขึ้นมาช้าๆ",
   "/w ชื่อ ข้อความ — กระซิบกับคนในโซนเดียวกัน (หรือกดปุ่ม กระซิบ ในรายชื่อ)",
   "/s ข้อความ — ตะโกนให้ทุกโซนได้ยิน (พัก 30 วินาที)",
-  "/roll [6|20|100] — ทอยลูกเต๋าให้คนในโซนเห็น"
+  "/roll [6|20|100] — ทอยลูกเต๋าให้คนในโซนเห็น",
+  "/guide — เปิดคู่มือวิธีเล่น (หิว เดินทาง โทษตาย)"
 ];
 
 function findZonePlayer(rest) {
@@ -764,6 +807,7 @@ async function sendChat(raw) {
   switch (cmd) {
     case "help": case "?": case "ช่วยเหลือ":
       HELP_LINES.forEach((l) => logLine(l, "info")); return;
+    case "guide": case "วิธีเล่น": openGuide(); return;
     case "me": case "ท่าทาง":
       if (!rest) return toast("ใช้: /me ท่าทางของตัวละคร");
       return postZone(rest, "emote");
