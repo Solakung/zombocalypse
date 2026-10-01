@@ -30,6 +30,13 @@ const db = getDatabase(app);
    2) ข้อมูลเกม (โซน + ไอเทม)
    ========================================================= */
 const STAMINA_COST = 10, STAMINA_BASE = 100, HP_BASE = 100;
+// หิวตามเวลา: ลด 1 หน่วยทุก ๆ N มิลลิวินาที (ซอมบี้หิวเร็วกว่า) คำนวณจาก timestamp เหมือนพลังงาน → ลดต่อแม้ปิดเกม — ต้องตรงกับ database_rules.json
+const FOOD_DECAY_MS = { human: 150000, zombie: 100000 }, WATER_DECAY_MS = 100000;
+// โทษตาย: ของสิ้นเปลืองเหลือ 70% (ปัดลง) / อาวุธที่ถือเหลือความทนครึ่งเดียว — rules บังคับตามนี้ตอนฟื้น
+const DEATH_KEEP = 0.7, WEAPON_KEEP = 0.5;
+const DEATH_STACK = ["canned_food", "water", "bandage", "medkit", "scrap", "chem", "super_ration", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat"];
+const STARVE_HP = 10;   // HP ที่เสียต่อการค้นหาตอนหิว/กระหาย (ทำได้เฉพาะใน Safe Zone) — ต้องตรงกับ database_rules.json
+const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA = 10, TRAVEL_STAMINA_SAFE = 5;   // ค่าเดินทางข้ามโซน (กลับ Safe Zone ถูกกว่า) — ต้องตรงกับ rules
 
 // ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
 const STAT_POINTS = 7, DODGE_PER_POINT = 0.03;
@@ -107,7 +114,9 @@ const ITEMS = {
   water_jug: { name: "น้ำสะอาดแกลลอน", icon: "🚰", type: "consumable", water: 70 },
   soup: { name: "ซุปอุ่น", icon: "🍲", type: "consumable", heal: 10, food: 30, water: 15 },
   stim_shot: { name: "ยากระตุ้น", icon: "💊", type: "consumable", stamina: 60 },
-  choco_bar: { name: "ช็อกโกแลตแท่ง", icon: "🍫", type: "consumable", food: 10, stamina: 15 }
+  choco_bar: { name: "ช็อกโกแลตแท่ง", icon: "🍫", type: "consumable", food: 10, stamina: 15 },
+  // อาหารรองของซอมบี้: ค้นหาเจอได้เฉพาะฝั่งซอมบี้ และกินได้เฉพาะซอมบี้ (ค่าอาหารต้องตรงกับ rules)
+  rotten_meat: { name: "เนื้อเน่า", icon: "🥩", type: "consumable", food: 20, zombieOnly: true }
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
@@ -131,12 +140,12 @@ const weaponBonus = (def) => (def.dmg >= 25 ? 3 : def.dmg >= 10 ? 2 : 1);
 
 const FACTION_PERK = {
   human: "มนุษย์: คราฟต์ผ้าพันแผล ยา ซุป และยากระตุ้นจากวัสดุที่ Safe Zone ได้ / ซอมบี้ป่าจะโจมตีคุณ ต้องทอยลูกเต๋าสู้หรือหนี / ถ้าถูกซอมบี้ผู้เล่นกัดโดนจะติดเชื้อ HP ค่อยๆ ลด ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส",
-  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า / กัดมนุษย์โดนแล้วเหยื่อจะติดเชื้อ"
+  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) หรือค้นหา “เนื้อเน่า” 🥩 นอก Safe Zone (+20) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า / กัดมนุษย์โดนแล้วเหยื่อจะติดเชื้อ"
 };
 
 // danger = ระดับอันตราย 0-10 (กำหนดเอง ปรับได้) / โอกาสเจอซอมบี้คำนวณจากตารางดรอปจริง
 const ZONES = {
-  safe: { name: "Safe Zone", icon: "🏕️", danger: 0, desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ ของหายาก", drops: [{ id: "canned_food", w: 15 }, { id: "bread", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 5 }, { id: "bandage", w: 5 }, { id: "scrap", w: 5 }, { id: null, w: 45 }] },
+  safe: { name: "Safe Zone", icon: "🏕️", danger: 0, desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ เสบียงมีแค่พอเสมอตัว ส่วนใหญ่เป็นวัสดุคราฟต์ — อยากได้ของจริงต้องออกไปข้างนอก", drops: [{ id: "canned_food", w: 4 }, { id: "bread", w: 5 }, { id: "water", w: 9 }, { id: "fruit", w: 5 }, { id: "bandage", w: 3 }, { id: "scrap", w: 22 }, { id: null, w: 52 }] },   // คาดหวังอาหาร ~3.1 / น้ำ ~4.1 ต่อครั้ง ≈ ต้นทุนค้นหา (3 / 4)
   ruins: { name: "เขตเมืองร้าง", icon: "🏚️", danger: 4, desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 12 }, { id: "bread", w: 8 }, { id: "water", w: 12 }, { id: "fruit", w: 4 }, { id: "energy_drink", w: 3 }, { id: "wooden_bat", w: 5 }, { id: "spiked_bat", w: 3 }, { id: "knife", w: 6 }, { id: "scrap", w: 12 }, { id: null, w: 20 }] },
   mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", danger: 6, desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 12 }, { id: "soup", w: 3 }, { id: "choco_bar", w: 3 }, { id: "bread", w: 10 }, { id: "water", w: 16 }, { id: "energy_drink", w: 6 }, { id: "crowbar", w: 10 }, { id: "scrap", w: 8 }, { id: null, w: 7 }] },
   hospital: { name: "โรงพยาบาล", icon: "🏥", danger: 7, desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 28 }, { id: "bandage", w: 15 }, { id: "medkit", w: 10 }, { id: "moss", w: 6 }, { id: "water", w: 10 }, { id: "energy_drink", w: 5 }, { id: "scrap", w: 8 }, { id: "antidote", w: 5 }, { id: "serum", w: 3 }, { id: "trauma_kit", w: 2 }, { id: "chem", w: 4 }, { id: null, w: 4 }] },
@@ -174,6 +183,10 @@ function effectiveDrops(z) {
   if (!zm && !nm) return ZONES[z].drops;
   return ZONES[z].drops.map((d) => d.id === "zombie" ? { ...d, w: Math.max(0, d.w + zm) } : d.id === null ? { ...d, w: Math.max(0, d.w + nm) } : d);
 }
+
+// เนื้อเน่า: น้ำหนักดรอปเพิ่มเฉพาะฝั่งซอมบี้ (นอก Safe Zone)
+const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10 };
+function zombieDrops(z) { const d = effectiveDrops(z), w = ZOMBIE_EXTRA[z]; return w ? [...d, { id: "rotten_meat", w }] : d; }
 
 function dangerInfo(id) {
   const drops = effectiveDrops(id), total = drops.reduce((t, d) => t + d.w, 0) || 1;
@@ -226,6 +239,27 @@ const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
 const regenPerTick = () => Math.max(0, 1 + 0.5 * statOf("regen"));
 const dodgeChance = () => Math.max(0, DODGE_PER_POINT * statOf("agi"));
 
+// ---- หิว/กระหายตามเวลา: เก็บ food/water + foodTs/waterTs → ค่าจริง = ค่าที่เก็บ − จำนวนรอบที่ผ่านไป ----
+const hungerMs = (k) => (k === "food" ? FOOD_DECAY_MS[state.profile?.faction] || FOOD_DECAY_MS.human : WATER_DECAY_MS);
+function hungerLeft(k) {
+  const p = state.profile; if (!p) return 100;
+  const v = typeof p[k] === "number" ? p[k] : 100, ts = p[k + "Ts"];
+  if (typeof ts !== "number") return v;
+  return Math.max(0, v - Math.floor(Math.max(0, serverNow() - ts) / hungerMs(k)));
+}
+const curFood = () => hungerLeft("food"), curWater = () => hungerLeft("water");
+// ปรับ food/water ลง u (delta = เพิ่ม/ลดจากค่าจริง) พร้อมเลื่อน timestamp ตามที่ rules ยอมรับ แล้วคืนค่าใหม่
+// เลื่อน ts ทีละ "รอบเต็ม" เท่านั้น (เศษเวลาไม่หาย → กดบ่อยก็ไม่ช่วยให้หิวช้าลง) / ถ้าหมดอยู่แล้วให้เริ่มนับใหม่จากตอนนี้
+function hungerShift(u, k, delta) {
+  const p = state.profile, ms = hungerMs(k), ts = p[k + "Ts"], v = typeof p[k] === "number" ? p[k] : 100;
+  if (typeof ts !== "number" || !delta) return hungerLeft(k);   // ข้อมูลเก่ายังไม่ถูกย้าย (ทำตอนเข้าเกม) → ข้ามไปก่อน
+  const kw = Math.floor(Math.max(0, serverNow() - 2500 - ts) / ms), empty = v <= kw;   // −2.5 วิ: กัน timestamp เกินเวลาเซิร์ฟเวอร์
+  const n = Math.max(0, Math.min(100, (empty ? 0 : v - kw) + delta)), base = `users/${state.uid}/${k}`;
+  if (empty) { if (n === v) return n; u[base] = n; u[base + "Ts"] = serverTimestamp(); }
+  else { u[base] = n; if (kw > 0) u[base + "Ts"] = ts + kw * ms; }
+  return n;
+}
+
 function mk(tag, cls, text) { const el = document.createElement(tag); if (cls) el.className = cls; if (text !== undefined) el.textContent = text; return el; }
 function btn(label, fn, cls = "btn primary mini") { const b = mk("button", cls, label); b.type = "button"; b.addEventListener("click", fn); return b; }
 function show(name) { document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active")); $("screen-" + name).classList.add("active"); }
@@ -245,7 +279,7 @@ const REGEN_FAST_MS = 20000, REGEN_NORMAL_MS = 30000, REGEN_SLOW_MS = 45000;   /
 function getRegenRate() {
   const p = state.profile;
   if (!p) return REGEN_NORMAL_MS;
-  const fd = p.food ?? 100, wt = p.water ?? 100;
+  const fd = curFood(), wt = curWater();
   if (fd > 70 && wt > 70) return REGEN_FAST_MS;
   if (fd <= 20 || wt <= 20) return REGEN_SLOW_MS;
   return REGEN_NORMAL_MS;
@@ -382,8 +416,8 @@ function renderBars() {
   const p = state.profile;
   if (!p) return;
   const st = curStamina();
-  const fd = p.food ?? 100;
-  const wt = p.water ?? 100;
+  const fd = curFood();
+  const wt = curWater();
   $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
   
   $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = `HP ${p.hp}/${maxHp()}`;
@@ -402,7 +436,7 @@ function renderBars() {
   }
 
   const starving = (fd === 0 || wt === 0);
-  $("btn-scavenge").disabled = (!starving && st < STAMINA_COST) || effActive("stun");
+  $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < STAMINA_COST) || effActive("stun");
   const fxEl = $("me-effects");
   if (fxEl) {
     fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).join("  ");
@@ -522,7 +556,7 @@ async function register(name, email, pw) {
       ["users/" + uid]: {
         username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
         stamina: STAMINA_BASE + 10 * stats.st, staminaTs: serverTimestamp(), hp: HP_BASE + 10 * stats.hp,
-        food: 100, water: 100,
+        food: 100, water: 100, foodTs: serverTimestamp(), waterTs: serverTimestamp(),
         createdAt: serverTimestamp()
       },
       ["stats/" + uid]: stats
@@ -557,6 +591,13 @@ function startGame() {
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
     state.profile = p;
+    if ((typeof p.foodTs !== "number" || typeof p.waterTs !== "number") && !state.hungerInit && !p.banned) {   // ผู้เล่นเก่า: เริ่มนับหิวจากตอนนี้
+      state.hungerInit = true;
+      const mu = {};
+      if (typeof p.foodTs !== "number") mu[`users/${state.uid}/foodTs`] = serverTimestamp();
+      if (typeof p.waterTs !== "number") mu[`users/${state.uid}/waterTs`] = serverTimestamp();
+      update(ref(db), mu).catch(console.error);
+    }
     const inf = !!p.infected && p.faction === "human";
     if (state.wasInfected !== undefined && inf !== state.wasInfected) {
       logLine(inf ? "🦠 คุณถูกกัดและติดเชื้อ! HP จะค่อยๆ ลดลง — รักษาด้วยชุดปฐมพยาบาล 🧰 หรือมอส 🌿" : "💊 อาการติดเชื้อหายแล้ว", inf ? "system" : "info");
@@ -575,6 +616,7 @@ function startGame() {
     document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
     if (state.statsLoaded && !state.stats) openStatModal();
     renderBars(); renderInv();
+    if (p.hp === 0) processDeath();
   });
   setInterval(renderBars, 1000);
   setInterval(infectionTick, 5000);
@@ -605,12 +647,25 @@ function buildZoneList() {
 
 function teardownZone() { state.unsubs.forEach((f) => f()); state.unsubs = []; }
 
-async function enterZone(z, initial = false) {
+const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_STAMINA);
+function travelCooldownLeft() { const t = state.profile?.lastTravel; return typeof t === "number" ? Math.max(0, TRAVEL_COOLDOWN - (serverNow() - t)) : 0; }
+
+// moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
+async function enterZone(z, initial = false, moved = false) {
   if (!initial && z === state.zone) return;
   const old = state.zone;
   try {
     if (!initial) {
-      await update(ref(db), { ["users/" + state.uid + "/zone"]: z });
+      if (!moved) {
+        if (state.profile.hp <= 0) return;
+        const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
+        if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
+        if (cur < cost) return toast(`พลังงานไม่พอเดินทาง (ต้องใช้ ${cost})`);
+        await update(ref(db), {
+          [`users/${state.uid}/zone`]: z, [`users/${state.uid}/lastTravel`]: serverTimestamp(),
+          [`users/${state.uid}/stamina`]: cur - cost, [`users/${state.uid}/staminaTs`]: serverTimestamp()
+        });
+      }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
     teardownZone(); state.zone = z; state.ground = {};
@@ -629,7 +684,7 @@ async function enterZone(z, initial = false) {
       onValue(ref(db, "zonePlayers/" + z), renderPlayers),
       onValue(ref(db, "zoneItems/" + z), (s) => { state.ground = s.val() || {}; renderGround(); })
     );
-    if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}`, "info");
+    if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${travelCost(z)} พลังงาน)`}`, "info");
   } catch (e) { toast(errMsg(e)); }
 }
 
@@ -768,10 +823,10 @@ function listenBites() {
     if (!s.exists() || state.claimingBite) return;
     state.claimingBite = true;
     try {
-      const fd = state.profile.food ?? 100;
+      const fd = curFood();
       const u = { [`bites/${state.uid}`]: null };
       const gain = Math.min(BITE_FOOD, 100 - fd);
-      if (gain > 0) u[`users/${state.uid}/food`] = fd + gain;
+      if (gain > 0) hungerShift(u, "food", gain);
       await update(ref(db), u);
       logLine(gain > 0 ? `🦷 คุณกัดเหยื่อ! อาหาร +${gain}` : "🦷 คุณกัดเหยื่อ (อิ่มอยู่แล้ว)", "combat");
     } catch (e) { console.error(e); }
@@ -847,7 +902,7 @@ function listenAnnouncements() {
 /* =========================================================
    9) กระเป๋า การกินอาหาร และ การทิ้งของ
    ========================================================= */
-function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; renderInv(); }); }
+function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; state.invLoaded = true; renderInv(); if (state.profile?.hp === 0) processDeath(); }); }
 
 function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
@@ -1010,20 +1065,22 @@ async function equip(slot, isEquipped) {
 
 async function useItem(slot) {
   const it = state.inv[slot], def = it && defOf(it), p = state.profile;
+  if (p.hp <= 0) return;
   if (!def || def.type !== "consumable") return;
   // ซอมบี้ได้อาหารจากการกัดเท่านั้น (ยกเว้นเสบียงพิเศษ/อาหาร custom ของแอดมิน) แต่ยังใช้ส่วนน้ำ/HP/พลังงานของไอเทมได้
-  const zombieNoFood = p.faction === "zombie" && def.food > 0 && !def.gmOnly && it.id !== "custom_food";
+  if (def.zombieOnly && p.faction !== "zombie") return toast("เนื้อเน่า… มีแต่ซอมบี้เท่านั้นที่กินลง");
+  const zombieNoFood = p.faction === "zombie" && def.food > 0 && !def.gmOnly && !def.zombieOnly && it.id !== "custom_food";
   const foodGain = zombieNoFood ? 0 : (def.food || 0);
-  const fd = p.food ?? 100, wt = p.water ?? 100, cur = curStamina();
+  const fd = curFood(), wt = curWater(), cur = curStamina();
   const u = {}, msgs = [];
 
   // ค่าบวก = เติม / ค่าลบ = ลด (HP ลดได้ต่ำสุด 1 ไม่ถึงตาย)
   if (def.heal > 0 && p.hp < maxHp()) { const n = Math.min(maxHp(), p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
   if (def.heal < 0 && p.hp > 1) { const n = Math.max(1, p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`เสีย ${p.hp - n} HP`); }
-  if (foodGain > 0 && fd < 100) { const n = Math.min(100, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร +${n - fd}`); }
-  if (foodGain < 0 && fd > 0) { const n = Math.max(0, fd + foodGain); u[`users/${state.uid}/food`] = n; msgs.push(`อาหาร −${fd - n}`); }
-  if (def.water > 0 && wt < 100) { const n = Math.min(100, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ +${n - wt}`); }
-  if (def.water < 0 && wt > 0) { const n = Math.max(0, wt + def.water); u[`users/${state.uid}/water`] = n; msgs.push(`น้ำ −${wt - n}`); }
+  if (foodGain > 0 && fd < 100) { const g = Math.min(100 - fd, foodGain); hungerShift(u, "food", g); msgs.push(`อาหาร +${g}`); }
+  if (foodGain < 0 && fd > 0) { const g = Math.min(fd, -foodGain); hungerShift(u, "food", -g); msgs.push(`อาหาร −${g}`); }
+  if (def.water > 0 && wt < 100) { const g = Math.min(100 - wt, def.water); hungerShift(u, "water", g); msgs.push(`น้ำ +${g}`); }
+  if (def.water < 0 && wt > 0) { const g = Math.min(wt, -def.water); hungerShift(u, "water", -g); msgs.push(`น้ำ −${g}`); }
   if (def.stamina > 0 && cur < maxStamina()) {
     const n = Math.min(maxStamina(), cur + def.stamina);
     u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
@@ -1087,44 +1144,69 @@ function rollDrop(table) {
   return null;
 }
 
+// ล้มลง (HP 0) → จ่ายโทษตาย แล้วฟื้น 50 HP ที่ Safe Zone: ของสิ้นเปลืองหาย ~30% + อาวุธที่ถือเสียความทนครึ่งหนึ่ง (database rules บังคับตามนี้)
+async function processDeath(attempt = 0) {
+  const p = state.profile;
+  if (!p || p.hp !== 0 || p.banned || state.dying || !state.invLoaded || !state.zone) return;
+  state.dying = true;
+  try {
+    const u = {}, lost = [], uid = state.uid;
+    DEATH_STACK.forEach((id) => {
+      const it = state.inv[id]; if (!it || !(it.qty > 0)) return;
+      const keep = Math.floor(it.qty * DEATH_KEEP);
+      if (keep >= it.qty) return;
+      lost.push(`${ITEMS[id].icon}×${it.qty - keep}`);
+      if (keep > 0) u[`inventory/${uid}/${id}/qty`] = keep; else u[`inventory/${uid}/${id}`] = null;
+    });
+    const ws = p.equipped, wi = ws && state.inv[ws];
+    if (wi && typeof wi.dur === "number") {
+      const nd = Math.floor(wi.dur * WEAPON_KEEP), wn = defOf(wi)?.name || "อาวุธ";
+      if (nd <= 0) { u[`inventory/${uid}/${ws}`] = null; u[`users/${uid}/equipped`] = null; lost.push(`${wn} พัง`); }
+      else { u[`inventory/${uid}/${ws}/dur`] = nd; lost.push(`${wn} ความทน −${wi.dur - nd}`); }
+    }
+    if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
+    u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe";
+    await update(ref(db), u);
+    logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
+    await enterZone("safe", false, true);
+  } catch (e) {
+    console.error("death", e);
+    if (attempt < 2) setTimeout(() => { state.dying = false; processDeath(attempt + 1); }, 2000);
+    else toast(errMsg(e));
+  } finally { if (state.profile?.hp !== 0 || attempt >= 2) state.dying = false; }
+}
+
 // ทำการค้นหา 1 ครั้ง (อ่านค่าล่าสุดจาก state ทุกครั้ง) — โยน error ออกไปให้ตัวครอบจัดการ
 async function scavengeOnce() {
   const p = state.profile;
+  if (p.hp <= 0) return;
   if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
-  const fd = p.food ?? 100;
-  const wt = p.water ?? 100;
+  const fd = curFood();
+  const wt = curWater();
   const starving = (fd === 0 || wt === 0);
 
+  if (starving && state.zone !== "safe") return toast("หิวหรือกระหายจนหมดแรง ค้นหาข้างนอกไม่ไหว — กินอาหาร/ดื่มน้ำก่อน (หรือกลับไปค้นหาใน Safe Zone)");
+  if (starving && p.hp <= STARVE_HP) return toast(`HP ต่ำเกินไปที่จะฝืนค้นหาตอนหิว (เสีย ${STARVE_HP} HP ต่อครั้ง) กินหรือดื่มก่อน`);
   if (!starving && cur < STAMINA_COST) return toast("พลังงานไม่พอ");
   {
-    let found = rollDrop(effectiveDrops(state.zone));
     const isZombie = p.faction === "zombie";
+    let found = rollDrop(isZombie ? zombieDrops(state.zone) : effectiveDrops(state.zone));
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
-    const u = {
-      [`users/${state.uid}/food`]: Math.max(0, fd - (isZombie ? 5 : 3)),
-      [`users/${state.uid}/water`]: Math.max(0, wt - (isZombie ? 2 : 4))
-    };
+    const u = {};
+    hungerShift(u, "food", -(isZombie ? 5 : 3)); hungerShift(u, "water", -(isZombie ? 2 : 4));
 
     let newHp = p.hp;
     if (starving) {
-      newHp = Math.max(0, p.hp - 5);
-      u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-      if (newHp === 0) u[`users/${state.uid}/zone`] = "safe";
+      newHp = Math.max(0, p.hp - STARVE_HP);
+      u[`users/${state.uid}/hp`] = newHp;
     } else {
       u[`users/${state.uid}/stamina`] = cur - STAMINA_COST;
       u[`users/${state.uid}/staminaTs`] = serverTimestamp();
     }
 
     state.lastPayload = u;
-    if (newHp === 0) {
-      await update(ref(db), u);
-      logLine("คุณหิวโซและฝืนร่างกายค้นหาของ จนหมดสติไป... และถูกหามกลับมาที่ Safe Zone", "system");
-      await enterZone("safe");
-      return;
-    }
-
     if (found === "zombie") {
       if (isZombie) {
         await update(ref(db), u);
@@ -1136,11 +1218,11 @@ async function scavengeOnce() {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
       logLine(`คุณค้นหา… เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
-      if (starving) logLine("คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด 5 HP", "system");
+      if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     } else {
       await update(ref(db), u);
       logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : "คุณค้นหา… ไม่เจออะไรเลย", "info");
-      if (starving) logLine("คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด 5 HP", "system");
+      if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
   }
 }
@@ -1189,16 +1271,12 @@ async function zombieEncounter(u, hpNow) {
   let newHp = hpNow;
   if (dmg > 0) {
     newHp = Math.max(0, hpNow - dmg);
-    u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-    if (newHp === 0) u[`users/${state.uid}/zone`] = "safe";
+    u[`users/${state.uid}/hp`] = newHp;
   }
 
   await update(ref(db), u);
   logLine(`🧟 ${rollTxt} — ${verdict}`, "combat");
-  if (newHp === 0) {
-    logLine("คุณบาดเจ็บสาหัสและถูกหามกลับมาที่ Safe Zone", "system");
-    await enterZone("safe");
-  }
+  if (newHp === 0) logLine("คุณบาดเจ็บสาหัสจนล้มลง…", "system");
 }
 
 /* =========================================================
@@ -1224,6 +1302,7 @@ function updateAttackButtons() {
 }
 
 async function attack(targetUid, targetName = "เป้าหมาย") {
+  if (state.profile.hp <= 0) return;
   if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
   if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้จนกว่าจะหายหรือรักษา");
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
@@ -1233,22 +1312,18 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   state.attacking = true; state.pending.add(targetUid); updateAttackButtons();
 
   const p = state.profile;
-  const fd = p.food ?? 100;
-  const wt = p.water ?? 100;
+  const fd = curFood();
+  const wt = curWater();
   const starving = (fd === 0 || wt === 0);
 
   let newHp = p.hp;
   let attackerDied = false;
-  const selfUpdate = {
-    [`users/${state.uid}/food`]: Math.max(0, fd - 2),
-    [`users/${state.uid}/water`]: Math.max(0, wt - 2),
-    [`users/${state.uid}/lastAttack`]: serverTimestamp()
-  };
+  const selfUpdate = { [`users/${state.uid}/lastAttack`]: serverTimestamp() };
+  hungerShift(selfUpdate, "food", -2); hungerShift(selfUpdate, "water", -2);
 
   if (starving) {
-    newHp = Math.max(0, p.hp - 5);
-    selfUpdate[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-    if (newHp === 0) { selfUpdate[`users/${state.uid}/zone`] = "safe"; attackerDied = true; }
+    newHp = Math.max(1, p.hp - 5);   // ฝืนโจมตีตอนหิวไม่ทำให้ตายเอง
+    selfUpdate[`users/${state.uid}/hp`] = newHp;
     toast("คุณฝืนโจมตีขณะหิวโซ เสีย HP 5 หน่วย!");
   }
 
@@ -1268,7 +1343,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
     if (attackerDied) {
       state.pending.delete(targetUid);
       logLine("คุณหิวโซและฝืนร่างกายโจมตีศัตรู จนหมดสติไป... ฟื้นอีกทีที่ Safe Zone", "system");
-      await enterZone("safe");
+      await enterZone("safe", false, true);
       return;
     }
 
@@ -1321,8 +1396,8 @@ async function freeHit(targetUid, targetName, w) {
   const u = { [`attacks/${targetUid}/${state.uid}`]: null };
   if (w) wearUpdates(u, w);
   if (!dodged) {
-    u[`users/${targetUid}/hp`] = left === 0 ? 50 : left;
-    if (left === 0) { text += ` — ${targetName} ล้มลง!`; u[`users/${targetUid}/zone`] = "safe"; }
+    u[`users/${targetUid}/hp`] = left;
+    if (left === 0) text += ` — ${targetName} ล้มลง!`;
   }
   if (p.faction === "zombie" && !dodged) {
     u[`bites/${state.uid}/${targetUid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
@@ -1367,8 +1442,8 @@ async function resolveAttack(key, a) {
       u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
       if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
     }
-    u[`users/${state.uid}/hp`] = newHp === 0 ? 50 : newHp;
-    if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; u[`users/${state.uid}/zone`] = "safe"; }
+    u[`users/${state.uid}/hp`] = newHp;
+    if (newHp === 0) text += ` — ${p.username} ล้มลง!`;
   } else if (dodged) {
     text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`;
   } else {
@@ -1382,10 +1457,6 @@ async function resolveAttack(key, a) {
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
 
-  if (landed && newHp === 0) {
-    await enterZone("safe");
-    logLine("คุณถูกกำจัด แล้วฟื้นขึ้นที่ Safe Zone", "system");
-  }
 }
 
 /* =========================================================
@@ -1954,9 +2025,8 @@ async function infectionTick() {
       await update(ref(db), { [`users/${state.uid}/hp`]: left, [`users/${state.uid}/infectTs`]: serverTimestamp() });
       if (away && p.hp - left > 0) logLine(`🦠 ระหว่างที่คุณไม่อยู่ เชื้อลุกลามกินร่างกาย −${p.hp - left} HP`, "system");
     } else {
-      await update(ref(db), { [`users/${state.uid}/hp`]: 50, [`users/${state.uid}/zone`]: "safe", [`users/${state.uid}/infected`]: null, [`users/${state.uid}/infectTs`]: null });
-      logLine("🦠 เชื้อลุกลามจนคุณสลบ… ถูกหามกลับ Safe Zone และอาการติดเชื้อหายไปแล้ว", "system");
-      await enterZone("safe");
+      await update(ref(db), { [`users/${state.uid}/hp`]: 0 });
+      logLine("🦠 เชื้อลุกลามจนคุณสลบ…", "system");
     }
   } catch (e) { console.error("infection tick", e); }
   finally { state.infBusy = false; }
