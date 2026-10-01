@@ -407,7 +407,7 @@ function openGuide() {
   ]);
   sec("หิวและกระหาย", [
     `อาหารของมนุษย์ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.human)} ซอมบี้หิวเร็วกว่า ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.zombie)}`,
-    `น้ำลด 1 ทุก ${fmtDur(WATER_DECAY_MS)} ลดต่อเนื่องแม้ปิดเกม`,
+    `น้ำลด 1 ทุก ${fmtDur(WATER_DECAY_MS)} ความหิวและกระหายหยุดนับตอนออกจากเกม (อาจคลาดเคลื่อนไม่กี่สิบวินาที)`,
     "ถ้าอาหารหรือน้ำเหลือ 0 นอก Safe Zone จะค้นหาไม่ได้เลย",
     `ใน Safe Zone ยังค้นหาได้เพื่อไม่ให้ติดตาย แต่เสีย HP ${STARVE_HP} ต่อครั้ง`
   ]);
@@ -668,6 +668,7 @@ async function register(name, email, pw) {
 }
 
 $("btn-logout").addEventListener("click", async () => {
+  await beat();
   if (state.zone) await remove(ref(db, `zonePlayers/${state.zone}/${state.uid}`));
   await signOut(auth); location.reload();
 });
@@ -675,6 +676,27 @@ $("btn-logout").addEventListener("click", async () => {
 /* =========================================================
    6) เริ่มเกม 
    ========================================================= */
+// ความหิว/กระหายหยุดนับตอนออกจากเกม: ส่งสัญญาณ users/{uid}/seenAt ทุก 30 วินาทีขณะออนไลน์
+// ตอนกลับเข้าเกมจะเลื่อน foodTs/waterTs ไปข้างหน้าเท่าเวลาที่หายไป (ค่า food/water ไม่เปลี่ยน) — rules จำกัดไม่ให้เลื่อนเกินช่วงออฟไลน์จริง
+const HEARTBEAT_MS = 30000;
+function beat() {
+  if (!state.uid || state.profile?.banned) return Promise.resolve();
+  return update(ref(db), { [`users/${state.uid}/seenAt`]: serverTimestamp() }).catch(() => {});
+}
+async function resumeOffline(p) {
+  const uid = state.uid, now = serverNow(), u = { [`users/${uid}/seenAt`]: serverTimestamp() };
+  if ([p.seenAt, p.foodTs, p.waterTs].every((x) => typeof x === "number")) {
+    const off = now - 1000 - p.seenAt;   // −1 วิ: กันนาฬิกาเหลื่อมกับเซิร์ฟเวอร์ (rules ไม่ยอมให้เลื่อนเกินช่วงที่หายไปจริง)
+    if (off > 0) ["food", "water"].forEach((k) => {
+      const ts = Math.min(now - 1000, p[k + "Ts"] + off);
+      if (ts > p[k + "Ts"]) u[`users/${uid}/${k}Ts`] = ts;
+    });
+  }
+  try { await update(ref(db), u); }
+  catch (e) { console.warn("resumeOffline denied", e?.code || e); await beat(); }
+}
+window.addEventListener("pagehide", () => { beat(); });
+
 function startGame() {
   if (state.started) return;
   state.started = true;
@@ -706,6 +728,7 @@ function startGame() {
     if (state.wasInfected !== undefined && inf !== state.wasInfected) syncInfectedFlag(inf);
     state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
+    if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
       show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
