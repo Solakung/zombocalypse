@@ -1199,14 +1199,31 @@ async function repairWeapon(slot) {
   if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่ซ่อมอาวุธได้");
   if (state.zone !== "safe") return toast("ซ่อมได้เฉพาะใน Safe Zone");
   const why = repairBlock(it); if (why) return toast(why);
-  const r = repairResult(it), have = state.inv.scrap?.qty || 0, def = ITEMS[it.id];
-  if (have < r.cost) return toast(`ต้องใช้เศษวัสดุ ${r.cost} ชิ้น (คุณมี ${have})`);
-  if (!confirm(`ซ่อม ${def.name}?\nใช้ เศษผ้าและวัสดุ ${r.cost} ชิ้น (มี ${have} → ${have - r.cost})\nความทน ${it.dur}/${slotMaxDur(it)} → ${r.dur}/${r.maxDur}\n⚠ ความทนสูงสุดลดลงถาวรทุกครั้งที่ซ่อม`)) return;
+  
   state.busy = true;
-  const u = { [`inventory/${state.uid}/${slot}/dur`]: r.dur, [`inventory/${state.uid}/${slot}/maxDur`]: r.maxDur };
-  if (have - r.cost > 0) u[`inventory/${state.uid}/scrap/qty`] = have - r.cost; else u[`inventory/${state.uid}/scrap`] = null;
-  try { await update(ref(db), u); toast(`ซ่อม ${def.name} แล้ว (${r.dur}/${r.maxDur})`); logLine(`🔧 คุณซ่อม ${def.name} ใช้เศษวัสดุ ${r.cost} ชิ้น (ความทน ${r.dur}/${r.maxDur})`, "info"); }
-  catch (e) { toast(errMsg(e)); }
+  try {
+    // ดึงค่า Scrap จริงจากเซิร์ฟเวอร์
+    const scrapSnap = await get(ref(db, `inventory/${state.uid}/scrap/qty`));
+    const realHave = scrapSnap.val() || 0;
+    
+    const r = repairResult(it), def = ITEMS[it.id];
+    if (realHave < r.cost) {
+        state.busy = false;
+        return toast(`ต้องใช้เศษวัสดุ ${r.cost} ชิ้น (คุณมี ${realHave})`);
+    }
+    
+    if (!confirm(`ซ่อม ${def.name}?\nใช้ เศษผ้าและวัสดุ ${r.cost} ชิ้น (มี ${realHave} → ${realHave - r.cost})\nความทน ${it.dur}/${slotMaxDur(it)} → ${r.dur}/${r.maxDur}\n⚠ ความทนสูงสุดลดลงถาวรทุกครั้งที่ซ่อม`)) {
+        state.busy = false;
+        return;
+    }
+    
+    const u = { [`inventory/${state.uid}/${slot}/dur`]: r.dur, [`inventory/${state.uid}/${slot}/maxDur`]: r.maxDur };
+    if (realHave - r.cost > 0) u[`inventory/${state.uid}/scrap/qty`] = realHave - r.cost; else u[`inventory/${state.uid}/scrap`] = null;
+    
+    await update(ref(db), u); 
+    toast(`ซ่อม ${def.name} แล้ว (${r.dur}/${r.maxDur})`); 
+    logLine(`🔧 คุณซ่อม ${def.name} ใช้เศษวัสดุ ${r.cost} ชิ้น (ความทน ${r.dur}/${r.maxDur})`, "info");
+  } catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
 
@@ -1217,16 +1234,35 @@ async function dismantleWeapon(slot) {
   if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่รื้ออาวุธได้");
   if (state.zone !== "safe") return toast("รื้อได้เฉพาะใน Safe Zone");
   if (!canDismantle(it)) return toast("รื้ออาวุธชิ้นนี้ไม่ได้");
-  const y = salvageYield(it), have = state.inv.scrap?.qty || 0, after = Math.min(99, have + y), def = ITEMS[it.id];
-  if (!confirm(`รื้อ ${def.name} (${it.dur}/${slotMaxDur(it)})?\nได้ เศษผ้าและวัสดุ ${y} ชิ้น (มี ${have} → ${after}${have + y > 99 ? " · เกิน 99 ส่วนเกินจะหาย" : ""})\n⚠ อาวุธจะหายไปถาวร`)) return;
+  
   state.busy = true;
-  const u = { [`inventory/${state.uid}/${slot}`]: null };
-  if (p.equipped === slot) u[`users/${state.uid}/equipped`] = null;
-  if (after > have) { u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: after }; u[`salvage/${state.uid}/slot`] = slot; u[`salvage/${state.uid}/ts`] = serverTimestamp(); }
-  try { await update(ref(db), u); toast(`รื้อ ${def.name} ได้เศษวัสดุ ${after - have} ชิ้น`); logLine(`🔩 คุณรื้อ ${def.name} ได้เศษวัสดุ ${after - have} ชิ้น`, "info"); }
-  catch (e) { toast(errMsg(e)); }
+  try {
+    // ดึงค่า Scrap จริงจากเซิร์ฟเวอร์ เพื่อป้องกัน Error จากข้อมูลที่ล้าหลัง
+    const scrapSnap = await get(ref(db, `inventory/${state.uid}/scrap/qty`));
+    const realHave = scrapSnap.val() || 0;
+    
+    const y = salvageYield(it), after = Math.min(99, realHave + y), def = ITEMS[it.id];
+    if (!confirm(`รื้อ ${def.name} (${it.dur}/${slotMaxDur(it)})?\nได้ เศษผ้าและวัสดุ ${y} ชิ้น (มี ${realHave} → ${after}${realHave + y > 99 ? " · เกิน 99 ส่วนเกินจะหาย" : ""})\n⚠ อาวุธจะหายไปถาวร`)) {
+        state.busy = false;
+        return;
+    }
+    
+    const u = { [`inventory/${state.uid}/${slot}`]: null };
+    if (p.equipped === slot) u[`users/${state.uid}/equipped`] = null;
+    if (after > realHave) { 
+        u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: after }; 
+        u[`salvage/${state.uid}/slot`] = slot; 
+        u[`salvage/${state.uid}/ts`] = serverTimestamp(); 
+    }
+    
+    await update(ref(db), u); 
+    toast(`รื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`); 
+    logLine(`🔩 คุณรื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`, "info");
+  } catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
+
+
 
 // ทำลายไอเทมทิ้งถาวร (ไม่ตกลงพื้น ใครก็เก็บไม่ได้) — ใช้เคลียร์กระเป๋าที่ล้น
 async function destroyItem(slot) {
