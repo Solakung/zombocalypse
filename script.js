@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.2";
+const APP_VERSION = "2026-10-02.1427";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -328,7 +328,7 @@ const baseStat = (k) => state.stats?.[k] || 0;
 const buffEnd = () => (state.buff && typeof state.buff.bstart === "number" ? state.buff.bstart + (state.buff.mins || 0) * 60000 : 0);
 const buffActive = () => buffEnd() - 1000 > serverNow();
 const buffOf = (k) => (buffActive() ? state.buff[k] || 0 : 0);
-const statOf = (k) => baseStat(k) + buffOf(k);
+const statOf = (k) => baseStat(k) + buffOf(k) + evoBonus(k);
 const effEnd = (e) => (e && typeof e.bstart === "number" ? e.bstart + (e.mins || 0) * 60000 : 0);
 const effActive = (t) => { const e = state.effects?.[t]; return !!e && effEnd(e) - 1000 > serverNow(); };
 const effV = (t) => (effActive(t) ? state.effects[t].v || 0 : 0);
@@ -495,7 +495,7 @@ function openGuide() {
   sec("มินิบอสประจำโซน (ฝ่ายมนุษย์)", [
     "ค้นหานอก Safe Zone มีโอกาสน้อยๆ เจอซอมบี้พิเศษประจำโซน เช่น Runner (เร็ว ตีสองครั้ง) Fatty (อึดมาก) ซอมบี้ถืออาวุธ และบอสใหญ่ในอุโมงค์",
     "สู้เป็นรอบ: โจมตี (ทอยลูกเต๋า ทอย 1 พลาด ทอย 6 คริติคอล) ใช้ผ้าพันแผล/ชุดปฐมพยาบาล หรือหนี (ไม่แน่ว่าจะพ้น ถ้าไม่พ้นบอสโจมตีต่อ)",
-    "สกิล: ปุ่มสกิลใต้ปุ่มโจมตี (ฟันหนัก ตั้งการ์ด หลบหลีก ปฐมพยาบาล) แต่ละอันมีคูลดาวน์ ใช้ได้ทั้งบอสประจำโซนและบอสโลก ใช้แล้วบอสยังสวนกลับ (ยกเว้นฟันหนักที่ฆ่าบอสได้) ส่วน ✚ปฐมพยาบาล ใช้ใน Safe Zone ได้ด้วย (ปุ่มอยู่ที่แผงกระเป๋า ใช้ฟรี คูลดาวน์ใช้ร่วมกับตอนสู้บอส)",
+    "สกิล: ปุ่มสกิลใต้ปุ่มโจมตี (ฟันหนัก ตั้งการ์ด หลบหลีก ปฐมพยาบาล) แต่ละอันมีคูลดาวน์ ใช้ได้ทั้งบอสประจำโซนและบอสโลก ใช้แล้วบอสยังสวนกลับ (ยกเว้นฟันหนักที่ฆ่าบอสได้)",
     "สกิล PvP: เลือก 🎯โจมตีเฉียบ / 🔨ฟาดหนัก / 🗡️ทะลวงเกราะ ที่แถบเหนือรายชื่อผู้เล่น แล้วกดโจมตี ใช้ได้ครั้งละ 1 สกิล ส่วน 🧱ท่าตั้งรับกดใช้ทันที ลดดาเมจที่โดนปะทะครึ่งหนึ่งนาน 60 วินาที",
     "สกิลพิเศษ: GM/Owner อาจมอบสกิลเฉพาะตัวให้ — เป็นรางวัลเควสต์ รางวัลบอสโลก หรือ 📜ม้วนสกิลที่วางไว้ในโซน (กด \"เรียนรู้\" ในรายการของบนพื้น คนแรกที่เรียนได้ไป) จะขึ้นต่อท้ายในแถบสกิล บางอันมีจำนวนครั้งจำกัด (แสดงเป็น ×จำนวน)",
     "ระหว่างสู้ย้ายโซนและค้นหาไม่ได้ และปิดเกมหนีไม่ได้ กลับมาเปิดใหม่จะต้องสู้ต่อ ถ้า HP หมดจะโดนโทษตายตามปกติ",
@@ -612,14 +612,14 @@ function renderBars() {
   }
 
   const starving = (fd === 0 || wt === 0);
-  $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < STAMINA_COST) || effActive("stun");
+  $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < searchCost()) || effActive("stun");
   const fxEl = $("me-effects");
   if (fxEl) {
     fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).join("  ");
     fxEl.classList.toggle("hidden", !fxEl.textContent);
   }
   updateAttackButtons();
-  renderBuffRow(); clampToMax(); renderAid();
+  renderBuffRow(); clampToMax();
 }
 
 /* =========================================================
@@ -871,10 +871,10 @@ async function enterZone(z, initial = false, moved = false) {
     teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
-    renderCraft(); renderInv(); renderAid();
+    renderCraft(); renderInv();
 
     const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
-    await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}) });
+    await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}), ...(evoTitleKey() ? { evo4: evoTitleKey() } : {}) });
     onDisconnect(pRef).remove();
 
     const chatQ = query(ref(db, "chats/" + z), orderByKey(), limitToLast(CHAT_LIMIT));
@@ -1024,6 +1024,7 @@ function listenShouts() {
 // ซอมบี้: กัดโดน → ฝั่งเหยื่อ (หรือคนกัดเองตอนฟาดฟรี) บันทึก bites แล้วคนกัดมารับอาหาร
 function listenBites() {
   if (state.profile.faction !== "zombie") return;
+  listenEvo();
   onValue(ref(db, "bites/" + state.uid), async (s) => {
     if (!s.exists() || state.claimingBite) return;
     state.claimingBite = true;
@@ -1032,8 +1033,10 @@ function listenBites() {
       const u = { [`bites/${state.uid}`]: null };
       const gain = Math.min(BITE_FOOD, 100 - fd);
       if (gain > 0) hungerShift(u, "food", gain);
+      await state.evoReady;   // รอโหลด evo ก่อน ไม่งั้นอาจสร้าง node ทับของเดิม
+      const evoMsg = evoClaimWrites(u, s.val());
       await update(ref(db), u);
-      logLine(gain > 0 ? `🦷 คุณกัดเหยื่อ! อาหาร +${gain}` : "🦷 คุณกัดเหยื่อ (อิ่มอยู่แล้ว)", "combat");
+      logLine((gain > 0 ? `🦷 คุณกัดเหยื่อ! อาหาร +${gain}` : "🦷 คุณกัดเหยื่อ (อิ่มอยู่แล้ว)") + evoMsg, "combat");
     } catch (e) { console.error(e); }
     finally { state.claimingBite = false; }
   });
@@ -1071,7 +1074,7 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}`));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`));
     if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
@@ -1444,6 +1447,7 @@ async function processDeath(attempt = 0) {
     }
     if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
     if (state.boss) u[`bossFights/${uid}`] = null;
+    { const en = evoDeathWrites(u); if (en) lost.push(en); }
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
     await update(ref(db), u);
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
@@ -1468,7 +1472,7 @@ async function scavengeOnce() {
 
   if (starving && state.zone !== "safe") return toast("หิวหรือกระหายจนหมดแรง ค้นหาข้างนอกไม่ไหว — กินอาหาร/ดื่มน้ำก่อน (หรือกลับไปค้นหาใน Safe Zone)");
   if (starving && p.hp <= STARVE_HP) return toast(`HP ต่ำเกินไปที่จะฝืนค้นหาตอนหิว (เสีย ${STARVE_HP} HP ต่อครั้ง) กินหรือดื่มก่อน`);
-  if (!starving && cur < STAMINA_COST) return toast("พลังงานไม่พอ");
+  if (!starving && cur < searchCost()) return toast("พลังงานไม่พอ");
   {
     const isZombie = p.faction === "zombie";
     let found = rollDrop(isZombie ? zombieDrops(state.zone) : humanDrops(state.zone));
@@ -1483,7 +1487,7 @@ async function scavengeOnce() {
       newHp = Math.max(0, p.hp - STARVE_HP);
       u[`users/${state.uid}/hp`] = newHp;
     } else {
-      u[`users/${state.uid}/stamina`] = cur - STAMINA_COST;
+      u[`users/${state.uid}/stamina`] = cur - searchCost();
       u[`users/${state.uid}/staminaTs`] = serverTimestamp();
     }
 
@@ -1749,34 +1753,8 @@ function listenSkills() {
   const refresh = () => { renderBoss(); renderWB(); renderPvpSkillBar(); };
   onValue(ref(db, "skillState/" + state.uid), (snap) => { state.skillUse = snap.val() || {}; refresh(); });
   onValue(ref(db, "skills/" + state.uid), (snap) => { state.mySkills = snap.val() || {}; refresh(); });
-  setInterval(() => { if (state.boss) renderBoss(); renderPvpSkillBar(); renderAid(); }, 1000);
+  setInterval(() => { if (state.boss) renderBoss(); renderPvpSkillBar(); }, 1000);
 }
-
-// ปฐมพยาบาลใน Safe Zone — ใช้สกิล aid ตัวเดียวกับตอนสู้บอส (สูตรฟื้นและคูลดาวน์ 90 วิร่วมกัน rules ตรวจให้)
-function renderAid() {
-  const sec = $("aid-section"); if (!sec) return;
-  const p = state.profile, on = !!p && p.hp > 0 && state.zone === "safe" && !state.boss;
-  sec.classList.toggle("hidden", !on); if (!on) return;
-  const cd = skillCdLeft("aid"), full = p.hp >= maxHp(), b = $("btn-aid");
-  b.disabled = !!state.aidBusy || cd > 0 || full;
-  b.textContent = `✚ ปฐมพยาบาล +${Math.min(skillHeal(), maxHp() - p.hp)} HP${cd > 0 ? ` (${cd})` : ""}`;
-  $("aid-hint").textContent = full ? "HP เต็มอยู่แล้ว" : cd > 0 ? "รอคูลดาวน์ (ใช้ร่วมกับตอนสู้บอส)" : "ใช้ฟรี ไม่เสียของ คูลดาวน์ 90 วินาที";
-}
-async function safeAid() {
-  const p = state.profile;
-  if (!p || p.hp <= 0 || state.zone !== "safe" || state.boss || state.aidBusy) return;
-  if (!skillReady("aid")) return toast("ปฐมพยาบาลยังไม่พร้อม");
-  if (p.hp >= maxHp()) return toast("HP เต็มอยู่แล้ว");
-  state.aidBusy = true; renderAid();
-  try {
-    const u = {}, hp = Math.min(maxHp(), p.hp + skillHeal());
-    skillUseWrites(u, "aid"); u[`users/${state.uid}/hp`] = hp;
-    await update(ref(db), u);
-    toast(`✚ ปฐมพยาบาล +${hp - p.hp} HP`); logLine(`✚ คุณปฐมพยาบาลตัวเอง +${hp - p.hp} HP`, "info");
-  } catch (e) { toast(errMsg(e)); }
-  finally { state.aidBusy = false; renderAid(); }
-}
-$("btn-aid")?.addEventListener("click", safeAid);
 
 async function bossRound(action) {
   const bs = state.boss, b = bs && BOSSES[bs.boss], p = state.profile;
@@ -2104,15 +2082,18 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   const dm = effV("dice");
   const rb = sty === "sharp" ? skd.power : 0;   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
   const roll = Math.max(1, Math.min(6 + Math.max(0, dm) + rb, d6() + dm + rb));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
-  const wd = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w);   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
+  const am = ambushMult(), wd0 = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w), wd = am > 1 ? Math.floor(wd0 * am) : wd0;   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
     ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {}),
     wdmg: wd,
+    ...(am > 1 ? { amb: true } : {}),
+    ...(evoT("h") >= 3 ? { bl: true } : {}),
     ...(skId ? { sk: skId, ...(skd.basic ? {} : { skt: skd.type, skn: skd.name, ski: skd.icon }) } : {})
   };
   if (skId) skillUseWrites(selfUpdate, skId);
+  if (am > 1) state.evoAmbFor = state.profile.lastTravel;
 
   try {
     await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, ...selfUpdate });
@@ -2179,7 +2160,8 @@ async function freeHit(targetUid, targetName, w, sk = null) {
     if (left === 0) text += ` — ${targetName} ล้มลง!`;
   }
   if (p.faction === "zombie" && !dodged) {
-    u[`bites/${state.uid}/${targetUid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
+    u[`bites/${state.uid}/${targetUid}`] = biteRec(state.players[targetUid]?.faction === "human" && !state.players[targetUid]?.infected); text += " 🦷";
+    if (evoT("h") >= 3) u[`effects/${targetUid}/bleed`] = bleedRec();
     if (state.players[targetUid]?.faction === "human") { u[`users/${targetUid}/infected`] = serverTimestamp(); text += " 🦠"; }
   }
 
@@ -2214,6 +2196,7 @@ async function resolveAttack(key, a) {
   const bi = braceInfo(), braced = landed && bi.left > 0;                        // ท่าตั้งรับ: ดาเมจที่โดนลดตาม %
   let dmg = landed ? Math.max(1, rawDmg - tough) : 0;
   if (braced) dmg = Math.max(1, Math.floor(dmg * (1 - bi.pct / 100)));
+  if (landed) dmg = evoCutDmg(dmg);   // ซากหนาขั้น 2
   const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
@@ -2222,7 +2205,8 @@ async function resolveAttack(key, a) {
   if (landed) {
     text += `${a.fromName} โจมตีโดน! −${dmg} HP${braced ? " (🧱 ท่าตั้งรับลดดาเมจ)" : ""}`;
     if (state.players[key]?.faction === "zombie") {
-      u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
+      u[`bites/${key}/${state.uid}`] = biteRec(p.faction === "human" && !p.infected); text += " 🦷";
+      if (a.bl && !(effActive("bleed") && effV("bleed") > 2)) { u[`effects/${state.uid}/bleed`] = bleedRec(); text += " 🩸"; }
       if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
     }
     u[`users/${state.uid}/hp`] = newHp;
@@ -2957,3 +2941,203 @@ async function adminInfect(on) {
 }
 $("adm-inf-on").addEventListener("click", () => adminInfect(true));
 $("adm-inf-off").addEventListener("click", () => adminInfect(false));
+
+/* =========================================================
+   14) วิวัฒนาการซอมบี้ (DNA) — แปะต่อท้าย script.js
+   เก็บที่ evo/{uid} = { dna, sp, line, h, g, s, day, gain, fd, rs }
+   h/g/s = ขั้นสายตะกละ/ซากหนา/เลื้อยคลาน (0-4) • sp = DNA ที่ใช้ไปสะสม • day/gain = เพดานรายวัน (UTC)
+   fd = วันที่ใช้ "ไม่ยอมตาย" ไปแล้ว • rs = เวลารีเซ็ตล่าสุด — ทุกค่าต้องตรงกับ rules (patch_rules_evo.js)
+   ใช้ function declaration ทั้งหมด (hoist) เพราะ statOf ที่อยู่ด้านบนเรียก evoBonus
+   ========================================================= */
+const EVO_STEP = [3, 6, 10, 15];                     // ราคาแต้มต่อขั้น (สะสม 3/9/19/34 — rules ตรวจ sp ตามนี้)
+const EVO_DAY = 86400000, EVO_DAILY_CAP = 25, EVO_CLAIM_MAX = 10, EVO_RESET_CD = 86400000, EVO_REFUND = 0.7;
+const EVO_LINES = {
+  hunter: { key: "h", icon: "🩸", name: "สายตะกละ", title: "อสูรตะกละ", tag: "วิ่งไว กัดแรง หิวโหย",
+    tiers: [["เขี้ยวคม", "พละกำลัง +1"], ["กระหายเลือด", "กัดโดนฟื้น HP 3"], ["แผลเน่า", "เหยื่อที่โดนกัดเลือดไหล (2 HP/รอบ นาน 3 นาที)"], ["อสูรตะกละ", "พละกำลัง +1 อีก และดูดเลือดเป็น 5 HP"]],
+    cost: "ราคา: หิวเร็วขึ้น 10/20/30/40% ตามขั้น" },
+  giant: { key: "g", icon: "🗿", name: "สายซากหนา", title: "ยักษ์ซากอมตะ", tag: "อึดถึก ตายยาก ช้า",
+    tiers: [["หนังด้าน", "HP +20 และความคงทน +1"], ["ไขมันเกราะ", "ดาเมจที่ได้รับ −10%"], ["ไม่ยอมตาย", "ตายครั้งแรกของวัน DNA ไม่หาย"], ["ยักษ์ซากอมตะ", "HP +20 อีก"]],
+    cost: "ราคา: ว่องไวลด 1/2/3/3 (หลบยาก) และฟื้นฟูพลังงาน −1 ตั้งแต่ขั้น 3" },
+  shade: { key: "s", icon: "🕷️", name: "สายเลื้อยคลาน", title: "นักล่าความมืด", tag: "เงียบ ว่อง ซุ่มโจมตี",
+    tiers: [["ก้าวเงียบ", "ว่องไว +2 (หลบ +6%)"], ["จมูกไว", "ค้นหาเสียพลังงานน้อยลง 20% (10→8)"], ["ซุ่มตะปบ", "ฟาดแรกหลังเข้าโซนภายใน 1 นาที ดาเมจ +50%"], ["นักล่าความมืด", "ว่องไว +1 อีก และซุ่มเป็น +100%"]],
+    cost: "ราคา: HP สูงสุด −10 (ขั้น 2) และ −20 (ขั้น 3 ขึ้นไป)" }
+};
+
+const evoToday = () => { const n = serverNow(); return n - (n % EVO_DAY); };
+function evoT(k) { return state.profile?.faction === "zombie" && state.evo ? state.evo[k] || 0 : 0; }
+
+// โบนัส/ข้อเสียสุทธิต่อสเตตัส จากขั้นที่กำหนด (เพดานโบนัสฝั่งบวก: str +2, hp +4, agi +4, tough +2)
+function evoBonusAt(k, e) {
+  const h = e?.h || 0, g = e?.g || 0, s = e?.s || 0;
+  const cap = { str: 2, hp: 4, agi: 4, tough: 2 };
+  let v = 0;
+  if (k === "str") v = (h >= 1 ? 1 : 0) + (h >= 4 ? 1 : 0);
+  else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
+  else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][g];
+  else if (k === "tough") v = g >= 1 ? 1 : 0;
+  else if (k === "regen") v = g >= 3 ? -1 : 0;
+  return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
+}
+function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
+
+function searchCost() { return evoT("s") >= 2 ? 8 : STAMINA_COST; }                 // ค้นหาไว: เสียพลังงาน −20%
+function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.9)) : dmg; }   // ไขมันเกราะ: −10%
+function evoTitleKey() { const e = state.evo; return !e || state.profile?.faction !== "zombie" ? null : e.h === 4 ? "hunter" : e.g === 4 ? "giant" : e.s === 4 ? "shade" : null; }
+function evoTitleText(key) { const L = EVO_LINES[key]; return L ? `${L.icon}${L.title}` : ""; }
+
+// ซุ่มตะปบ: คืนตัวคูณดาเมจ (1 = ไม่ได้ซุ่ม) — ใช้ได้ครั้งเดียวต่อการเดินทาง 1 ครั้ง (ภายใน 55 วิ ให้เข้มกว่า rules 60 วิ)
+function ambushMult() {
+  const s = evoT("s"), lt = state.profile?.lastTravel;
+  if (s < 3 || typeof lt !== "number" || state.evoAmbFor === lt) return 1;
+  return serverNow() - lt <= 55000 ? (s >= 4 ? 2 : 1.5) : 1;
+}
+
+// ระเบียน bites: dna = 1 (กัดโดน) หรือ 6 (กัดโดน + ติดเชื้อครั้งแรก) — rules ตรวจว่า 6 ใช้ได้เฉพาะตอนเหยื่อเพิ่งติดเชื้อจริง
+function biteRec(firstInfect) { return { ts: serverTimestamp(), food: BITE_FOOD, dna: firstInfect ? 6 : 1 }; }
+function bleedRec() { return { bstart: serverTimestamp(), mins: 3, v: 2, tick: serverTimestamp() }; }
+
+/* ---------- ฟัง evo + ปุ่ม + ฉายา + ค่าหิวเพิ่ม ---------- */
+function listenEvo() {
+  if (state.evoOn) return; state.evoOn = true;
+  state.evoReady = new Promise((r) => { state.evoResolve = r; });
+  const b = btn("🧬 วิวัฒนาการ", openEvo, "btn ghost mini"); b.id = "btn-evo";
+  $("btn-profile").before(b);
+  onValue(ref(db, "evo/" + state.uid), (s) => {
+    state.evo = s.val(); state.evoResolve?.();
+    renderBars(); syncEvoTitle();
+    $("btn-scavenge").textContent = `ค้นหาไอเทม (−${searchCost()} พลังงาน)`;
+    if (!$("evo-modal")?.classList.contains("hidden")) renderEvo();
+  }, (e) => { console.error("evo", e); state.evoResolve?.(); });
+  setInterval(evoHungerTick, 30000);
+}
+
+function syncEvoTitle() {
+  if (!state.zone || state.profile?.faction !== "zombie") return;
+  const r = ref(db, `zonePlayers/${state.zone}/${state.uid}/evo4`), k = evoTitleKey();
+  (k ? set(r, k) : remove(r)).catch(() => {});
+}
+
+// สายตะกละ: หิวเร็วขึ้นตามขั้น (หักอาหารเพิ่มเอง ทีละ 30 วิ ขณะออนไลน์ — rules อนุญาตให้ food ลดได้เสมอ)
+async function evoHungerTick() {
+  const pct = [0, 0.1, 0.2, 0.3, 0.4][evoT("h")], p = state.profile;
+  if (!pct || !p || p.hp <= 0 || state.busy || state.evoHBusy) return;
+  state.evoHAcc = (state.evoHAcc || 0) + (pct * 30000) / FOOD_DECAY_MS.zombie;
+  const n = Math.floor(state.evoHAcc); if (n < 1) return;
+  state.evoHAcc -= n;
+  const fd = curFood(); if (fd <= 0) return;
+  const u = {}; hungerShift(u, "food", -Math.min(n, fd));
+  if (!Object.keys(u).length) return;
+  state.evoHBusy = true;
+  try { await update(ref(db), u); } catch (e) { console.error("evo hunger", e); } finally { state.evoHBusy = false; }
+}
+
+/* ---------- ได้ DNA + ดูดเลือด (เรียกตอนรับ bites ใน listenBites) — เขียนลง u ใบเดียวกับที่ลบ bites ---------- */
+function evoClaimWrites(u, bites) {
+  const uid = state.uid, p = state.profile, e = state.evo, today = evoToday();
+  let n = 0; Object.values(bites || {}).forEach((b) => { n += Number(b?.dna) || 1; });
+  const room = e && e.day === today ? EVO_DAILY_CAP - (e.gain || 0) : EVO_DAILY_CAP;
+  const add = Math.max(0, Math.min(n, EVO_CLAIM_MAX, room));
+  let msg = "";
+  if (add > 0) {
+    if (!e) Object.entries({ dna: add, sp: 0, line: "none", h: 0, g: 0, s: 0, day: today, gain: add, fd: 0, rs: 0 }).forEach(([k, v]) => { u[`evo/${uid}/${k}`] = v; });
+    else { u[`evo/${uid}/dna`] = (e.dna || 0) + add; u[`evo/${uid}/day`] = today; u[`evo/${uid}/gain`] = (e.day === today ? e.gain || 0 : 0) + add; }
+    msg += ` 🧬 DNA +${add}`;
+  } else if (n > 0) msg += " (🧬 DNA วันนี้เต็มแล้ว)";
+  const h = evoT("h");
+  if (h >= 2 && p.hp > 0 && p.hp < maxHp()) {
+    const heal = Math.min(h >= 4 ? 5 : 3, maxHp() - p.hp);
+    u[`users/${uid}/hp`] = p.hp + heal; msg += ` 🩸 ฟื้น HP +${heal}`;
+  }
+  return msg;
+}
+
+/* ---------- ตาย: เสีย DNA ที่ยังไม่ใช้ครึ่งหนึ่ง (ซากหนาขั้น 3 ยกเว้นครั้งแรกของวัน) — เรียกใน processDeath ---------- */
+function evoDeathWrites(u) {
+  const e = state.evo, uid = state.uid;
+  if (state.profile?.faction !== "zombie" || !e || !(e.dna > 0)) return "";
+  const today = evoToday();
+  if ((e.g || 0) >= 3 && (e.fd || 0) < today) { u[`evo/${uid}/fd`] = today; return "🗿 ไม่ยอมตาย (DNA ไม่หาย)"; }
+  const keep = Math.floor(e.dna / 2); u[`evo/${uid}/dna`] = keep;
+  return `🧬 DNA −${e.dna - keep}`;
+}
+
+/* ---------- ซื้อขั้น / รีเซ็ต ---------- */
+function evoClampHp(u, tiers) {   // ถ้าเพดาน HP ใหม่ต่ำกว่า HP ปัจจุบัน ให้ลด HP ในอัปเดตเดียวกัน (rules validate HP ด้วยค่า evo ใหม่)
+  const p = state.profile, mx = HP_BASE + 10 * (baseStat("hp") + buffOf("hp") + evoBonusAt("hp", tiers));
+  if (p.hp > mx) u[`users/${state.uid}/hp`] = Math.max(1, mx);
+}
+async function evoBuy(lineId) {
+  const e = state.evo; if (!e || state.evoBusy) return;
+  const L = EVO_LINES[lineId], cur = e[L.key] || 0, next = cur + 1;
+  const main = e.line && e.line !== "none" ? e.line : lineId;
+  if (next > 4) return toast("ขั้นสูงสุดแล้ว");
+  if (next > 1 && main !== lineId) return toast("สายอื่นอัปได้ถึงขั้น 1 เท่านั้น");
+  const cost = EVO_STEP[cur]; if ((e.dna || 0) < cost) return toast(`DNA ไม่พอ (ต้องใช้ ${cost})`);
+  const tiers = { h: e.h || 0, g: e.g || 0, s: e.s || 0, [L.key]: next };
+  const u = { [`evo/${state.uid}/${L.key}`]: next, [`evo/${state.uid}/sp`]: (e.sp || 0) + cost, [`evo/${state.uid}/dna`]: e.dna - cost, [`evo/${state.uid}/line`]: main };
+  evoClampHp(u, tiers);
+  state.evoBusy = true;
+  try { await update(ref(db), u); toast(`🧬 ${L.tiers[cur][0]} สำเร็จ`); } catch (err) { toast(errMsg(err)); } finally { state.evoBusy = false; }
+}
+async function evoReset() {
+  const e = state.evo; if (!e || state.evoBusy || !(e.sp > 0)) return;
+  const left = e.rs ? EVO_RESET_CD - (serverNow() - e.rs) : 0;
+  if (left > 0) return toast(`รีเซ็ตได้อีกใน ${Math.ceil(left / 3600000)} ชม.`);
+  const refund = Math.floor(e.sp * EVO_REFUND);
+  if (!confirm(`รีเซ็ตวิวัฒนาการทั้งหมด? จะได้ DNA คืน ${refund} จาก ${e.sp} (70%) และรีเซ็ตซ้ำได้ทุก 24 ชม.`)) return;
+  const u = { [`evo/${state.uid}/h`]: 0, [`evo/${state.uid}/g`]: 0, [`evo/${state.uid}/s`]: 0, [`evo/${state.uid}/sp`]: 0, [`evo/${state.uid}/line`]: "none", [`evo/${state.uid}/dna`]: (e.dna || 0) + refund, [`evo/${state.uid}/rs`]: serverTimestamp() };
+  evoClampHp(u, { h: 0, g: 0, s: 0 });
+  state.evoBusy = true;
+  try { await update(ref(db), u); toast(`รีเซ็ตแล้ว ได้ DNA คืน ${refund}`); } catch (err) { toast(errMsg(err)); } finally { state.evoBusy = false; }
+}
+
+/* ---------- UI (สร้าง modal ด้วย JS ใช้ class เดิมของเกม ไม่ต้องแก้ index.html/style.css) ---------- */
+function openEvo() {
+  if (!$("evo-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "evo-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "440px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🧬 วิวัฒนาการ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "evo-body"; body.style.cssText = "display:grid;gap:12px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  renderEvo(); $("evo-modal").classList.remove("hidden");
+}
+function renderEvo() {
+  const body = $("evo-body"); if (!body) return;
+  body.innerHTML = "";
+  const e = state.evo || { dna: 0, sp: 0, line: "none", h: 0, g: 0, s: 0, day: 0, gain: 0, rs: 0 };
+  const today = evoToday(), gainToday = e.day === today ? e.gain || 0 : 0;
+  const head = mk("div"); head.append(mk("div", "", `🧬 DNA ${e.dna || 0} • วันนี้ได้แล้ว ${gainToday}/${EVO_DAILY_CAP}`));
+  // เป้าหมายถัดไป: ขั้นที่ถูกที่สุดที่ซื้อได้ตามกติกา
+  let goal = null;
+  Object.entries(EVO_LINES).forEach(([id, L]) => {
+    const cur = e[L.key] || 0, main = e.line && e.line !== "none" ? e.line : id;
+    if (cur >= 4 || (cur >= 1 && main !== id)) return;
+    const c = EVO_STEP[cur]; if (!goal || c < goal.c) goal = { c, name: L.tiers[cur][0] };
+  });
+  if (goal) head.append(mk("div", "muted", (e.dna || 0) >= goal.c ? `พร้อมอัป: ${goal.name}` : `อีก ${goal.c - (e.dna || 0)} DNA ถึง "${goal.name}"`));
+  body.append(head);
+  body.append(mk("p", "muted", "ได้ DNA: กัดโดน +1 / ติดเชื้อเหยื่อครั้งแรก +6 • ตายเสียครึ่งหนึ่ง • สายหลักได้ถึงขั้น 4 สายอื่นได้ถึงขั้น 1"));
+  Object.entries(EVO_LINES).forEach(([id, L]) => {
+    const cur = e[L.key] || 0, main = e.line && e.line !== "none" ? e.line : id, locked = cur >= 1 && main !== id;
+    const card = mk("div"); card.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+    card.append(mk("b", "", `${L.icon} ${L.name} ${e.line === id ? "⭐ สายหลัก" : ""} — ขั้น ${cur}/4`), mk("span", "muted", L.tag));
+    L.tiers.forEach(([n, d], i) => {
+      const row = mk("div"); row.style.cssText = "display:flex;justify-content:space-between;gap:8px;align-items:center";
+      const t = mk("span", i < cur ? "" : "muted", `${i < cur ? "✅" : i === cur ? "▶" : "🔒"} ขั้น ${i + 1} ${n}: ${d}`);
+      row.append(t);
+      if (i === cur && cur < 4) {
+        const capped = cur >= 1 && main !== id, cost = EVO_STEP[cur];
+        const b = btn(`${cost} DNA`, () => evoBuy(id), "btn primary mini");
+        b.disabled = capped || (e.dna || 0) < cost || !state.evo; row.append(b);
+      }
+      card.append(row);
+    });
+    card.append(mk("span", "muted", L.cost));
+    if (locked) card.append(mk("span", "muted", "สายอื่น: อัปได้ถึงขั้น 1 เท่านั้น"));
+    body.append(card);
+  });
+  const left = e.rs ? EVO_RESET_CD - (serverNow() - e.rs) : 0;
+  const rb = btn(left > 0 ? `รีเซ็ต (รออีก ${Math.ceil(left / 3600000)} ชม.)` : `รีเซ็ตวิวัฒนาการ (คืน ${Math.floor((e.sp || 0) * EVO_REFUND)} DNA)`, evoReset, "btn danger wide");
+  rb.disabled = !(e.sp > 0) || left > 0; body.append(rb);
+}
