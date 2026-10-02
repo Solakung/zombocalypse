@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.1427";
+const APP_VERSION = "2026-10-02.1445";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -805,7 +805,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -3140,4 +3140,166 @@ function renderEvo() {
   const left = e.rs ? EVO_RESET_CD - (serverNow() - e.rs) : 0;
   const rb = btn(left > 0 ? `รีเซ็ต (รออีก ${Math.ceil(left / 3600000)} ชม.)` : `รีเซ็ตวิวัฒนาการ (คืน ${Math.floor((e.sp || 0) * EVO_REFUND)} DNA)`, evoReset, "btn danger wide");
   rb.disabled = !(e.sp > 0) || left > 0; body.append(rb);
+}
+
+/* =========================================================
+   15) ตลาดซื้อขาย — แปะต่อท้าย script.js (แยกตลาดตามฝั่ง: market/{human|zombie})
+   market/{faction}/{uid_1..3} = { seller, sellerName, give:{id,qty}, want:{id,qty}, ts }  ← ของที่ลงขายอยู่ใน escrow (หักจากคลังตอนลง)
+   marketPayouts/{seller}/{lid_ts} = { id, qty, lid }  ← ของที่ผู้ขายได้ รอกด "รับ"
+   marketTx/{uid} = { op: buy|cancel|claim, lid|pid, ts }  ← "ตั๋ว" ที่ rules ใช้ตรวจ (เขียนในอัปเดตเดียวกับการย้ายของ)
+   ทุกค่าต้องตรงกับ rules (patch_rules_market.js) • ใช้ function declaration (hoist) ไม่ต้องแก้ index.html/style.css
+   ========================================================= */
+const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat"];
+const MKT_SLOTS = 3, MKT_MAX = 99;
+const mktIdsFor = () => MKT_IDS.filter((id) => id !== "rotten_meat" || state.profile?.faction === "zombie");
+const mktHave = (id) => state.inv?.[id]?.qty || 0;
+const mktLabel = (id) => { const d = ITEMS[id]; return d ? `${d.icon || "📦"} ${d.name}` : id; };
+const mktInt = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= MKT_MAX ? n : 0; };
+// ใส่ของเข้าคลังตัวเอง (บวกจากของเดิม) ลง u — ถ้าช่องมีอยู่แล้วแก้แค่ qty
+function mktCredit(u, id, qty) {
+  const have = mktHave(id), base = `inventory/${state.uid}/${id}`;
+  if (have > 0) u[base + "/qty"] = have + qty; else u[base] = { id, qty };
+}
+function mktDebit(u, id, qty) {
+  const left = mktHave(id) - qty, base = `inventory/${state.uid}/${id}`;
+  if (left > 0) u[base + "/qty"] = left; else u[base] = null;
+}
+
+function listenMarket() {
+  if (state.mktOn || !state.profile?.faction) return; state.mktOn = true;
+  state.market = {}; state.mktPay = {}; state.mktForm = state.mktForm || { g: "", gq: 1, w: "scrap", wq: 1 };
+  const b = btn("🏪 ตลาด", openMarket, "btn ghost mini"); b.id = "btn-market"; $("btn-profile").before(b);
+  const again = () => {
+    const m = $("mkt-modal"); if (!m || m.classList.contains("hidden")) return;
+    if (document.activeElement?.tagName === "INPUT" && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์จำนวน
+    renderMarket();
+  };
+  onValue(ref(db, "market/" + state.profile.faction), (s) => { state.market = s.val() || {}; again(); }, (e) => console.error("market", e));
+  onValue(ref(db, "marketPayouts/" + state.uid), (s) => { state.mktPay = s.val() || {}; updateMarketBadge(); again(); }, (e) => console.error("marketPayouts", e));
+  onValue(ref(db, "inventory/" + state.uid), again);   // ลงทะเบียนหลัง listenInventory จึงเห็น state.inv ล่าสุดเสมอ
+  setInterval(again, 5000);                              // อัปเดตสถานะ Safe Zone ของปุ่ม
+}
+function updateMarketBadge() {
+  const b = $("btn-market"); if (!b) return;
+  const n = Object.keys(state.mktPay || {}).length;
+  b.textContent = n ? `🏪 ตลาด (${n} รอรับ)` : "🏪 ตลาด";
+}
+function mktErr(e) { return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่สำเร็จ — อาจมีคนซื้อ/ยกเลิกไปก่อน หรืออยู่นอก Safe Zone" : "ทำรายการไม่สำเร็จ"; }
+async function mktRun(u, okMsg) {
+  if (state.mktBusy) return; state.mktBusy = true;
+  try { await update(ref(db), u); toast(okMsg); } catch (e) { console.error("market", e); toast(mktErr(e)); } finally { state.mktBusy = false; }
+}
+function mktGuard(needSafe = true) {
+  const p = state.profile;
+  if (!p || p.hp <= 0) { toast("คุณสลบอยู่"); return false; }
+  if (needSafe && state.zone !== "safe") { toast("ซื้อขายได้เฉพาะใน Safe Zone"); return false; }
+  return true;
+}
+
+// ลงขาย: ของออกจากคลัง → ประกาศ (escrow)
+async function mktCreate() {
+  const f = state.mktForm, p = state.profile; if (!mktGuard()) return;
+  const gq = mktInt(f.gq), wq = mktInt(f.wq);
+  if (!f.g || !f.w || f.g === f.w) return toast("เลือกของที่ขายกับของที่ต้องการให้ต่างกัน");
+  if (!gq || !wq) return toast("จำนวนต้องเป็น 1–99");
+  if (mktHave(f.g) < gq) return toast("ของในกระเป๋าไม่พอ");
+  const n = [1, 2, 3].find((i) => !state.market?.[`${state.uid}_${i}`]);
+  if (!n) return toast(`ลงขายได้สูงสุด ${MKT_SLOTS} ประกาศ — ยกเลิกอันเก่าก่อน`);
+  const u = { [`market/${p.faction}/${state.uid}_${n}`]: { seller: state.uid, sellerName: p.username, give: { id: f.g, qty: gq }, want: { id: f.w, qty: wq }, ts: serverTimestamp() } };
+  mktDebit(u, f.g, gq);
+  await mktRun(u, `ลงขาย ${ITEMS[f.g].name} ×${gq} แล้ว`);
+}
+// ซื้อ: จ่ายของที่ขอ → ได้ของในประกาศ • ผู้ขายได้ใบรับของ (ซื้อทั้งประกาศ ไม่แบ่งซื้อ)
+async function mktBuy(lid) {
+  const l = state.market?.[lid], p = state.profile; if (!l || !mktGuard()) return;
+  if (l.seller === state.uid) return toast("ซื้อประกาศตัวเองไม่ได้");
+  if (mktHave(l.want.id) < l.want.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(l.want.id)} ×${l.want.qty}`);
+  if (mktHave(l.give.id) + l.give.qty > MKT_MAX) return toast(`${ITEMS[l.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
+  const u = {
+    [`market/${p.faction}/${lid}`]: null,
+    [`marketTx/${state.uid}`]: { op: "buy", lid, ts: serverTimestamp() },
+    [`marketPayouts/${l.seller}/${lid}_${l.ts}`]: { id: l.want.id, qty: l.want.qty, lid }
+  };
+  mktDebit(u, l.want.id, l.want.qty); mktCredit(u, l.give.id, l.give.qty);
+  await mktRun(u, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`);
+}
+// ยกเลิกประกาศของตัวเอง: ของกลับเข้าคลัง
+async function mktCancel(lid) {
+  const l = state.market?.[lid]; if (!l || l.seller !== state.uid || !mktGuard(false)) return;
+  if (mktHave(l.give.id) + l.give.qty > MKT_MAX) return toast(`${ITEMS[l.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
+  const u = { [`market/${state.profile.faction}/${lid}`]: null, [`marketTx/${state.uid}`]: { op: "cancel", lid, ts: serverTimestamp() } };
+  mktCredit(u, l.give.id, l.give.qty);
+  await mktRun(u, "ยกเลิกประกาศแล้ว ของกลับเข้ากระเป๋า");
+}
+// รับของที่ขายได้
+async function mktClaim(pid) {
+  const pay = state.mktPay?.[pid]; if (!pay || !mktGuard(false)) return;
+  if (mktHave(pay.id) + pay.qty > MKT_MAX) return toast(`${ITEMS[pay.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อนแล้วค่อยรับ`);
+  const u = { [`marketPayouts/${state.uid}/${pid}`]: null, [`marketTx/${state.uid}`]: { op: "claim", pid, ts: serverTimestamp() } };
+  mktCredit(u, pay.id, pay.qty);
+  await mktRun(u, `รับ ${ITEMS[pay.id].name} ×${pay.qty} แล้ว`);
+}
+
+/* ---------- UI (modal สร้างด้วย JS ใช้ class เดิมของเกม) ---------- */
+function openMarket() {
+  if (!$("mkt-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "mkt-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🏪 ตลาด"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "mkt-body"; body.style.cssText = "display:grid;gap:12px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  renderMarket(); $("mkt-modal").classList.remove("hidden");
+}
+function mktSelect(ids, value, onChange) {
+  const s = mk("select"); s.style.cssText = "flex:1;min-width:0";
+  ids.forEach((id) => { const o = mk("option", "", mktLabel(id)); o.value = id; s.append(o); });
+  if (ids.includes(value)) s.value = value;
+  s.addEventListener("change", () => onChange(s.value)); return s;
+}
+function renderMarket() {
+  const body = $("mkt-body"); if (!body) return;
+  body.innerHTML = "";
+  const f = state.mktForm, safe = state.zone === "safe", fac = state.profile?.faction === "zombie" ? "🧟 ตลาดฝั่งซอมบี้" : "🧍 ตลาดฝั่งมนุษย์";
+  body.append(mk("div", "muted", `${fac} — ซื้อขายกับผู้เล่นฝั่งเดียวกันเท่านั้น${safe ? "" : " • ตอนนี้ไม่ได้อยู่ Safe Zone (ซื้อ/ลงขายไม่ได้ แต่ยกเลิกและรับของได้)"}`));
+  const row = () => { const r = mk("div"); r.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px"; return r; };
+  const card = (title) => { const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px"; c.append(mk("b", "", title)); return c; };
+
+  const pays = Object.entries(state.mktPay || {});
+  if (pays.length) {
+    const c = card("📬 ของที่ขายได้ รอรับ");
+    pays.forEach(([pid, p]) => { const r = row(); r.append(mk("span", "", `${mktLabel(p.id)} ×${p.qty}`), btn("รับ", () => mktClaim(pid), "btn primary mini")); c.append(r); });
+    body.append(c);
+  }
+
+  const mine = [1, 2, 3].map((i) => [`${state.uid}_${i}`, state.market?.[`${state.uid}_${i}`]]).filter(([, l]) => l);
+  const c2 = card(`📦 ประกาศของฉัน (${mine.length}/${MKT_SLOTS})`);
+  mine.forEach(([lid, l]) => { const r = row(); r.append(mk("span", "", `ขาย ${mktLabel(l.give.id)} ×${l.give.qty} → ต้องการ ${mktLabel(l.want.id)} ×${l.want.qty}`), btn("ยกเลิก", () => mktCancel(lid), "btn danger mini")); c2.append(r); });
+  if (mine.length < MKT_SLOTS) {
+    const haveIds = mktIdsFor().filter((id) => mktHave(id) > 0);
+    if (!haveIds.includes(f.g)) f.g = haveIds[0] || "";
+    if (!mktIdsFor().includes(f.w)) f.w = "scrap";
+    if (!haveIds.length) c2.append(mk("span", "muted", "ไม่มีของที่ลงขายได้ในกระเป๋า"));
+    else {
+      const num = (key) => { const i = mk("input"); i.type = "number"; i.min = 1; i.max = MKT_MAX; i.value = f[key]; i.style.cssText = "width:64px"; i.addEventListener("input", () => { f[key] = i.value; }); return i; };
+      const r1 = row(), r2 = row();
+      r1.append(mk("span", "", "ขาย"), mktSelect(haveIds, f.g, (v) => { f.g = v; renderMarket(); }), num("gq"), mk("span", "muted", `(มี ${mktHave(f.g)})`));
+      r2.append(mk("span", "", "แลก"), mktSelect(mktIdsFor(), f.w, (v) => { f.w = v; }), num("wq"));
+      const go = btn("ลงขาย", mktCreate, "btn primary mini"); go.disabled = !safe;
+      c2.append(r1, r2, go, mk("span", "muted", "ของที่ลงขายจะถูกเก็บไว้ในตลาด (ไม่หายตอนตาย) ยกเลิกเมื่อไรก็ได้"));
+    }
+  }
+  body.append(c2);
+
+  const others = Object.entries(state.market || {}).filter(([, l]) => l.seller !== state.uid).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  const c3 = card(`🛒 ประกาศในตลาด (${others.length})`);
+  others.forEach(([lid, l]) => {
+    const r = row(), enough = mktHave(l.want.id) >= l.want.qty;
+    const t = mk("span", enough ? "" : "muted", `${l.sellerName}: ${mktLabel(l.give.id)} ×${l.give.qty} ← ${mktLabel(l.want.id)} ×${l.want.qty}`);
+    const b = btn("ซื้อ", () => mktBuy(lid), "btn primary mini"); b.disabled = !safe || !enough;
+    if (!enough) b.title = "ของไม่พอ";
+    r.append(t, b); c3.append(r);
+  });
+  if (!others.length) c3.append(mk("span", "muted", "ยังไม่มีใครลงขาย"));
+  body.append(c3);
 }
