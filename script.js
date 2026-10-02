@@ -2188,9 +2188,10 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   hungerShift(selfUpdate, "food", -2); hungerShift(selfUpdate, "water", -2);
 
   if (starving) {
-    newHp = Math.max(1, p.hp - 5);   // ฝืนโจมตีตอนหิวไม่ทำให้ตายเอง
+    const starvePen = p.faction === "zombie" ? 2 : 5;   // ซอมบี้เสียน้อยกว่า (ชดเชยด้วยการกัดฟื้น HP +2) — HP ลดได้เสมอตาม rules
+    newHp = Math.max(1, p.hp - starvePen);   // ฝืนโจมตีตอนหิวไม่ทำให้ตายเอง
     selfUpdate[`users/${state.uid}/hp`] = newHp;
-    toast("คุณฝืนโจมตีขณะหิวโซ เสีย HP 5 หน่วย!");
+    toast(`คุณฝืนโจมตีขณะหิวโซ เสีย HP ${starvePen} หน่วย!`);
   }
 
   const w = equippedWeapon();
