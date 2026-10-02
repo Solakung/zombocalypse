@@ -26,6 +26,43 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
+/* ---------------------------------------------------------
+   อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
+   ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
+   (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
+   --------------------------------------------------------- */
+const APP_VERSION = "2026-10-02.1";
+let updateBarShown = false;
+function reloadToVersion(v) {
+  const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
+  location.replace(u.toString());
+}
+function showUpdateBar(v) {
+  if (updateBarShown) return;
+  // ยังไม่ได้ล็อกอิน (ไม่มีอะไรเสียหาย) → รีโหลดให้เองครั้งเดียวต่อเวอร์ชัน กันวนลูปถ้า CDN ยังส่งไฟล์เก่า
+  if (document.getElementById("screen-login")?.classList.contains("active")) {
+    try { const k = "upd:" + v; if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, "1"); return reloadToVersion(v); } } catch (_) {}
+  }
+  updateBarShown = true;
+  const bar = document.createElement("div"); bar.className = "update-banner"; bar.setAttribute("role", "status");
+  const msg = document.createElement("span"); msg.textContent = "🔄 มีเวอร์ชันใหม่ของเกมแล้ว";
+  const go = document.createElement("button"); go.className = "btn primary mini"; go.textContent = "อัปเดตเลย"; go.onclick = () => reloadToVersion(v);
+  const later = document.createElement("button"); later.className = "btn ghost mini"; later.textContent = "ทีหลัง";
+  later.onclick = () => { bar.remove(); setTimeout(() => { updateBarShown = false; }, 5 * 60 * 1000); };
+  bar.append(msg, go, later); document.body.append(bar);
+}
+async function checkForUpdate() {
+  try {
+    const r = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (typeof v === "string" && v && v !== APP_VERSION) showUpdateBar(v);
+  } catch (_) { /* ออฟไลน์/ไฟล์ไม่มี → ข้าม */ }
+}
+checkForUpdate();
+setInterval(checkForUpdate, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkForUpdate(); });
+
 /* =========================================================
    2) ข้อมูลเกม (โซน + ไอเทม)
    ========================================================= */
@@ -169,6 +206,31 @@ const RECIPES = {
   soup: { need: { canned_food: 1, water: 1 }, out: "soup", qty: 1 },
   stim_shot: { need: { chem: 3, energy_drink: 1 }, out: "stim_shot", qty: 1 }
 };
+
+// <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
+// สูตรทั้งหมดต้องตรงกับ database_rules.json (ช่อง inventory/$uid/$slot) ถ้าแก้ตรงนี้ ต้องแก้ rules ด้วย
+// สัญญากับ rules:
+//   ซ่อม  = เขียนช่องอาวุธ {dur: m, maxDur: m} (m = nextMaxDur) + หัก scrap = repairCost ในคำสั่ง update เดียวกัน
+//   รื้อ/พัง = ลบช่องอาวุธ + เขียน scrap (qty ใหม่) + เขียน salvage/{uid} = { slot: <ช่องอาวุธที่ลบ>, ts: serverTimestamp() } ในคำสั่งเดียวกัน
+//   พังเอง (dur 1→0) ได้ซาก BREAK_SCRAP = 1 ฝั่งมนุษย์ ส่วนซอมบี้ไม่ได้
+const SALVAGE_IDS = ["wooden_bat", "pocket_knife", "crowbar", "knife", "spiked_bat", "fire_axe", "crossbow", "pistol", "samurai_sword", "shotgun"];
+const BREAK_SCRAP = 1;
+const isSalvageable = (it) => !!it && SALVAGE_IDS.includes(it.id);
+const repairFull = (id) => Math.ceil(ITEMS[id].dmg / 4) + 1;                 // ค่าซ่อมเต็ม (scrap) = ปัดขึ้น(ดาเมจ ÷ 4) + 1
+const slotMaxDur = (it) => it.maxDur ?? ITEMS[it.id].maxDur;                  // ความทนสูงสุดปัจจุบันของช่อง (ของเก่าไม่มี maxDur → ใช้ค่าตั้งต้น)
+const nextMaxDur = (mx) => Math.floor((mx * 9) / 10);                         // ซ่อม 1 ครั้ง: สูงสุดลด 10% (ปัดลง)
+const minMaxDur = (id) => Math.ceil(ITEMS[id].maxDur / 2);                    // ลดได้ไม่เกินครึ่งของค่าตั้งต้น (ปัดขึ้น)
+const canRepair = (it) => isSalvageable(it) && it.dur < slotMaxDur(it) && nextMaxDur(slotMaxDur(it)) >= minMaxDur(it.id) && nextMaxDur(slotMaxDur(it)) > it.dur; // ต้องได้ความทนเพิ่มจริง ไม่งั้นเสียของเปล่า
+const repairCost = (it) => Math.ceil((repairFull(it.id) * (slotMaxDur(it) - it.dur)) / slotMaxDur(it)); // ตามสัดส่วนที่หายไป (≥ 1 เสมอเมื่อ canRepair)
+const repairResult = (it) => { const m = nextMaxDur(slotMaxDur(it)); return { cost: repairCost(it), dur: m, maxDur: m }; };
+const canDismantle = (it) => isSalvageable(it) && it.dur <= slotMaxDur(it);   // อาวุธที่ dur เกินสูงสุด (เช่นของรางวัล GM) รื้อไม่ได้
+const salvageYield = (it) => Math.max(1, Math.floor((repairFull(it.id) * (slotMaxDur(it) + it.dur)) / (5 * slotMaxDur(it)))); // = ปัดลง(ค่าซ่อมเต็ม × 0.4 × (0.5 + 0.5 × dur/max)) ขั้นต่ำ 1
+const repairBlock = (it) => !isSalvageable(it) ? "ซ่อมอาวุธชนิดนี้ไม่ได้"
+  : it.dur >= slotMaxDur(it) ? "ความทนยังเต็มอยู่"
+  : nextMaxDur(slotMaxDur(it)) < minMaxDur(it.id) ? "ซ่อมจนสุดทางแล้ว (ความทนสูงสุดต่ำสุดแล้ว)"
+  : nextMaxDur(slotMaxDur(it)) <= it.dur ? "ซ่อมแล้วความทนไม่เพิ่ม ไม่คุ้ม"
+  : "";
+// REPAIR-HELPERS>>
 
 // โบนัสทอยลูกเต๋าตอนเจอซอมบี้ตามความแรงของอาวุธที่ถือ
 const weaponBonus = (def) => (def.dmg >= 25 ? 3 : def.dmg >= 10 ? 2 : 1);
@@ -340,7 +402,16 @@ function equippedWeapon() {
 function wearUpdates(u, w) {
   if (w.it.dur > 999) return;   // อาวุธค่าสูงเกินเพดาน rules (dur ≤ 999) → ไม่หักความทน ไม่งั้นอัปเดตโดนปฏิเสธ
   const left = w.it.dur - 1;
-  if (left <= 0) { u[`inventory/${state.uid}/${w.slot}`] = null; u[`users/${state.uid}/equipped`] = null; toast(`${w.def.name} พังแล้ว!`); }
+  if (left <= 0) {
+    u[`inventory/${state.uid}/${w.slot}`] = null; u[`users/${state.uid}/equipped`] = null;
+    // ซากอาวุธ: มนุษย์ได้ scrap 1 (อาวุธมาตรฐาน) — ต้องเขียน salvage/{uid} ในคำสั่งเดียวกันให้ rules ตรวจ; ซอมบี้/อาวุธ custom ไม่ได้
+    const have = state.inv.scrap?.qty || 0;
+    if (state.profile?.faction === "human" && isSalvageable(w.it) && have < 99) {
+      u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: have + BREAK_SCRAP };
+      u[`salvage/${state.uid}/slot`] = w.slot; u[`salvage/${state.uid}/ts`] = serverTimestamp();
+      toast(`${w.def.name} พังแล้ว! เหลือซาก ${BREAK_SCRAP} เศษวัสดุ`);
+    } else toast(`${w.def.name} พังแล้ว!`);
+  }
   else { u[`inventory/${state.uid}/${w.slot}/dur`] = left; }
 }
 
@@ -800,7 +871,7 @@ async function enterZone(z, initial = false, moved = false) {
     teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
-    renderCraft();
+    renderCraft(); renderInv();
 
     const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
     await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}) });
@@ -1047,10 +1118,16 @@ function renderInv() {
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
       if (eq) li.classList.add("equipped");
-      li.append(mk("span", "", `🗡️ ${def.name} (${it.dur}/${def.maxDur})`));
+      li.append(mk("span", "", `🗡️ ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})`));
       
       const btnGrp = mk("div", "row-btns");
       btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
+      if (state.profile?.faction === "human" && state.zone === "safe" && isSalvageable(it)) {   // เบต้า: ซ่อม/รื้ออาวุธ
+        const why = repairBlock(it);
+        const rb = btn(why ? "ซ่อม" : `ซ่อม −${repairCost(it)}`, () => repairWeapon(slot), "btn primary mini"); rb.disabled = !!why; if (why) rb.title = why;
+        btnGrp.append(rb);
+        if (canDismantle(it)) btnGrp.append(btn(`รื้อ +${salvageYield(it)}`, () => dismantleWeapon(slot), "btn ghost mini"));
+      }
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
@@ -1104,6 +1181,42 @@ async function craft(id) {
   finally { state.busy = false; }
 }
 
+// ซ่อมอาวุธด้วย scrap (เบต้า) — มนุษย์ใน Safe Zone เท่านั้น / ความทนสูงสุดลดลง 10% ทุกครั้ง
+async function repairWeapon(slot) {
+  if (state.busy) return;
+  const it = state.inv[slot], p = state.profile; if (!it || !p) return;
+  if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่ซ่อมอาวุธได้");
+  if (state.zone !== "safe") return toast("ซ่อมได้เฉพาะใน Safe Zone");
+  const why = repairBlock(it); if (why) return toast(why);
+  const r = repairResult(it), have = state.inv.scrap?.qty || 0, def = ITEMS[it.id];
+  if (have < r.cost) return toast(`ต้องใช้เศษวัสดุ ${r.cost} ชิ้น (คุณมี ${have})`);
+  if (!confirm(`ซ่อม ${def.name}?\nใช้ เศษผ้าและวัสดุ ${r.cost} ชิ้น (มี ${have} → ${have - r.cost})\nความทน ${it.dur}/${slotMaxDur(it)} → ${r.dur}/${r.maxDur}\n⚠ ความทนสูงสุดลดลงถาวรทุกครั้งที่ซ่อม`)) return;
+  state.busy = true;
+  const u = { [`inventory/${state.uid}/${slot}/dur`]: r.dur, [`inventory/${state.uid}/${slot}/maxDur`]: r.maxDur };
+  if (have - r.cost > 0) u[`inventory/${state.uid}/scrap/qty`] = have - r.cost; else u[`inventory/${state.uid}/scrap`] = null;
+  try { await update(ref(db), u); toast(`ซ่อม ${def.name} แล้ว (${r.dur}/${r.maxDur})`); logLine(`🔧 คุณซ่อม ${def.name} ใช้เศษวัสดุ ${r.cost} ชิ้น (ความทน ${r.dur}/${r.maxDur})`, "info"); }
+  catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
+// รื้ออาวุธเอาเศษวัสดุ (เบต้า) — ได้ ~40% ของค่าซ่อมเต็ม ยิ่งสึกยิ่งได้น้อย / อาวุธหายถาวร
+async function dismantleWeapon(slot) {
+  if (state.busy) return;
+  const it = state.inv[slot], p = state.profile; if (!it || !p) return;
+  if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่รื้ออาวุธได้");
+  if (state.zone !== "safe") return toast("รื้อได้เฉพาะใน Safe Zone");
+  if (!canDismantle(it)) return toast("รื้ออาวุธชิ้นนี้ไม่ได้");
+  const y = salvageYield(it), have = state.inv.scrap?.qty || 0, after = Math.min(99, have + y), def = ITEMS[it.id];
+  if (!confirm(`รื้อ ${def.name} (${it.dur}/${slotMaxDur(it)})?\nได้ เศษผ้าและวัสดุ ${y} ชิ้น (มี ${have} → ${after}${have + y > 99 ? " · เกิน 99 ส่วนเกินจะหาย" : ""})\n⚠ อาวุธจะหายไปถาวร`)) return;
+  state.busy = true;
+  const u = { [`inventory/${state.uid}/${slot}`]: null };
+  if (p.equipped === slot) u[`users/${state.uid}/equipped`] = null;
+  if (after > have) { u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: after }; u[`salvage/${state.uid}/slot`] = slot; u[`salvage/${state.uid}/ts`] = serverTimestamp(); }
+  try { await update(ref(db), u); toast(`รื้อ ${def.name} ได้เศษวัสดุ ${after - have} ชิ้น`); logLine(`🔩 คุณรื้อ ${def.name} ได้เศษวัสดุ ${after - have} ชิ้น`, "info"); }
+  catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
 // ทำลายไอเทมทิ้งถาวร (ไม่ตกลงพื้น ใครก็เก็บไม่ได้) — ใช้เคลียร์กระเป๋าที่ล้น
 async function destroyItem(slot) {
   if (state.busy) return;
@@ -1135,6 +1248,7 @@ async function dropItem(slot) {
   u[`zoneItems/${state.zone}/${key}`] = {
     id: it.id, qty: 1, src: slot,
     ...(it.dur ? { dur: it.dur } : {}),
+    ...(it.maxDur && it.id !== "custom" && it.id !== "custom_food" ? { maxDur: it.maxDur } : {}),   // ความทนสูงสุดที่ลดจากการซ่อมต้องติดไปด้วย (กันทิ้งแล้วเก็บคืนเพื่อรีเซ็ต)
     ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {}),
     ...(it.id === "custom_food" ? foodFields(it) : {})
   };
@@ -1168,7 +1282,7 @@ function renderGround() {
   if (!ul.children.length) ul.append(mk("li", "empty", "ไม่มีของบนพื้น"));
 }
 
-function invAddUpdate(u, itemId, qty, src, dur, customData) {
+function invAddUpdate(u, itemId, qty, src, dur, customData, maxDur) {
   if (itemId === "custom" && customData) {
     const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
     u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {}) };
@@ -1182,7 +1296,7 @@ function invAddUpdate(u, itemId, qty, src, dur, customData) {
   const def = ITEMS[itemId];
   if (def.type === "weapon") {
     const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
-    u[`inventory/${state.uid}/${k}`] = { id: itemId, qty: 1, dur: dur ?? def.maxDur, ...(src ? { src } : {}) };
+    u[`inventory/${state.uid}/${k}`] = { id: itemId, qty: 1, dur: dur ?? def.maxDur, ...(maxDur ? { maxDur } : {}), ...(src ? { src } : {}) };
   } else {
     const total = Math.min(99, (state.inv[itemId]?.qty || 0) + qty);
     u[`inventory/${state.uid}/${itemId}`] = { id: itemId, qty: total, ...(src ? { src } : {}) };
@@ -1209,7 +1323,7 @@ async function pickup(key, btnEl) {
   const u = { [`zoneItems/${state.zone}/${key}`]: null };
   const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : g.id === "custom_food" ? g : null;
   
-  invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData);
+  invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData, g.maxDur);
   try { await update(ref(db), u); toast(`เก็บ ${defOf(g).name} แล้ว`); } 
   catch { toast("มีคนเก็บไปก่อนแล้ว หรือกระเป๋าเต็ม"); if (btnEl) btnEl.disabled = false; }
 }

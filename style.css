@@ -459,3 +459,12 @@ textarea#chat-input {
   .wb-actions .btn { min-height: 34px; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
   .wb-box:not(.open) #wb-tag, .wb-box:not(.open) #wb-top { display: none; }
 }
+
+/* แถบแจ้งอัปเดตเวอร์ชัน */
+.update-banner {
+  position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%);
+  z-index: 9999; display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 20px);
+  background: var(--panel-2); color: var(--text); border: 1px solid var(--hazard); border-radius: var(--r);
+  padding: 8px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-size: 14px;
+}
+.update-banner span { margin-right: 4px; }
