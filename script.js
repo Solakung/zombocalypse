@@ -1033,8 +1033,16 @@ function listenBites() {
       const u = { [`bites/${state.uid}`]: null };
       const gain = Math.min(BITE_FOOD, 100 - fd);
       if (gain > 0) hungerShift(u, "food", gain);
-      await state.evoReady;   // รอโหลด evo ก่อน ไม่งั้นอาจสร้าง node ทับของเดิม
-      const evoMsg = evoClaimWrites(u, s.val());
+      
+      await state.evoReady;
+      
+      // ดึงค่าเลือดที่แท้จริงจากฐานข้อมูลก่อนคำนวณฮีล
+      const hpSnap = await get(ref(db, `users/${state.uid}/hp`));
+      const realHp = hpSnap.val() || 0;
+      
+      // ส่ง realHp เข้าไปคำนวณแทน
+      const evoMsg = evoClaimWrites(u, s.val(), realHp);
+      
       await update(ref(db), u);
       logLine((gain > 0 ? `🦷 คุณกัดเหยื่อ! อาหาร +${gain}` : "🦷 คุณกัดเหยื่อ (อิ่มอยู่แล้ว)") + evoMsg, "combat");
     } catch (e) { console.error(e); }
@@ -2887,9 +2895,21 @@ async function questDeliverAuto(id, q) {
     if (have < q.need.qty) return toast(`ของไม่พอ ต้องมี ${needText(q.need)}`);
     if (have > q.need.qty) u[`inventory/${uid}/${q.need.id}/qty`] = have - q.need.qty; else u[`inventory/${uid}/${q.need.id}`] = null;
   }
-  if (r.id === "skill") u[`skills/${uid}/q_${id}`] = skillFields(r);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
-  else if (AUTO_STACK.includes(r.id)) u[`inventory/${uid}/${r.id}`] = { id: r.id, qty: Math.min(99, (state.inv[r.id]?.qty || 0) + r.qty) };
-  else u[`inventory/${uid}/q_${id}`] = { ...r };
+  if (r.id === "skill") {
+    u[`skills/${uid}/q_${id}`] = skillFields(r);
+  } else if (AUTO_STACK.includes(r.id)) {
+    // ดึงค่าล่าสุดจากฐานข้อมูลโดยตรง ป้องกัน Error จาก State ในเครื่องที่ไม่ตรงกัน
+    const curSnap = await get(ref(db, `inventory/${uid}/${r.id}/qty`));
+    u[`inventory/${uid}/${r.id}`] = { id: r.id, qty: Math.min(99, (curSnap.val() || 0) + r.qty) };
+  } else {
+    // บังคับแนบค่า dur สำหรับอาวุธ เพื่อให้ผ่านด่านตรวจของ Rules
+    const def = ITEMS[r.id];
+    if (def && def.type === "weapon") {
+      u[`inventory/${uid}/q_${id}`] = { id: r.id, qty: 1, dur: r.dur || def.maxDur };
+    } else {
+      u[`inventory/${uid}/q_${id}`] = { ...r };
+    }
+  }
   u[`questPayouts/${uid}`] = { qid: id, ts: serverTimestamp() };
   u[`quests/${id}`] = null;
   state.busy = true;
@@ -3115,13 +3135,13 @@ function evoClaimWrites(u, bites) {
     msg += ` 🧬 DNA +${add}`;
   } else if (n > 0) msg += " (🧬 DNA วันนี้เต็มแล้ว)";
   const h = evoT("h");
-  if (h >= 2 && p.hp > 0 && p.hp < maxHp()) {
-    const heal = Math.min(h >= 4 ? 5 : 3, maxHp() - p.hp);
-    u[`users/${uid}/hp`] = p.hp + heal; msg += ` 🩸 ฟื้น HP +${heal}`;
+  if (h >= 2 && realHp > 0 && realHp < maxHp()) {
+    const heal = Math.min(h >= 4 ? 5 : 3, maxHp() - realHp);
+    u[`users/${uid}/hp`] = realHp + heal; 
+    msg += ` 🩸 ฟื้น HP +${heal}`;
   }
   return msg;
 }
-
 /* ---------- ตาย: เสีย DNA ที่ยังไม่ใช้ครึ่งหนึ่ง (ซากหนาขั้น 3 ยกเว้นครั้งแรกของวัน) — เรียกใน processDeath ---------- */
 function evoDeathWrites(u) {
   const e = state.evo, uid = state.uid;
