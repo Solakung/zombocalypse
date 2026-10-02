@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.1600";
+const APP_VERSION = "2026-10-02.1700";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2020,10 +2020,81 @@ function listenWorldBoss() {
     Object.entries(nu).forEach(([z, b]) => {
       const was = state.wb?.[z];
       if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0 && z === state.zone) logLine(`🏆 ${b.name}ล้มลงแล้ว! ผู้ที่ร่วมโจมตีกดรับรางวัลได้`, "system");
+      wbaNotice(z, b, was);
     });
     state.wb = nu; renderWB(); renderAdminWB();
   });
+  onValue(ref(db, "wbAuto"), (s) => { state.wbAuto = s.val(); state.wbAutoOk = true; wbaTick(); }, (e) => console.error("wbAuto", e));
   setInterval(() => { renderWB(); renderAdminWB(); }, 1000);
+  setInterval(wbaTick, 20000);
+}
+
+/* =========================================================
+   10c) บอสโลกสุ่มเกิด — เกิดเองทุก 1–2 ชม. หายเองตามเวลา รางวัลสุ่มตอนเกิด (ไม่ต้องมี GM / ไม่ต้องมีเซิร์ฟเวอร์)
+   wbAuto = { ts, zone, by } = ครั้งล่าสุดที่เกิด • ระยะห่างครั้งถัดไป = 60–120 นาที สุ่มจาก seed = ts ล่าสุด (ทุกเครื่องคำนวณได้ค่าเดียวกัน)
+   ผู้เล่นออนไลน์คนแรกที่ถึงเวลาเป็นคนเขียนบอส (worldBosses/{zone} + wbAuto ในอัปเดตเดียวกัน) • คนที่ช้ากว่าโดน rules ปฏิเสธ = ปกติ
+   ตัวเลขทุกค่า (HP/ดาเมจ/อายุ/รายการรางวัล/จำนวน) ต้องอยู่ในขอบเขตเดียวกับ rules ของ worldBosses (ฝั่ง auto) ใน database_rules.json
+   ========================================================= */
+const WBA = {
+  gapMin: 60, gapMax: 120,   // นาที (rules บังคับขั้นต่ำ 60 นาทีนับจาก wbAuto.ts)
+  tiers: [
+    { w: 60, hp: 1500, dlo: 8, dhi: 16, hits: 1, acc: 0.65, mins: 40, tag: "บอสเล็ก",
+      rewards: [["canned_food", 3], ["water_jug", 2], ["bandage", 4], ["stim_shot", 2], ["scrap", 6], ["chem", 4], ["soup", 3]],
+      names: [["ซอมบี้ยักษ์หิวโหย", "🧟", "ร่างใหญ่โตที่หิวกระหายเลือดมนุษย์"], ["ผีคลั่งข้างถนน", "💀", "มันวิ่งตรงมาโดยไม่สนอะไรทั้งนั้น"]] },
+    { w: 30, hp: 3000, dlo: 12, dhi: 24, hits: 1, acc: 0.75, mins: 45, tag: "บอสกลาง",
+      rewards: [["medkit", 3], ["army_meal", 4], ["trauma_kit", 2], ["antidote", 2], ["serum", 2], ["spiked_bat", 1], ["fire_axe", 1]],
+      names: [["ราชาซอมบี้", "👹", "เสียงคำรามของมันดังไปทั่วเขต"], ["สัตว์ประหลาดกลายพันธุ์", "🐺", "เชื้อไวรัสเปลี่ยนมันจนจำเค้าเดิมไม่ได้"]] },
+    { w: 10, hp: 5000, dlo: 15, dhi: 28, hits: 2, acc: 0.7, mins: 50, tag: "บอสใหญ่ รางวัลดีมาก",
+      rewards: [["trauma_kit", 3], ["serum", 3], ["crossbow", 1], ["samurai_sword", 1], ["shotgun", 1], ["pistol", 1]],
+      names: [["ทรราชแห่งความตาย", "☠️", "ผู้รอดชีวิตหลายคนไม่เคยกลับมาจากที่ที่มันอยู่"], ["เจ้าแห่งฝูงผี", "👹", "ฝูงซอมบี้ทั้งเขตเชื่อฟังมัน"]] }
+  ]
+};
+const wbaGapMin = (last) => WBA.gapMin + Math.floor(bmRng((Math.imul(Math.floor(last / 1000), 2654435761) ^ 0x1b873593) >>> 0)() * (WBA.gapMax - WBA.gapMin + 1));
+const wbaDue = () => state.wbAutoOk && (!state.wbAuto?.ts || serverNow() >= state.wbAuto.ts + wbaGapMin(state.wbAuto.ts) * 60000);
+
+// สร้างบอสรอบถัดจาก last (seed จาก last → ชนิด/รางวัลเหมือนกันทุกเครื่อง; โซนเลือกจากโซนที่ยังไม่มีบอสอยู่)
+function wbaBuild(last) {
+  const rnd = bmRng((Math.imul(Math.floor(last / 1000), 2246822519) ^ 0x85ebca6b) >>> 0);
+  const roll = rnd() * 100; let acc = 0;
+  const t = WBA.tiers.find((x) => (acc += x.w) > roll) || WBA.tiers[0];
+  const zones = Object.keys(ZONES).filter((z) => z !== "safe" && !wbAlive(wbOf(z)));
+  if (!zones.length) return null;
+  const zone = zones[Math.floor(rnd() * zones.length)];
+  const [name, icon, intro] = t.names[Math.floor(rnd() * t.names.length)];
+  const [rid, rqty] = t.rewards[Math.floor(rnd() * t.rewards.length)], isW = ITEMS[rid].type === "weapon";
+  return {
+    zone, mins: t.mins,
+    boss: { name, icon, tag: t.tag, intro, hp: t.hp, max: t.hp, zone, dmgLo: t.dlo, dmgHi: t.dhi, hits: t.hits, acc: t.acc, rid, rqty: isW ? 1 : rqty, ...(isW ? { rdur: Math.min(20, ITEMS[rid].maxDur) } : {}) }
+  };
+}
+
+async function wbaTick() {
+  const p = state.profile;
+  if (!p || p.banned || state.wbaBusy || !wbaDue() || Date.now() < (state.wbaBackoff || 0)) return;
+  state.wbaBusy = true;
+  try {
+    await new Promise((r) => setTimeout(r, Math.random() * 4000));   // สุ่มหน่วง กันหลายคนเขียนชนกัน
+    if (!wbaDue()) return;                                            // มีคนเขียนไปก่อนแล้ว (listener อัปเดต state.wbAuto)
+    const made = wbaBuild(state.wbAuto?.ts || 0); if (!made) return;
+    const { zone, mins, boss } = made;
+    await update(ref(db), {
+      [`worldBosses/${zone}`]: { ...boss, by: p.username, startedAt: serverTimestamp(), endsAt: serverNow() + mins * 60000, auto: true },
+      wbAuto: { ts: serverTimestamp(), zone, by: state.uid }
+    });
+  } catch (e) {
+    state.wbaBackoff = Date.now() + 120000;   // โดนปฏิเสธ (มักมีคนเขียนก่อน) → เว้น 2 นาทีค่อยลองใหม่
+    console.debug("wbaSpawn", e?.code || e);
+  } finally { state.wbaBusy = false; }
+}
+
+// แจ้งผู้เล่นออนไลน์ทุกคนในเกมเมื่อมีบอสสุ่มเกิดใหม่ (ประกาศของ GM เขียนโดยผู้เล่นทั่วไปไม่ได้ จึงแจ้งฝั่ง client เอง) / ตอนเพิ่งเข้าเกมก็บอกบอสที่ยังอยู่
+function wbaNotice(z, b, was) {
+  if (!b?.auto || typeof b.hp !== "number" || b.hp <= 0 || (b.endsAt && b.endsAt <= serverNow())) return;
+  if (was && was.startedAt === b.startedAt) return;
+  state.wbaSeen = state.wbaSeen || {}; const key = z + b.startedAt; if (state.wbaSeen[key]) return; state.wbaSeen[key] = 1;
+  const left = b.endsAt ? Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000)) : 0;
+  logLine(`${b.icon || "👹"} บอสโลก「${b.name}」ปรากฏที่${ZONES[z]?.name || z}! ไปช่วยกันล้มมัน${left ? ` (หายไปใน ~${left} นาที)` : ""} • รางวัล ${wbRewardText(b)}`, "system");
+  toast(`${b.icon || "👹"} บอสโลกปรากฏที่${ZONES[z]?.name || z}!`);
 }
 
 /* =========================================================

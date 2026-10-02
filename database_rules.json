@@ -392,7 +392,7 @@
     "worldBosses": {
       ".read": "auth != null",
       "$zone": {
-        ".write": "auth != null && root.child('users').child(auth.uid).child('banned').val() !== true && (root.child('users').child(auth.uid).child('role').val() === 'gm' || root.child('users').child(auth.uid).child('role').val() === 'owner') && (!newData.exists() || !data.exists() || data.child('hp').val() === 0 || (data.child('endsAt').exists() && data.child('endsAt').val() <= now))",
+        ".write": "(auth != null && root.child('users').child(auth.uid).child('banned').val() !== true && (root.child('users').child(auth.uid).child('role').val() === 'gm' || root.child('users').child(auth.uid).child('role').val() === 'owner') && (!newData.exists() || !data.exists() || data.child('hp').val() === 0 || (data.child('endsAt').exists() && data.child('endsAt').val() <= now))) || (auth != null && root.child('users').child(auth.uid).child('banned').val() !== true && newData.exists() && (!data.exists() || data.child('hp').val() === 0 || (data.child('endsAt').exists() && data.child('endsAt').val() <= now)) && newData.child('auto').val() === true && newData.parent().parent().child('wbAuto').child('ts').val() === now && newData.parent().parent().child('wbAuto').child('zone').val() === $zone && newData.parent().parent().child('wbAuto').child('by').val() === auth.uid && newData.child('startedAt').val() === now && newData.child('hp').val() === newData.child('max').val() && newData.child('max').val() >= 1500 && newData.child('max').val() <= 5000 && newData.child('dmgLo').val() >= 5 && newData.child('dmgHi').val() <= 30 && newData.child('hits').val() <= 2 && newData.child('acc').val() <= 0.8 && newData.child('endsAt').exists() && newData.child('endsAt').val() >= now + 900000 && newData.child('endsAt').val() <= now + 3600000 && !newData.child('rsk').exists() && newData.child('rid').val().matches(/^(canned_food|water_jug|bandage|medkit|trauma_kit|army_meal|stim_shot|chem|scrap|antidote|serum|soup|spiked_bat|fire_axe|crossbow|samurai_sword|shotgun|pistol)$/) && (newData.child('rid').val().matches(/^(spiked_bat|fire_axe|crossbow|samurai_sword|shotgun|pistol)$/) ? (newData.child('rqty').val() === 1 && newData.child('max').val() >= 3000 && (!newData.child('rdur').exists() || newData.child('rdur').val() <= 20)) : newData.child('rqty').val() <= 8))",
         ".validate": "(newData.hasChildren(['name','hp','max','zone','by','startedAt','dmgLo','dmgHi','hits','acc','rid','rqty']) && $zone.matches(/^(ruins|mall|hospital|police|forest|factory|port|base|tunnel)$/) && newData.child('zone').val() === $zone && ((newData.child('hp').val() === newData.child('max').val() && newData.child('by').val() === root.child('users').child(auth.uid).child('username').val() && newData.child('startedAt').val() === now) || (data.exists() && newData.child('startedAt').val() === data.child('startedAt').val() && newData.child('max').val() === data.child('max').val() && newData.child('by').val() === data.child('by').val()))) && (newData.child('rid').val() !== 'skill' || (newData.child('rsk').exists() && newData.child('rqty').val() === 1))",
         "name": {
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 30"
@@ -472,6 +472,9 @@
           "$other": {
             ".validate": false
           }
+        },
+        "auto": {
+          ".validate": "newData.val() === true"
         },
         "$other": {
           ".validate": false
@@ -793,6 +796,23 @@
             ".validate": false
           }
         }
+      }
+    },
+    "wbAuto": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('users').child(auth.uid).child('banned').val() !== true && ((root.child('users').child(auth.uid).child('role').val() === 'gm' || root.child('users').child(auth.uid).child('role').val() === 'owner') || (newData.exists() && newData.child('ts').val() === now && newData.child('by').val() === auth.uid && (!data.exists() || data.child('ts').val() + 3600000 <= now) && newData.parent().child('worldBosses').child(newData.child('zone').val()).child('startedAt').val() === now && newData.parent().child('worldBosses').child(newData.child('zone').val()).child('auto').val() === true))",
+      ".validate": "newData.hasChildren(['ts','zone','by']) && newData.child('ts').isNumber() && newData.child('zone').isString() && newData.child('zone').val().matches(/^(ruins|mall|hospital|police|forest|factory|port|base|tunnel)$/) && newData.child('by').isString() && newData.child('by').val().length <= 40",
+      "ts": {
+        ".validate": "newData.isNumber()"
+      },
+      "zone": {
+        ".validate": "newData.isString()"
+      },
+      "by": {
+        ".validate": "newData.isString()"
+      },
+      "$other": {
+        ".validate": false
       }
     }
   }
