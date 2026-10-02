@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.1520";
+const APP_VERSION = "2026-10-02.1600";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3185,9 +3185,16 @@ function updateMarketBadge() {
   b.textContent = n ? `🏪 ตลาด (${n} รอรับ)` : "🏪 ตลาด";
 }
 function mktErr(e) { return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่สำเร็จ — อาจมีคนซื้อ/ยกเลิกไปก่อน หรืออยู่นอก Safe Zone" : "ทำรายการไม่สำเร็จ"; }
-async function mktRun(u, okMsg) {
+async function mktRun(u, okMsg, tag = "") {
   if (state.mktBusy) return; state.mktBusy = true;
-  try { await update(ref(db), u); toast(okMsg); } catch (e) { console.error("market", e); toast(mktErr(e)); } finally { state.mktBusy = false; }
+  try {
+    // timeout กัน mktBusy ค้างเป็น true (ปุ่มตลาดทุกปุ่มจะเงียบ) ถ้าคำขอไม่ตอบกลับ
+    await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
+    toast(okMsg);
+  } catch (e) {
+    console.error("market", tag, e?.code || e, JSON.stringify(u), "inv:", JSON.stringify(state.inv));   // ส่ง log นี้มาดูได้ว่าเขียนอะไรแล้วโดนปฏิเสธ
+    toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : mktErr(e) + (tag ? ` [${tag}]` : ""));
+  } finally { state.mktBusy = false; }
 }
 function mktGuard(needSafe = true) {
   const p = state.profile;
@@ -3234,10 +3241,18 @@ async function mktCancel(lid) {
 // รับของที่ขายได้
 async function mktClaim(pid) {
   const pay = state.mktPay?.[pid]; if (!pay || !mktGuard(false)) return;
-  if (mktHave(pay.id) + pay.qty > MKT_MAX) return toast(`${ITEMS[pay.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อนแล้วค่อยรับ`);
-  const u = { [`marketPayouts/${state.uid}/${pid}`]: null, [`marketTx/${state.uid}`]: { op: "claim", pid, ts: serverTimestamp() } };
-  mktCredit(u, pay.id, pay.qty);
-  await mktRun(u, `รับ ${ITEMS[pay.id].name} ×${pay.qty} แล้ว`);
+  // อ่านช่องของจริงจากเซิร์ฟเวอร์ก่อนรับ (ไม่เชื่อ state.inv) แล้วเขียนทั้งช่อง {id, qty} เสมอ
+  // → ไม่ติดกรณีช่องหายจาก DB / มีฟิลด์เก่าค้างเช่น dur / จำนวนในเครื่องไม่ตรง
+  let slot = null;
+  try { slot = (await get(ref(db, `inventory/${state.uid}/${pay.id}`))).val(); } catch (e) { slot = state.inv?.[pay.id] || null; }
+  const have = slot?.qty || 0;
+  if (have + pay.qty > MKT_MAX) return toast(`${ITEMS[pay.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อนแล้วค่อยรับ`);
+  const u = {
+    [`marketPayouts/${state.uid}/${pid}`]: null,
+    [`marketTx/${state.uid}`]: { op: "claim", pid, ts: serverTimestamp() },
+    [`inventory/${state.uid}/${pay.id}`]: { id: pay.id, qty: have + pay.qty }
+  };
+  await mktRun(u, `รับ ${ITEMS[pay.id].name} ×${pay.qty} แล้ว`, "claim");
 }
 
 /* ---------- UI (modal สร้างด้วย JS ใช้ class เดิมของเกม) ---------- */
