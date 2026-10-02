@@ -237,7 +237,7 @@ const weaponBonus = (def) => (def.dmg >= 25 ? 3 : def.dmg >= 10 ? 2 : 1);
 
 const FACTION_PERK = {
   human: "มนุษย์: คราฟต์ผ้าพันแผล ยา ซุป และยากระตุ้นจากวัสดุที่ Safe Zone ได้ / ซอมบี้ป่าจะโจมตีคุณ ต้องทอยลูกเต๋าสู้หรือหนี / ถ้าถูกซอมบี้ผู้เล่นกัดโดนจะติดเชื้อ HP ค่อยๆ ลด ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส",
-  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) หรือค้นหา “เนื้อเน่า” 🥩 นอก Safe Zone (+20) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า / กัดมนุษย์โดนแล้วเหยื่อจะติดเชื้อ"
+  zombie: "ซอมบี้: กินอาหารทั่วไป (กระป๋อง ขนมปัง ผลไม้) ไม่ได้ ต้องกัดคนให้โดนเพื่อเติมอาหาร (+25) และฟื้น HP +2 หรือค้นหา “เนื้อเน่า” 🥩 นอก Safe Zone (+20) / ซอมบี้ป่าจะเมินคุณ แต่คุณหิวเร็วกว่า / กัดมนุษย์โดนแล้วเหยื่อจะติดเชื้อ"
 };
 
 // danger = ระดับอันตราย 0-10 (กำหนดเอง ปรับได้) / โอกาสเจอซอมบี้คำนวณจากตารางดรอปจริง
@@ -3159,7 +3159,7 @@ async function evoHungerTick() {
 }
 
 /* ---------- ได้ DNA + ดูดเลือด (เรียกตอนรับ bites ใน listenBites) — เขียนลง u ใบเดียวกับที่ลบ bites ---------- */
-function evoClaimWrites(u, bites) {
+function evoClaimWrites(u, bites, realHp = 0) {
   const uid = state.uid, p = state.profile, e = state.evo, today = evoToday();
   let n = 0; Object.values(bites || {}).forEach((b) => { n += Number(b?.dna) || 1; });
   const room = e && e.day === today ? EVO_DAILY_CAP - (e.gain || 0) : EVO_DAILY_CAP;
@@ -3171,8 +3171,8 @@ function evoClaimWrites(u, bites) {
     msg += ` 🧬 DNA +${add}`;
   } else if (n > 0) msg += " (🧬 DNA วันนี้เต็มแล้ว)";
   const h = evoT("h");
-  if (h >= 2 && realHp > 0 && realHp < maxHp()) {
-    const heal = Math.min(h >= 4 ? 5 : 3, maxHp() - realHp);
+  if (realHp > 0 && realHp < maxHp()) {
+    const heal = Math.min(h >= 4 ? 5 : h >= 2 ? 3 : 2, maxHp() - realHp);   // พื้นฐาน 2 / สายตะกละขั้น 2-3 = 3 / ขั้น 4 = 5 — ต้องตรงกับ rules (users/hp)
     u[`users/${uid}/hp`] = realHp + heal; 
     msg += ` 🩸 ฟื้น HP +${heal}`;
   }
