@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.1";
+const APP_VERSION = "2026-10-02.2";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -495,7 +495,7 @@ function openGuide() {
   sec("มินิบอสประจำโซน (ฝ่ายมนุษย์)", [
     "ค้นหานอก Safe Zone มีโอกาสน้อยๆ เจอซอมบี้พิเศษประจำโซน เช่น Runner (เร็ว ตีสองครั้ง) Fatty (อึดมาก) ซอมบี้ถืออาวุธ และบอสใหญ่ในอุโมงค์",
     "สู้เป็นรอบ: โจมตี (ทอยลูกเต๋า ทอย 1 พลาด ทอย 6 คริติคอล) ใช้ผ้าพันแผล/ชุดปฐมพยาบาล หรือหนี (ไม่แน่ว่าจะพ้น ถ้าไม่พ้นบอสโจมตีต่อ)",
-    "สกิล: ปุ่มสกิลใต้ปุ่มโจมตี (ฟันหนัก ตั้งการ์ด หลบหลีก ปฐมพยาบาล) แต่ละอันมีคูลดาวน์ ใช้ได้ทั้งบอสประจำโซนและบอสโลก ใช้แล้วบอสยังสวนกลับ (ยกเว้นฟันหนักที่ฆ่าบอสได้)",
+    "สกิล: ปุ่มสกิลใต้ปุ่มโจมตี (ฟันหนัก ตั้งการ์ด หลบหลีก ปฐมพยาบาล) แต่ละอันมีคูลดาวน์ ใช้ได้ทั้งบอสประจำโซนและบอสโลก ใช้แล้วบอสยังสวนกลับ (ยกเว้นฟันหนักที่ฆ่าบอสได้) ส่วน ✚ปฐมพยาบาล ใช้ใน Safe Zone ได้ด้วย (ปุ่มอยู่ที่แผงกระเป๋า ใช้ฟรี คูลดาวน์ใช้ร่วมกับตอนสู้บอส)",
     "สกิล PvP: เลือก 🎯โจมตีเฉียบ / 🔨ฟาดหนัก / 🗡️ทะลวงเกราะ ที่แถบเหนือรายชื่อผู้เล่น แล้วกดโจมตี ใช้ได้ครั้งละ 1 สกิล ส่วน 🧱ท่าตั้งรับกดใช้ทันที ลดดาเมจที่โดนปะทะครึ่งหนึ่งนาน 60 วินาที",
     "สกิลพิเศษ: GM/Owner อาจมอบสกิลเฉพาะตัวให้ — เป็นรางวัลเควสต์ รางวัลบอสโลก หรือ 📜ม้วนสกิลที่วางไว้ในโซน (กด \"เรียนรู้\" ในรายการของบนพื้น คนแรกที่เรียนได้ไป) จะขึ้นต่อท้ายในแถบสกิล บางอันมีจำนวนครั้งจำกัด (แสดงเป็น ×จำนวน)",
     "ระหว่างสู้ย้ายโซนและค้นหาไม่ได้ และปิดเกมหนีไม่ได้ กลับมาเปิดใหม่จะต้องสู้ต่อ ถ้า HP หมดจะโดนโทษตายตามปกติ",
@@ -619,7 +619,7 @@ function renderBars() {
     fxEl.classList.toggle("hidden", !fxEl.textContent);
   }
   updateAttackButtons();
-  renderBuffRow(); clampToMax();
+  renderBuffRow(); clampToMax(); renderAid();
 }
 
 /* =========================================================
@@ -871,7 +871,7 @@ async function enterZone(z, initial = false, moved = false) {
     teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
-    renderCraft(); renderInv();
+    renderCraft(); renderInv(); renderAid();
 
     const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
     await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}) });
@@ -1749,8 +1749,34 @@ function listenSkills() {
   const refresh = () => { renderBoss(); renderWB(); renderPvpSkillBar(); };
   onValue(ref(db, "skillState/" + state.uid), (snap) => { state.skillUse = snap.val() || {}; refresh(); });
   onValue(ref(db, "skills/" + state.uid), (snap) => { state.mySkills = snap.val() || {}; refresh(); });
-  setInterval(() => { if (state.boss) renderBoss(); renderPvpSkillBar(); }, 1000);
+  setInterval(() => { if (state.boss) renderBoss(); renderPvpSkillBar(); renderAid(); }, 1000);
 }
+
+// ปฐมพยาบาลใน Safe Zone — ใช้สกิล aid ตัวเดียวกับตอนสู้บอส (สูตรฟื้นและคูลดาวน์ 90 วิร่วมกัน rules ตรวจให้)
+function renderAid() {
+  const sec = $("aid-section"); if (!sec) return;
+  const p = state.profile, on = !!p && p.hp > 0 && state.zone === "safe" && !state.boss;
+  sec.classList.toggle("hidden", !on); if (!on) return;
+  const cd = skillCdLeft("aid"), full = p.hp >= maxHp(), b = $("btn-aid");
+  b.disabled = !!state.aidBusy || cd > 0 || full;
+  b.textContent = `✚ ปฐมพยาบาล +${Math.min(skillHeal(), maxHp() - p.hp)} HP${cd > 0 ? ` (${cd})` : ""}`;
+  $("aid-hint").textContent = full ? "HP เต็มอยู่แล้ว" : cd > 0 ? "รอคูลดาวน์ (ใช้ร่วมกับตอนสู้บอส)" : "ใช้ฟรี ไม่เสียของ คูลดาวน์ 90 วินาที";
+}
+async function safeAid() {
+  const p = state.profile;
+  if (!p || p.hp <= 0 || state.zone !== "safe" || state.boss || state.aidBusy) return;
+  if (!skillReady("aid")) return toast("ปฐมพยาบาลยังไม่พร้อม");
+  if (p.hp >= maxHp()) return toast("HP เต็มอยู่แล้ว");
+  state.aidBusy = true; renderAid();
+  try {
+    const u = {}, hp = Math.min(maxHp(), p.hp + skillHeal());
+    skillUseWrites(u, "aid"); u[`users/${state.uid}/hp`] = hp;
+    await update(ref(db), u);
+    toast(`✚ ปฐมพยาบาล +${hp - p.hp} HP`); logLine(`✚ คุณปฐมพยาบาลตัวเอง +${hp - p.hp} HP`, "info");
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.aidBusy = false; renderAid(); }
+}
+$("btn-aid")?.addEventListener("click", safeAid);
 
 async function bossRound(action) {
   const bs = state.boss, b = bs && BOSSES[bs.boss], p = state.profile;
