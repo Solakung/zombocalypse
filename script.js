@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-02.1445";
+const APP_VERSION = "2026-10-02.1520";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -805,7 +805,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -3272,6 +3272,7 @@ function renderMarket() {
     body.append(c);
   }
 
+  if (typeof bmRender === "function") bmRender(body, card, row);   // ตลาดมืด (ข้อ 16)
   const mine = [1, 2, 3].map((i) => [`${state.uid}_${i}`, state.market?.[`${state.uid}_${i}`]]).filter(([, l]) => l);
   const c2 = card(`📦 ประกาศของฉัน (${mine.length}/${MKT_SLOTS})`);
   mine.forEach(([lid, l]) => { const r = row(); r.append(mk("span", "", `ขาย ${mktLabel(l.give.id)} ×${l.give.qty} → ต้องการ ${mktLabel(l.want.id)} ×${l.want.qty}`), btn("ยกเลิก", () => mktCancel(lid), "btn danger mini")); c2.append(r); });
@@ -3302,4 +3303,112 @@ function renderMarket() {
   });
   if (!others.length) c3.append(mk("span", "muted", "ยังไม่มีใครลงขาย"));
   body.append(c3);
+}
+
+
+/* =========================================================
+   16) ตลาดมืด — ระบบสุ่มของมาขาย หมุนรอบทุก 60 นาที (แปะต่อท้าย script.js ต่อจากข้อ 15 ตลาดซื้อขาย)
+   bm/{faction} = { w, o1..o5: { give:{id,qty}, want:{id,qty}, stock, sold, buyers:{uid:true} } }
+   w = เลขรอบ = floor(เวลาเซิร์ฟเวอร์ ÷ 1 ชม.) • ผู้เล่นออนไลน์คนแรกของรอบเป็นคนเขียนรอบใหม่ (แนวเดียวกับเหตุการณ์สุ่ม)
+   สุ่มด้วย seed จากเลขรอบ → ทุกเครื่องได้ชั้นวางเหมือนกัน • rules บังคับไอเทมต่อช่อง/ราคาต่ำสุด-สูงสุด/สต็อก (patch_rules_bm.js)
+   ซื้อ: marketTx/{uid} = { op: "bmbuy", k, ts } + bm/{f}/{k}/sold +1 + bm/{f}/{k}/buyers/{uid} ในอัปเดตเดียวกับการย้ายของ
+   ของที่จ่ายหายจากระบบ (เป็นที่ระบายของ) • ตารางสินค้า/ราคามาจาก bm_config.js ชุดเดียวกับ rules
+   ========================================================= */
+const BM_CFG = {"win":3600000,"slots":{"o1":"common","o2":"common","o3":"mid","o4":"mid","o5":"rare"},"stock":{"common":4,"mid":3,"rare":2},"human":{"currency":"scrap","tiers":{"common":["chem","water_jug","choco_bar","soup","medkit"],"mid":["army_meal","energy_drink","antidote","stim_shot"],"rare":["serum","trauma_kit"]},"price":{"chem":[5,4,6],"water_jug":[6,5,7],"choco_bar":[6,5,7],"soup":[5,4,6],"medkit":[6,5,7],"army_meal":[6,5,7],"energy_drink":[9,7,11],"antidote":[12,10,14],"stim_shot":[13,11,15],"serum":[17,14,20],"trauma_kit":[19,16,22]}},"zombie":{"currency":"rotten_meat","tiers":{"common":["water_jug","choco_bar","soup","moss"],"mid":["medkit","energy_drink","stim_shot"],"rare":["trauma_kit"]},"price":{"water_jug":[3,2,4],"choco_bar":[3,2,4],"soup":[3,2,4],"moss":[2,1,3],"medkit":[3,2,4],"energy_drink":[4,3,5],"stim_shot":[6,5,7],"trauma_kit":[8,6,10]}}};
+
+const bmWindow = () => Math.floor(serverNow() / BM_CFG.win);
+function bmRng(seed) {   // mulberry32 — เหมือนกันทุกเครื่องเมื่อ seed เท่ากัน
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+// สร้างชั้นวางของรอบ w ของฝั่ง fac (ไม่ซ้ำไอเทมเดียวกันในรอบเดียว ถ้าชั้นนั้นมีให้เลือกพอ)
+function bmBuildRound(fac, w) {
+  const c = BM_CFG[fac], rnd = bmRng(w * 2654435761 + (fac === "zombie" ? 977 : 31)), used = {}, round = { w };
+  Object.entries(BM_CFG.slots).forEach(([k, tier]) => {
+    const all = c.tiers[tier], pool = all.filter((id) => !used[id]), list = pool.length ? pool : all;
+    const id = list[Math.floor(rnd() * list.length)]; used[id] = 1;
+    const [base, lo, hi] = c.price[id];
+    const qty = Math.max(lo, Math.min(hi, Math.round(base * (0.88 + 0.24 * rnd()))));
+    round[k] = { give: { id, qty: 1 }, want: { id: c.currency, qty }, stock: BM_CFG.stock[tier], sold: 0 };
+  });
+  return round;
+}
+
+function listenBlackMarket() {
+  if (state.bmOn || !state.profile?.faction) return; state.bmOn = true;
+  state.bm = null; state.bmFac = "";
+  bmSubscribe();
+  setInterval(() => { bmSubscribe(); bmMaybeRotate(); }, 15000);   // เช็กรอบใหม่ทุก 15 วิ (คำนวณในเครื่อง ไม่แตะฐานข้อมูลถ้ายังไม่ถึงรอบ)
+}
+function bmSubscribe() {
+  const fac = state.profile?.faction; if (!fac || fac === state.bmFac) return;
+  if (state.bmOff) state.bmOff();
+  state.bmFac = fac; state.bm = null;
+  state.bmOff = onValue(ref(db, "bm/" + fac), (s) => { state.bm = s.val() || {}; bmRefresh(); bmMaybeRotate(); }, (e) => console.error("bm", e));
+}
+function bmRefresh() {
+  const m = $("mkt-modal"); if (!m || m.classList.contains("hidden")) return;
+  if (document.activeElement?.tagName === "INPUT" && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์จำนวนในตลาดผู้เล่น
+  renderMarket();
+}
+// ไม่มีเซิร์ฟเวอร์ → ผู้เล่นที่ออนไลน์คนใดคนหนึ่งเป็นคนเขียนรอบใหม่ (rules บังคับให้เขียนได้เฉพาะรอบปัจจุบันและเลขรอบต้องเพิ่มขึ้น)
+async function bmMaybeRotate() {
+  const p = state.profile, fac = state.bmFac;
+  if (state.bmBusy || !p || p.banned || !fac || fac !== p.faction || state.bm === null) return;
+  const w = bmWindow();
+  if ((state.bm.w || 0) >= w || serverNow() < w * BM_CFG.win + 1500) return;   // +1.5 วิ: กันนาฬิกาเครื่องเร็วกว่าเซิร์ฟเวอร์เล็กน้อย
+  state.bmBusy = true;
+  try {
+    await new Promise((r) => setTimeout(r, Math.random() * 4000));            // สุ่มหน่วง กันหลายคนชนกัน
+    if (bmWindow() !== w || (state.bm?.w || 0) >= w) return;
+    await update(ref(db), { ["bm/" + fac]: bmBuildRound(fac, w) });
+  } catch (e) { /* มีคนเขียนก่อน หรือยังไม่ถึงเวลา — ไม่ต้องแจ้งผู้เล่น */ }
+  finally { state.bmBusy = false; }
+}
+
+// ซื้อ: จ่ายสกุลของฝั่ง → ได้ของ 1 ชิ้น • 1 คนซื้อได้ 1 ครั้งต่อช่องต่อรอบ
+async function bmBuy(k) {
+  const o = state.bm?.[k], p = state.profile; if (!o || !o.give || !mktGuard()) return;
+  if (state.bm.w !== bmWindow()) return toast("ตลาดมืดกำลังเปลี่ยนรอบ — รอสักครู่");
+  if (o.buyers?.[state.uid]) return toast("คุณซื้อรายการนี้ในรอบนี้แล้ว");
+  if ((o.sold || 0) >= o.stock) return toast("สินค้าหมดแล้ว");
+  if (mktHave(o.want.id) < o.want.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(o.want.id)} ×${o.want.qty}`);
+  if (mktHave(o.give.id) + o.give.qty > MKT_MAX) return toast(`${ITEMS[o.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
+  const u = {
+    [`bm/${p.faction}/${k}/sold`]: (o.sold || 0) + 1,
+    [`bm/${p.faction}/${k}/buyers/${state.uid}`]: true,
+    [`marketTx/${state.uid}`]: { op: "bmbuy", k, ts: serverTimestamp() }
+  };
+  mktDebit(u, o.want.id, o.want.qty); mktCredit(u, o.give.id, o.give.qty);
+  await mktRun(u, `ซื้อ ${ITEMS[o.give.id].name} จากตลาดมืดแล้ว`);
+}
+
+// วาดการ์ด "ตลาดมืด" ในหน้าต่างตลาดเดิม (renderMarket เรียกให้ พร้อมส่งตัวช่วย card/row มา)
+function bmRender(body, card, row) {
+  const fac = state.profile?.faction, c = BM_CFG[fac]; if (!c) return;
+  const w = bmWindow(), safe = state.zone === "safe", bm = state.bm;
+  const left = Math.max(1, Math.ceil(((w + 1) * BM_CFG.win - serverNow()) / 60000));
+  const box = card("🕶️ ตลาดมืด");
+  const fresh = !!bm && bm.w === w;
+  box.append(mk("span", "muted", fresh
+    ? `ระบบสุ่มของมาขาย เปลี่ยนรอบในอีก ~${left} นาที • ซื้อได้ 1 ชิ้นต่อรายการต่อรอบ • จ่ายด้วย ${mktLabel(c.currency)} (ของที่จ่ายหายไปจากระบบ)`
+    : bm === null ? "กำลังโหลด…" : "กำลังจัดของรอบใหม่…"));
+  if (fresh) {
+    Object.keys(BM_CFG.slots).forEach((k) => {
+      const o = bm[k]; if (!o || !o.give || !o.want) return;
+      const stockLeft = o.stock - (o.sold || 0), bought = !!o.buyers?.[state.uid], out = stockLeft <= 0, enough = mktHave(o.want.id) >= o.want.qty;
+      const r = row();
+      r.append(
+        mk("span", enough || bought || out ? "" : "muted", `${mktLabel(o.give.id)} ×${o.give.qty} ← ${mktLabel(o.want.id)} ×${o.want.qty}  (เหลือ ${Math.max(0, stockLeft)}/${o.stock})`),
+        (() => {
+          const b = btn(bought ? "ซื้อแล้ว" : out ? "หมด" : "ซื้อ", () => bmBuy(k), "btn primary mini");
+          b.disabled = !safe || bought || out || !enough;
+          if (!safe) b.title = "ซื้อได้เฉพาะใน Safe Zone"; else if (!enough && !bought && !out) b.title = "ของไม่พอ";
+          return b;
+        })()
+      );
+      box.append(r);
+    });
+  }
+  body.append(box);
 }
