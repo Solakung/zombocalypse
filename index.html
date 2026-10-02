@@ -96,6 +96,8 @@
         <h2>โซน</h2>
         <ul id="zone-list" class="list"></ul>
         <h2>ผู้เล่นในโซนนี้</h2>
+        <div id="pvp-skills" class="pvp-skills hidden"></div>
+        <p id="pvp-skill-hint" class="muted hidden" style="margin: 4px 0 8px; font-size: 13px;"></p>
         <ul id="player-list" class="list"></ul>
         <h2>กระดานภารกิจ</h2>
         <ul id="quest-list" class="list"></ul>
@@ -117,6 +119,7 @@
               <button id="wb-attack" class="btn danger" type="button">⚔️ โจมตีบอสโลก</button>
               <button id="wb-claim" class="btn primary hidden" type="button">🎁 รับรางวัล</button>
             </div>
+            <div id="wb-skills" class="wb-skills"></div>
           </div>
         </div>
         <div id="chat-log" class="chat-log" aria-live="polite"></div>
@@ -163,6 +166,7 @@
         <button id="boss-flee" class="btn danger">🏃 หนี</button>
         <button id="boss-claim" class="btn primary hidden">🎁 รับรางวัล</button>
       </div>
+      <div id="boss-skills" class="boss-actions" style="margin-top: 8px;"></div>
     </div>
   </div>
 
@@ -272,7 +276,7 @@
       </div>
 
       <div class="adm-section">
-        <h3>เสกไอเทม</h3>
+        <h3>เสกไอเทม / สกิล</h3>
         <select id="adm-item"></select>
         
         <div id="adm-custom-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
@@ -292,6 +296,8 @@
           <div id="adm-stat-box"></div>
         </div>
 
+        <div id="adm-skill-box" class="hidden"></div>
+
         <input id="adm-qty" type="number" min="1" max="99" value="1" aria-label="จำนวน" placeholder="จำนวน (ชิ้น)" style="margin-top: 8px;">
         <select id="adm-mode">
           <option value="player">เข้ากระเป๋าผู้เล่น (ใช้ Player ID)</option>
@@ -299,7 +305,27 @@
         </select>
         <input id="adm-target-id" placeholder="Player ID ของเป้าหมาย">
         <select id="adm-target-zone" class="hidden"></select>
-        <button id="adm-spawn" class="btn primary">เสกไอเทม</button>
+        <button id="adm-spawn" class="btn primary">เสก</button>
+      </div>
+
+      <div class="adm-section">
+        <h3>มอบสกิล</h3>
+        <input id="adm-sk-id" placeholder="Player ID ที่จะมอบสกิล (หรือกด จัดการ ข้างชื่อผู้เล่น)">
+        <input id="adm-sk-name" maxlength="20" placeholder="ชื่อสกิล (เช่น คมดาบพิฆาต)">
+        <input id="adm-sk-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ = ✨)">
+        <select id="adm-sk-kind">
+          <option value="pve">PvE — ใช้กับบอสประจำโซน / บอสโลก</option>
+          <option value="pvp">PvP — ใช้ตอนปะทะผู้เล่น</option>
+        </select>
+        <select id="adm-sk-type"></select>
+        <input id="adm-sk-power" type="number" step="0.1" placeholder="ค่าของสกิล">
+        <input id="adm-sk-cd" type="number" min="5" max="3600" value="60" placeholder="คูลดาวน์ (วินาที)">
+        <input id="adm-sk-uses" type="number" min="1" max="999" placeholder="จำนวนครั้งที่ใช้ได้ (เว้นว่าง = ไม่จำกัด)">
+        <div class="row-btns">
+          <button id="adm-sk-grant" class="btn primary">มอบสกิล</button>
+          <button id="adm-sk-load" class="btn ghost">ดู/ถอนสกิลของผู้เล่น</button>
+        </div>
+        <ul id="adm-sk-list" class="list"></ul>
       </div>
 
       <div class="adm-section">
@@ -337,6 +363,7 @@
         <input id="adm-wb-acc" type="number" min="10" max="100" value="75" placeholder="โอกาสโดน % (10–100)">
         <p class="label" style="margin-top: 8px;">🎁 รางวัลของผู้ร่วมโจมตี (ทุกคนที่ตีบอสอย่างน้อย 1 ครั้งรับได้คนละครั้ง)</p>
         <select id="adm-wb-reward"></select>
+        <div id="adm-wb-skill-box" class="hidden"></div>
         <input id="adm-wb-rqty" type="number" min="1" max="50" value="1" placeholder="จำนวนรางวัล (อาวุธได้ 1 ชิ้นเสมอ)">
         <input id="adm-wb-rdur" type="number" min="1" max="60" placeholder="ความทนอาวุธรางวัล (เฉพาะอาวุธ)">
         <input id="adm-wb-mins" type="number" min="0" max="700" value="0" placeholder="หายไปเองใน (นาที) — 0 = ไม่หาย">
@@ -351,7 +378,7 @@
         <select id="adm-q-need"></select>
         <input id="adm-q-need-qty" type="number" min="1" max="50" value="1" placeholder="จำนวนที่ต้องส่ง">
 
-        <p class="label" style="margin-top: 8px;">🎁 รางวัลเมื่อทำภารกิจเสร็จ (GM กดอนุมัติแล้วไอเทมเข้ากระเป๋าผู้เล่นให้อัตโนมัติ)</p>
+        <p class="label" style="margin-top: 8px;">🎁 รางวัลเมื่อทำภารกิจเสร็จ (ไอเทมเข้ากระเป๋า / สกิลเข้าแถบสกิลของผู้เล่น — ตามวิธีมอบรางวัลที่เลือกด้านล่าง)</p>
         <select id="adm-q-item"></select>
 
         <div id="adm-q-custom-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
@@ -370,6 +397,8 @@
           <input id="adm-q-food-st" type="number" min="-100" max="100" placeholder="เติมพลังงาน (−100 ถึง 100 / ลบ = ลดค่า)">
           <div id="adm-q-stat-box"></div>
         </div>
+
+        <div id="adm-q-skill-box" class="hidden"></div>
 
         <input id="adm-q-qty" type="number" min="1" max="99" value="1" aria-label="จำนวนรางวัล" placeholder="จำนวนรางวัล (ชิ้น)">
         <select id="adm-q-mode" aria-label="วิธีมอบรางวัล">

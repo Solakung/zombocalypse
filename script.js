@@ -424,6 +424,9 @@ function openGuide() {
   sec("มินิบอสประจำโซน (ฝ่ายมนุษย์)", [
     "ค้นหานอก Safe Zone มีโอกาสน้อยๆ เจอซอมบี้พิเศษประจำโซน เช่น Runner (เร็ว ตีสองครั้ง) Fatty (อึดมาก) ซอมบี้ถืออาวุธ และบอสใหญ่ในอุโมงค์",
     "สู้เป็นรอบ: โจมตี (ทอยลูกเต๋า ทอย 1 พลาด ทอย 6 คริติคอล) ใช้ผ้าพันแผล/ชุดปฐมพยาบาล หรือหนี (ไม่แน่ว่าจะพ้น ถ้าไม่พ้นบอสโจมตีต่อ)",
+    "สกิล: ปุ่มสกิลใต้ปุ่มโจมตี (ฟันหนัก ตั้งการ์ด หลบหลีก ปฐมพยาบาล) แต่ละอันมีคูลดาวน์ ใช้ได้ทั้งบอสประจำโซนและบอสโลก ใช้แล้วบอสยังสวนกลับ (ยกเว้นฟันหนักที่ฆ่าบอสได้)",
+    "สกิล PvP: เลือก 🎯โจมตีเฉียบ / 🔨ฟาดหนัก / 🗡️ทะลวงเกราะ ที่แถบเหนือรายชื่อผู้เล่น แล้วกดโจมตี ใช้ได้ครั้งละ 1 สกิล ส่วน 🧱ท่าตั้งรับกดใช้ทันที ลดดาเมจที่โดนปะทะครึ่งหนึ่งนาน 60 วินาที",
+    "สกิลพิเศษ: GM/Owner อาจมอบสกิลเฉพาะตัวให้ — เป็นรางวัลเควสต์ รางวัลบอสโลก หรือ 📜ม้วนสกิลที่วางไว้ในโซน (กด \"เรียนรู้\" ในรายการของบนพื้น คนแรกที่เรียนได้ไป) จะขึ้นต่อท้ายในแถบสกิล บางอันมีจำนวนครั้งจำกัด (แสดงเป็น ×จำนวน)",
     "ระหว่างสู้ย้ายโซนและค้นหาไม่ได้ และปิดเกมหนีไม่ได้ กลับมาเปิดใหม่จะต้องสู้ต่อ ถ้า HP หมดจะโดนโทษตายตามปกติ",
     `ชนะได้ของหายากประจำโซน 1 ชิ้น + ของแถมบางครั้ง เจอบอสได้ทุก ๆ ${fmtDur(BOSS_COOLDOWN)} อย่างน้อย`
   ]);
@@ -731,7 +734,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -1004,7 +1007,7 @@ function renderPlayers(snap) {
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
-        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id"].forEach((id) => { $(id).value = c.key; });
+        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-sk-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
         $("admin-modal").classList.remove("hidden");
       }, "btn ghost mini"));
@@ -1150,6 +1153,12 @@ async function dropItem(slot) {
 function renderGround() {
   const ul = $("ground-list"); ul.innerHTML = "";
   Object.entries(state.ground).forEach(([key, g]) => {
+    if (g.id === "skill") {   // ม้วนสกิลที่ GM วางไว้
+      const li = mk("li"); li.title = skillDesc({ ...g, basic: false });
+      li.append(mk("span", "", `📜 ม้วนสกิล ${g.icon || "✨"} ${g.name} (${g.kind === "pvp" ? "PvP" : "PvE"})`));
+      li.append(btn("เรียนรู้", (e) => learnScroll(key, e.target)));
+      ul.append(li); return;
+    }
     const def = defOf(g); if (!def) return;
     const li = mk("li");
     li.append(mk("span", "", `📦 ${def.name}${def.type === "consumable" ? " ×" + g.qty : ""}`));
@@ -1180,9 +1189,23 @@ function invAddUpdate(u, itemId, qty, src, dur, customData) {
   }
 }
 
+// เรียนรู้สกิลจากม้วนบนพื้น: ลบม้วน + เขียนสกิลลง skills/{uid}/z:{key} ในคำสั่งเดียว (rules ตรวจว่าม้วนมีอยู่จริงและค่าตรงกัน ใครเร็วกว่าได้)
+async function learnScroll(key, btnEl) {
+  const g = state.ground[key], p = state.profile; if (!g || g.id !== "skill") return;
+  if (btnEl) btnEl.disabled = true;
+  if (p.hp <= 0) { if (btnEl) btnEl.disabled = false; return toast("คุณสลบอยู่ เรียนรู้สกิลไม่ได้"); }
+  const sk = skillFields(g);
+  try {
+    await update(ref(db), { [`zoneItems/${state.zone}/${key}`]: null, [`skills/${state.uid}/z:${key}`]: sk });
+    toast(`เรียนรู้สกิล ${sk.icon} ${sk.name} แล้ว!`);
+    logLine(`📖 ${p.username} เรียนรู้สกิล ${sk.icon} ${sk.name} จากม้วนสกิล`, "system");
+  } catch { toast("มีคนเรียนม้วนนี้ไปก่อนแล้ว หรือม้วนถูกเก็บไปแล้ว"); if (btnEl) btnEl.disabled = false; }
+}
+
 async function pickup(key, btnEl) {
   if (btnEl) btnEl.disabled = true;
   const g = state.ground[key]; if (!g) return;
+  if (g.id === "skill") return learnScroll(key, btnEl);
   const u = { [`zoneItems/${state.zone}/${key}`]: null };
   const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : g.id === "custom_food" ? g : null;
   
@@ -1467,6 +1490,7 @@ function renderBoss() {
   $("boss-medkit").classList.toggle("hidden", won); $("boss-medkit").disabled = busy || !kit; $("boss-medkit").textContent = `🧰 ชุดปฐมพยาบาล ×${kit}`;
   $("boss-flee").classList.toggle("hidden", won); $("boss-flee").disabled = busy;
   $("boss-claim").classList.toggle("hidden", !won); $("boss-claim").disabled = busy;
+  $("boss-skills").classList.toggle("hidden", won); renderSkillBar($("boss-skills"), (id) => bossRound("skill:" + id), busy || won, p);
 }
 
 // การโจมตีของบอส 1 รอบ (ทอยโดน/พลาดแต่ละครั้ง)
@@ -1479,14 +1503,166 @@ function bossStrike(b) {
   return { total, text: `${b.verb} (${parts.join(", ")})` };
 }
 
+/* =========================================================
+   สกิล — พื้นฐาน (ทุกคนมีอัตโนมัติ) + สกิล custom ที่ GM/Owner มอบ (skills/{uid}/{slot})
+   สถานะคูลดาวน์เก็บที่ skillState/{uid}/{id} = { ts } / rules คุมคูลดาวน์และจำนวนครั้งที่เหลือ
+   ทุกสกิลมี type + power
+     PvE: power = ตีโดนแน่ ดาเมจ×power / guard = ลดดาเมจสวนกลับ power% / dodge = บอสสวนกลับพลาด / heal = ฟื้น HP
+     PvP: sharp = ทอยโจมตี +power / smash = ดาเมจ×power / pierce = ไม่หัก tough / brace = ลดดาเมจที่โดน power% นาน 60 วิ
+   สกิล custom มี uses: -1 = ไม่จำกัด, >0 = จำนวนครั้งที่เหลือ (ใช้ครั้งละ 1), 0 = หมด
+   ========================================================= */
+const SKILLS = {
+  heavy: { kind: "pve", type: "power", power: 1.5, basic: true, icon: "💥", name: "ฟันหนัก", cd: 30, desc: "ตีโดนแน่ ดาเมจ ×1.5 (ไม่ต้องลุ้นลูกเต๋า)" },
+  guard: { kind: "pve", type: "guard", power: 50, basic: true, icon: "🛡️", name: "ตั้งการ์ด", cd: 45, desc: "ดาเมจที่บอสสวนกลับรอบนี้ลดลงครึ่งหนึ่ง" },
+  dodge: { kind: "pve", type: "dodge", power: 0, basic: true, icon: "💨", name: "หลบหลีก", cd: 60, desc: "บอสสวนกลับรอบนี้พลาดแน่" },
+  aid:   { kind: "pve", type: "heal", power: 0, basic: true, icon: "✚", name: "ปฐมพยาบาล", cd: 90, desc: "ฟื้น HP 20 + 2×ค่า HP ของตัวละคร" },
+  // ---- PvP (ใช้ตอนปะทะผู้เล่น) — เลือกสกิลก่อนกดโจมตี สกิลโจมตีใช้ได้ครั้งละ 1 อัน ----
+  sharp:  { kind: "pvp", type: "sharp", power: 2, basic: true, icon: "🎯", name: "โจมตีเฉียบ", cd: 40, desc: "ค่าทอยโจมตีครั้งถัดไป +2" },
+  smash:  { kind: "pvp", type: "smash", power: 1.3, basic: true, icon: "🔨", name: "ฟาดหนัก", cd: 45, desc: "ดาเมจปะทะครั้งถัดไป ×1.3" },
+  pierce: { kind: "pvp", type: "pierce", power: 0, basic: true, icon: "🗡️", name: "ทะลวงเกราะ", cd: 60, desc: "โจมตีครั้งถัดไปไม่ถูกหักด้วยค่า tough ของเป้าหมาย" },
+  brace:  { kind: "pvp", type: "brace", power: 50, basic: true, icon: "🧱", name: "ท่าตั้งรับ", cd: 90, desc: "60 วินาที ดาเมจที่โดนปะทะลดลงครึ่งหนึ่ง" }
+};
+const PVP_BRACE_MS = 60000;   // ระยะท่าตั้งรับ (rules บังคับ cd ของสกิลประเภท brace ≥ 60 วิ)
+const skillHeal = () => 20 + 2 * baseStat("hp");   // สกิลพื้นฐาน: ต้องไม่เกินเพดานใน rules (users/hp)
+const skillDef = (id) => SKILLS[id] || state.mySkills?.[id] || null;
+const skillHealOf = (d) => (d.basic ? skillHeal() : d.power);
+function skillCdLeft(id) {
+  const d = skillDef(id), t = state.skillUse?.[id]?.ts;
+  return d && typeof t === "number" ? Math.max(0, Math.ceil((d.cd * 1000 - (serverNow() - t)) / 1000)) : 0;
+}
+const skillReady = (id) => { const d = skillDef(id); return !!d && d.uses !== 0 && skillCdLeft(id) === 0; };
+// ข้อความอธิบายสกิล (ใช้เป็น tooltip)
+function skillDesc(d) {
+  if (d.basic) return d.desc;
+  const p = d.power;
+  return ({
+    power: `ตีโดนแน่ ดาเมจ ×${p}`, guard: `ลดดาเมจที่บอสสวนกลับ ${p}%`, dodge: "บอสสวนกลับรอบนี้พลาดแน่", heal: `ฟื้น HP ${p}`,
+    sharp: `ค่าทอยโจมตีครั้งถัดไป +${p}`, smash: `ดาเมจปะทะครั้งถัดไป ×${p}`, pierce: "โจมตีครั้งถัดไปไม่ถูกหักด้วยค่า tough",
+    brace: `60 วินาที ดาเมจที่โดนปะทะลด ${p}%`
+  })[d.type] || d.name;
+}
+const skillList = (kind) => [
+  ...Object.entries(SKILLS).filter(([, d]) => d.kind === kind),
+  ...Object.entries(state.mySkills || {}).filter(([, d]) => d && d.kind === kind)
+];
+function skillLabel(d, cd) {
+  const left = d.basic || d.uses === -1 ? "" : d.uses === 0 ? " (หมด)" : ` ×${d.uses}`;
+  return `${d.icon} ${d.name}${left}${cd > 0 ? ` (${cd})` : ""}`;
+}
+// บันทึกการใช้สกิลลง update: คูลดาวน์ + (custom) ลดจำนวนครั้ง + (custom heal) ตัวบอกว่าฟื้นจากสกิลไหน
+function skillUseWrites(u, id) {
+  const uid = state.uid, d = skillDef(id);
+  u[`skillState/${uid}/${id}`] = { ts: serverTimestamp() };
+  if (!d.basic) {
+    if (d.uses > 0) u[`skills/${uid}/${id}/uses`] = d.uses - 1;
+    if (d.type === "heal") u[`skillMark/${uid}`] = { sid: id, ts: serverTimestamp() };
+  }
+}
+// ท่าตั้งรับที่ยังมีผลอยู่ (พื้นฐาน + custom) → เลือกอันที่ลดดาเมจมากสุด
+function braceInfo() {
+  let best = { left: 0, pct: 0 };
+  const check = (id, d) => {
+    const t = state.skillUse?.[id]?.ts; if (typeof t !== "number") return;
+    const left = Math.max(0, Math.ceil((PVP_BRACE_MS - (serverNow() - t)) / 1000));
+    if (left > 0 && d.power > best.pct) best = { left, pct: d.power };
+  };
+  check("brace", SKILLS.brace);
+  Object.entries(state.mySkills || {}).forEach(([id, d]) => { if (d && d.type === "brace") check(id, d); });
+  return best;
+}
+const braceLeft = () => braceInfo().left;
+// การสวนกลับของบอสเมื่อใช้สกิลป้องกัน: guard ลด power% / dodge พลาดทั้งหมด
+function strikeWith(b, def) {
+  if (def?.type === "dodge") return { total: 0, text: `${b.verb} (หลบพ้นทั้งหมด)` };
+  const s = bossStrike(b);
+  if (def?.type === "guard" && s.total > 0) { const t = Math.ceil(s.total * (1 - def.power / 100)); return { total: t, text: `${s.text} → ลดเหลือ −${t}` }; }
+  return s;
+}
+// สร้างปุ่มสกิลครั้งเดียว แล้วอัปเดตข้อความ/สถานะทุกครั้งที่ render (ไม่สร้างใหม่ ปุ่มจะได้ไม่หลุดตอนกด)
+function syncSkillButtons(box, kind, onClick, stateFn) {
+  const list = skillList(kind), ids = new Set(list.map(([id]) => id));
+  box.querySelectorAll("[data-sk]").forEach((b) => { if (!ids.has(b.dataset.sk)) b.remove(); });
+  list.forEach(([id, d]) => {
+    let b = box.querySelector(`[data-sk="${id}"]`);
+    if (!b) { b = mk("button", "btn ghost sk-btn"); b.type = "button"; b.dataset.sk = id; b.addEventListener("click", () => onClick(id)); box.append(b); }
+    b.title = skillDesc(d);
+    stateFn(b, id, d);
+  });
+}
+function renderSkillBar(box, onUse, blocked, p) {
+  if (!box) return;
+  syncSkillButtons(box, "pve", onUse, (b, id, d) => {
+    const cd = skillCdLeft(id);
+    b.disabled = !!blocked || cd > 0 || d.uses === 0 || (d.type === "heal" && p && p.hp >= maxHp());
+    b.textContent = skillLabel(d, cd);
+  });
+}
+// แถบสกิล PvP: สกิลโจมตี (กดเลือก → ใช้กับปุ่มโจมตีครั้งถัดไป) + ท่าตั้งรับ (ใช้ทันที)
+function renderPvpSkillBar() {
+  const box = $("pvp-skills"), hint = $("pvp-skill-hint"); if (!box) return;
+  const p = state.profile, off = !p || p.hp <= 0 || !state.zone || state.zone === "safe";
+  box.classList.toggle("hidden", off); hint.classList.toggle("hidden", off);
+  if (off) { state.pvpSkill = null; return; }
+  const stunned = effActive("stun");
+  syncSkillButtons(box, "pvp", (id) => {
+    const d = skillDef(id); if (!d) return;
+    if (d.type === "brace") return useBrace(id);
+    if (!skillReady(id)) return;
+    state.pvpSkill = state.pvpSkill === id ? null : id; renderPvpSkillBar();
+  }, (b, id, d) => {
+    const cd = skillCdLeft(id), t = state.skillUse?.[id]?.ts;
+    const act = d.type === "brace" && typeof t === "number" ? Math.max(0, Math.ceil((PVP_BRACE_MS - (serverNow() - t)) / 1000)) : 0;
+    b.disabled = cd > 0 || d.uses === 0 || (d.type !== "brace" && stunned) || !!state.braceBusy;
+    b.classList.toggle("on", state.pvpSkill === id);
+    b.textContent = act > 0 ? `${d.icon} ตั้งรับอยู่ (${act})` : skillLabel(d, cd);
+  });
+  if (state.pvpSkill && !skillReady(state.pvpSkill)) state.pvpSkill = null;
+  const sel = state.pvpSkill && skillDef(state.pvpSkill);
+  hint.textContent = sel ? `ครั้งถัดไปที่กด "โจมตี" จะใช้ ${sel.icon} ${sel.name} (กดซ้ำเพื่อยกเลิก)` : 'สกิล PvP: เลือกสกิลโจมตีก่อน แล้วกด "โจมตี" ที่ผู้เล่น / ท่าตั้งรับกดใช้ได้ทันที';
+}
+async function useBrace(id = "brace") {
+  if (!skillReady(id) || state.braceBusy || state.profile.hp <= 0) return;
+  state.braceBusy = true; renderPvpSkillBar();
+  try {
+    const u = {}, d = skillDef(id); skillUseWrites(u, id);
+    await update(ref(db), u);
+    toast(`${d.icon} ตั้งท่ารับ 60 วินาที ดาเมจที่โดนปะทะลด ${d.power}%`);
+    logLine(`${d.icon} คุณตั้งท่ารับ — ดาเมจที่โดนปะทะลดลง ${d.power}% ใน 60 วินาที`, "info");
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.braceBusy = false; renderPvpSkillBar(); }
+}
+function listenSkills() {
+  const refresh = () => { renderBoss(); renderWB(); renderPvpSkillBar(); };
+  onValue(ref(db, "skillState/" + state.uid), (snap) => { state.skillUse = snap.val() || {}; refresh(); });
+  onValue(ref(db, "skills/" + state.uid), (snap) => { state.mySkills = snap.val() || {}; refresh(); });
+  setInterval(() => { if (state.boss) renderBoss(); renderPvpSkillBar(); }, 1000);
+}
+
 async function bossRound(action) {
   const bs = state.boss, b = bs && BOSSES[bs.boss], p = state.profile;
   if (!b || state.bossBusy || p.hp <= 0 || bs.hp <= 0) return;
   state.bossBusy = true; renderBoss();
   let killed = false;
   try {
-    const u = {}, uid = state.uid; let hp = p.hp, strike = true, line = "";
-    if (action === "attack") {
+    const u = {}, uid = state.uid; let hp = p.hp, strike = true, line = "", skillUsed = null;
+    if (action.startsWith("skill:")) {
+      const id = action.slice(6), sk = skillDef(id);
+      if (!sk || sk.kind !== "pve" || !skillReady(id)) return;
+      skillUsed = sk; skillUseWrites(u, id);
+      if (sk.type === "power") {
+        const w = equippedWeapon(), dmg = Math.floor(myDmg(w) * sk.power), left = Math.max(0, bs.hp - dmg);
+        line = `${sk.icon} ${sk.name} — โจมตีโดนแน่ −${dmg}`;
+        if (w) wearUpdates(u, w);
+        u[`bossFights/${uid}/hp`] = left;
+        if (left === 0) { strike = false; killed = true; }
+      } else if (sk.type === "guard") line = `${sk.icon} ${sk.name} — ตั้งท่ารับ`;
+      else if (sk.type === "dodge") line = `${sk.icon} ${sk.name} — เตรียมหลบ`;
+      else if (sk.type === "heal") {
+        if (hp >= maxHp()) return;
+        hp = Math.min(maxHp(), hp + skillHealOf(sk));
+        line = `${sk.icon} ${sk.name} +${hp - p.hp} HP`;
+      }
+    } else if (action === "attack") {
       const w = equippedWeapon(), r = d6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
       const dmg = Math.round(myDmg(w) * mult), left = Math.max(0, bs.hp - dmg);
       line = `🎲 ทอย ${r} — ` + (dmg ? `โจมตีโดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
@@ -1503,7 +1679,7 @@ async function bossRound(action) {
       if (Math.random() < b.flee) { u[`bossFights/${uid}`] = null; strike = false; line = "🏃 คุณวิ่งหนีออกมาได้!"; }
       else line = "🏃 หนีไม่พ้น! มันขวางทางไว้";
     }
-    if (strike) { const s = bossStrike(b); hp = Math.max(0, hp - s.total); line += ` • ${s.text}`; }
+    if (strike) { const s = strikeWith(b, skillUsed); hp = Math.max(0, hp - s.total); line += ` • ${s.text}`; }
     if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
@@ -1546,7 +1722,7 @@ const wbOf = (z) => { const b = state.wb?.[z]; return b && typeof b.hp === "numb
 const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow();
 const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
 const wbMine = (b) => { const h = state.wbHits?.[state.uid]; return h && h.bid === b.startedAt ? h : null; };
-const wbRewardText = (b) => { const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
+const wbRewardText = (b) => { if (b.rid === "skill" && b.rsk) return `📖 สกิล ${b.rsk.icon || "✨"} ${b.rsk.name}`; const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
 
 function renderWB() {
   const box = $("wb-box"); if (!box) return;
@@ -1569,6 +1745,8 @@ function renderWB() {
   const atk = $("wb-attack"); atk.classList.toggle("hidden", dead);
   atk.disabled = !!state.wbBusy || p.hp <= 0 || cd > 0 || stunned;
   atk.textContent = state.wbBusy ? "กำลังต่อสู้…" : stunned ? "😵 มึนงง" : cd > 0 ? `พักแรง ${cd}` : "⚔️ โจมตีบอสโลก";
+  const sb = $("wb-skills"); sb.classList.toggle("hidden", dead);
+  renderSkillBar(sb, (id) => wbAttack(true, id), !!state.wbBusy || p.hp <= 0 || cd > 0 || stunned, p);
   const cl = $("wb-claim"); cl.classList.toggle("hidden", !dead || !mine || claimed); cl.disabled = !!state.wbBusy;
   if (dead && !mine) $("wb-top").textContent += " • คุณไม่ได้ร่วมโจมตี จึงไม่มีรางวัล";
   if (dead && claimed) $("wb-top").textContent += " • รับรางวัลแล้ว";
@@ -1586,32 +1764,39 @@ function wbDebug(tag, e, u, b) {
     }, null, 1));
   } catch (x) { console.error("[WB-DEBUG] failed", x); }
 }
-async function wbAttack(retry = true) {
+async function wbAttack(retry = true, skill = null) {
   const z = state.zone, p = state.profile; let b = wbOf(z);
   if (!wbAlive(b) || state.wbBusy || p.hp <= 0 || z === "safe") return;
   if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้ในตอนนี้");
   if (attackCooldownLeft() > 0) return toast("ยังพักแรงอยู่");
+  const skd = skill ? skillDef(skill) : null;
+  if (skill && (!skd || skd.kind !== "pve" || !skillReady(skill))) return toast("สกิลยังไม่พร้อม");
+  if (skd?.type === "heal" && p.hp >= maxHp()) return toast("HP เต็มอยู่แล้ว");
   state.wbBusy = true; renderWB();
   try {
     const fresh = (await get(ref(db, `worldBosses/${z}`))).val();   // อ่าน HP ล่าสุดก่อนตี (หลายคนตีพร้อมกันได้)
     b = fresh && typeof fresh.hp === "number" ? { ...b, ...fresh } : b;
     if (!wbAlive(b)) { toast("บอสโลกล้มไปแล้วหรือหายไปแล้ว"); return; }
-    const uid = state.uid, u = {}, w = equippedWeapon(), r = d6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
-    const dmg = Math.min(b.hp, Math.floor(myDmg(w) * mult));   // floor: ต้องไม่เกินเพดาน ×1.5 ที่ rules ตรวจ
+    const uid = state.uid, u = {}, w = equippedWeapon(), r = d6(), sk = skd, atk = !sk || sk.type === "power";
+    const mult = sk?.type === "power" ? sk.power : r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
+    const dmg = atk ? Math.min(b.hp, Math.floor(myDmg(w) * mult)) : 0;   // floor: ต้องไม่เกินเพดาน (×1.5 หรือ power ของสกิล custom) ที่ rules ตรวจ
     u[`users/${uid}/lastAttack`] = serverTimestamp();
-    if (w && r !== 1) wearUpdates(u, w);
-    let line = `🎲 ทอย ${r} — ` + (dmg ? `โจมตี${b.name}โดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
+    if (sk) skillUseWrites(u, skill);
+    if (w && atk && (sk?.type === "power" || r !== 1)) wearUpdates(u, w);
+    let line = sk ? (sk.type === "power" ? `${sk.icon} ${sk.name} — โจมตี${b.name}โดนแน่ −${dmg}` : `${sk.icon} ${sk.name}`)
+      : `🎲 ทอย ${r} — ` + (dmg ? `โจมตี${b.name}โดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
     let killed = false;
     if (dmg) {
       const mine = wbMine(b);
-      u[`worldBossHits/${z}/${uid}`] = { bid: b.startedAt, last: dmg, total: (mine?.total || 0) + dmg, ts: serverTimestamp(), name: p.username, ...(w ? { wpn: w.it.id } : {}) };
+      u[`worldBossHits/${z}/${uid}`] = { bid: b.startedAt, last: dmg, total: (mine?.total || 0) + dmg, ts: serverTimestamp(), name: p.username, ...(w ? { wpn: w.it.id } : {}), ...(sk && !sk.basic && sk.type === "power" ? { sk: skill } : {}) };
       u[`worldBosses/${z}/hp`] = b.hp - dmg;
       killed = b.hp - dmg <= 0;
     }
     let hp = p.hp;
+    if (sk?.type === "heal") { hp = Math.min(maxHp(), hp + skillHealOf(sk)); line += ` +${hp - p.hp} HP`; }
     if (!killed) {
-      const s = bossStrike({ hits: b.hits, acc: b.acc, dmg: [b.dmgLo, b.dmgHi], verb: `${b.name}โจมตีกลับ` });
-      hp = Math.max(0, p.hp - s.total); line += ` • ${s.text}`;
+      const s = strikeWith({ hits: b.hits, acc: b.acc, dmg: [b.dmgLo, b.dmgHi], verb: `${b.name}โจมตีกลับ` }, sk);
+      hp = Math.max(0, hp - s.total); line += ` • ${s.text}`;
       if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     }
     state.wbDbgU = u;
@@ -1622,7 +1807,7 @@ async function wbAttack(retry = true) {
   } catch (e) {
     if (String(e?.code || e).includes("PERMISSION_DENIED")) wbDebug(retry ? "attack" : "attack-retry", e, state.wbDbgU, b);
     if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) {
-      state.wbBusy = false; await new Promise((r) => setTimeout(r, 1200)); return wbAttack(false);   // ข้อมูลในเครื่องอาจล้าหลัง/มีคนตีพร้อมกัน ลองใหม่ 1 ครั้ง
+      state.wbBusy = false; await new Promise((r) => setTimeout(r, 1200)); return wbAttack(false, skill);   // ข้อมูลในเครื่องอาจล้าหลัง/มีคนตีพร้อมกัน ลองใหม่ 1 ครั้ง
     }
     toast(errMsg(e));
   } finally { state.wbBusy = false; renderWB(); }
@@ -1636,7 +1821,8 @@ async function wbClaim() {
   state.wbBusy = true; renderWB();
   try {
     const u = { [`worldBossClaims/${z}/${state.uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
-    if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
+    if (b.rid === "skill") u[`skills/${state.uid}/wb_${z}_${b.startedAt}`] = skillFields(b.rsk);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
+    else if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
     else u[`inventory/${state.uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
     state.wbDbgU = u;
     await update(ref(db), u);
@@ -1670,8 +1856,17 @@ async function wbRemove(z) {
 
 function buildAdminWB() {
   fillSelect($("adm-wb-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, `${z.icon} ${z.name}`]));
-  fillSelect($("adm-wb-reward"), WB_REWARD_IDS.map((id) => [id, `${ITEMS[id].icon} ${ITEMS[id].name}${ITEMS[id].type === "weapon" ? " (อาวุธ)" : ""}`]));
+  fillSelect($("adm-wb-reward"), [...WB_REWARD_IDS.map((id) => [id, `${ITEMS[id].icon} ${ITEMS[id].name}${ITEMS[id].type === "weapon" ? " (อาวุธ)" : ""}`]), ["skill", "📖 สกิลเอง (custom)"]]);
+  buildSkillBox("adm-wb-skill-box", "adm-wb-spk-");
+  syncWbRewardFields();
 }
+function syncWbRewardFields() {
+  const isSk = $("adm-wb-reward").value === "skill";
+  $("adm-wb-skill-box").classList.toggle("hidden", !isSk);
+  $("adm-wb-rqty").classList.toggle("hidden", isSk);
+  $("adm-wb-rdur").classList.toggle("hidden", isSk);
+}
+$("adm-wb-reward").addEventListener("change", syncWbRewardFields);
 
 $("adm-wb-spawn").addEventListener("click", async () => {
   if (!isStaff()) return;
@@ -1681,10 +1876,12 @@ $("adm-wb-spawn").addEventListener("click", async () => {
   const num = (id, lo, hi, def) => { const n = parseInt($(id).value, 10); return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : def)); };
   const hp = num("adm-wb-hp", 1, 100000, 2000), dlo = num("adm-wb-dlo", 1, 200, 15), dhi = Math.max(dlo, num("adm-wb-dhi", 1, 200, 30));
   const hits = num("adm-wb-hits", 1, 5, 1), acc = num("adm-wb-acc", 10, 100, 75) / 100, mins = num("adm-wb-mins", 0, 700, 0);
-  const rid = $("adm-wb-reward").value, def = ITEMS[rid], isW = def.type === "weapon";
+  const rid = $("adm-wb-reward").value, isSk = rid === "skill", def = isSk ? null : ITEMS[rid], isW = !isSk && def.type === "weapon";
+  const sk = isSk ? readSkillForm("adm-wb-spk-") : null; if (isSk && !sk) return;
   const icon = $("adm-wb-icon").value.trim().slice(0, 4), tag = $("adm-wb-tag").value.trim().slice(0, 80), intro = $("adm-wb-intro").value.trim().slice(0, 120);
   const b = {
-    name, hp, max: hp, zone: z, by: state.profile.username, startedAt: serverTimestamp(), dmgLo: dlo, dmgHi: dhi, hits, acc, rid, rqty: isW ? 1 : num("adm-wb-rqty", 1, 50, 1),
+    name, hp, max: hp, zone: z, by: state.profile.username, startedAt: serverTimestamp(), dmgLo: dlo, dmgHi: dhi, hits, acc, rid, rqty: isW || isSk ? 1 : num("adm-wb-rqty", 1, 50, 1),
+    ...(isSk ? { rsk: skillFields(sk) } : {}),
     ...(isW ? { rdur: num("adm-wb-rdur", 1, 60, Math.min(30, def.maxDur)) } : {}),
     ...(icon ? { icon } : {}), ...(tag ? { tag } : {}), ...(intro ? { intro } : {}), ...(mins ? { endsAt: serverNow() + mins * 60000 } : {})
   };
@@ -1740,6 +1937,10 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
   const cd = attackCooldownLeft();
   if (cd > 0) return toast(`ร่างกายยังล้าจากการปะทะครั้งก่อน พักอีก ${Math.ceil(cd / 1000)} วินาที`);
+  const skd = state.pvpSkill ? skillDef(state.pvpSkill) : null;
+  const skId = skd && skd.kind === "pvp" && skd.type !== "brace" ? state.pvpSkill : null;
+  if (skId && !skillReady(skId)) { state.pvpSkill = null; renderPvpSkillBar(); return toast("สกิลยังไม่พร้อม"); }
+  const sty = skId ? skd.type : null;
 
   state.attacking = true; state.pending.add(targetUid); updateAttackButtons();
 
@@ -1761,13 +1962,17 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 
   const w = equippedWeapon();
   const dm = effV("dice");
-  const roll = Math.max(1, Math.min(6 + Math.max(0, dm), d6() + dm));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
+  const rb = sty === "sharp" ? skd.power : 0;   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
+  const roll = Math.max(1, Math.min(6 + Math.max(0, dm) + rb, d6() + dm + rb));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
+  const wd = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w);   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
     ...(w ? { wpn: w.it.id === "custom" ? "custom" : w.it.id } : {}),
-    wdmg: myDmg(w)
+    wdmg: wd,
+    ...(skId ? { sk: skId, ...(skd.basic ? {} : { skt: skd.type, skn: skd.name, ski: skd.icon }) } : {})
   };
+  if (skId) skillUseWrites(selfUpdate, skId);
 
   try {
     await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, ...selfUpdate });
@@ -1779,8 +1984,9 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
       return;
     }
 
-    toast(`คุณพุ่งเข้าใส่ ${targetName} (ทอยได้ ${roll}) — รอเขาตอบโต้...`);
-    watchAttack(targetUid, targetName, w);
+    if (skId) { state.pvpSkill = null; renderPvpSkillBar(); }
+    toast(`${skId ? skd.icon + " " : ""}คุณพุ่งเข้าใส่ ${targetName} (ทอยได้ ${roll}) — รอเขาตอบโต้...`);
+    watchAttack(targetUid, targetName, w, skId ? skd : null);
   } catch (e) {
     state.pending.delete(targetUid);
     toast(errMsg(e));
@@ -1790,7 +1996,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 }
 
 // รอผลการโจมตี: ถ้าเป้าหมายตอบโต้ (ลบคำสั่งโจมตี) ก็จบ ถ้าเงียบเกินเวลาจะฟาดฟรี
-function watchAttack(targetUid, targetName, w) {
+function watchAttack(targetUid, targetName, w, sk = null) {
   const aRef = ref(db, `attacks/${targetUid}/${state.uid}`);
   let seen = false, finished = false, off = null, timer = null;
   const cleanup = () => {
@@ -1801,12 +2007,12 @@ function watchAttack(targetUid, targetName, w) {
   off = onValue(aRef, (s) => { if (s.exists()) seen = true; else if (seen) cleanup(); });
   timer = setTimeout(async () => {
     if (finished) return;
-    try { await freeHit(targetUid, targetName, w); } catch (e) { console.error(e); }
+    try { await freeHit(targetUid, targetName, w, sk); } catch (e) { console.error(e); }
     cleanup();
   }, ATTACK_FALLBACK);
 }
 
-async function freeHit(targetUid, targetName, w) {
+async function freeHit(targetUid, targetName, w, sk = null) {
   const p = state.profile;
   const aRef = ref(db, `attacks/${targetUid}/${state.uid}`);
   if (!(await get(aRef)).exists()) return;
@@ -1819,7 +2025,8 @@ async function freeHit(targetUid, targetName, w) {
   const tb = (k) => (tBuff && tBuff.bstart + (tBuff.mins || 0) * 60000 - 1000 > serverNow() ? tBuff[k] || 0 : 0);
   const tIsZombie = state.players[targetUid]?.faction === "zombie";
   const dodged = tIsZombie && Math.random() < Math.max(0, DODGE_PER_POINT * ((tStats.agi || 0) + tb("agi")));
-  const dmg = Math.min(myDmg(w), Math.max(1, myDmg(w) - ((tStats.tough || 0) + tb("tough"))));
+  const base = sk?.type === "smash" ? Math.floor(myDmg(w) * sk.power) : myDmg(w), tough = sk?.type === "pierce" ? 0 : (tStats.tough || 0) + tb("tough");
+  const dmg = Math.min(base, Math.max(1, base - tough));
   const left = Math.max(0, tHp - dmg);
   let text = dodged
     ? `🏃 ${p.username} ฟาดใส่ ${targetName} แต่ถูกหลบได้! 💨`
@@ -1863,13 +2070,17 @@ async function resolveAttack(key, a) {
   const dodged = hit && p.faction === "zombie" && Math.random() < dodgeChance();
   const landed = hit && !dodged;
   const rawDmg = a.wdmg ?? attackDmg(a.wpn, { dmg: a.wdmg });
-  const dmg = landed ? Math.max(1, rawDmg - statOf("tough")) : 0;
+  const tough = a.sk === "pierce" || a.skt === "pierce" ? 0 : statOf("tough");   // ทะลวงเกราะ: ไม่หักค่า tough
+  const bi = braceInfo(), braced = landed && bi.left > 0;                        // ท่าตั้งรับ: ดาเมจที่โดนลดตาม %
+  let dmg = landed ? Math.max(1, rawDmg - tough) : 0;
+  if (braced) dmg = Math.max(1, Math.floor(dmg * (1 - bi.pct / 100)));
+  const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
-  let text = `⚔ ${a.fromName} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
+  let text = `⚔ ${a.fromName}${skTxt} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
   if (landed) {
-    text += `${a.fromName} โจมตีโดน! −${dmg} HP`;
+    text += `${a.fromName} โจมตีโดน! −${dmg} HP${braced ? " (🧱 ท่าตั้งรับลดดาเมจ)" : ""}`;
     if (state.players[key]?.faction === "zombie") {
       u[`bites/${key}/${state.uid}`] = { ts: serverTimestamp(), food: BITE_FOOD }; text += " 🦷";
       if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
@@ -1926,10 +2137,11 @@ function buildAdmin() {
   fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
   fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"]);
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
   buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor();
+  buildSkillBox("adm-skill-box", "adm-spk-"); buildSkillBox("adm-q-skill-box", "adm-q-spk-");
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
 
@@ -1946,6 +2158,8 @@ $("adm-mode").addEventListener("change", (e) => {
 ["adm-", "adm-q-"].forEach((P) => $(P + "item").addEventListener("change", (e) => {
   $(P + "custom-fields").classList.toggle("hidden", e.target.value !== "custom");
   $(P + "food-fields").classList.toggle("hidden", e.target.value !== "custom_food");
+  $(P + "skill-box").classList.toggle("hidden", e.target.value !== "skill");
+  $(P + "qty").classList.toggle("hidden", e.target.value === "skill");   // สกิลไม่มีจำนวนชิ้น
 }));
 
 $("adm-ann-send").addEventListener("click", async () => {
@@ -1960,6 +2174,8 @@ $("adm-ann-send").addEventListener("click", async () => {
 // P = คำนำหน้า id ของฟอร์ม: "adm-" = เสกไอเทม, "adm-q-" = รางวัลภารกิจ
 function readAdminItem(P = "adm-") {
   const itemId = $(P + "item").value;
+  // สกิล: คืน skill (null ถ้ากรอกไม่ผ่าน — readSkillForm toast บอกเหตุผลแล้ว) ผู้เรียกต้องเช็กก่อนใช้
+  if (itemId === "skill") return { itemId, skill: readSkillForm(P + "spk-") };
   const qty = Math.max(1, Math.min(99, parseInt($(P + "qty").value, 10) || 1));
   const isFood = itemId === "custom_food";
   let customData = null, def = ITEMS[itemId];
@@ -1990,8 +2206,29 @@ function readAdminItem(P = "adm-") {
   return { itemId, qty, isFood, customData, def, single };
 }
 
+// เสกสกิล: เข้าผู้เล่นโดยตรง (เหมือนมอบสกิล) หรือวาง "ม้วนสกิล" ไว้กลางโซน — คนแรกที่กดเรียนรู้จะได้สกิล (ม้วนหายไป)
+async function spawnSkill(sk) {
+  try {
+    if ($("adm-mode").value === "zone") {
+      const z = $("adm-target-zone").value;
+      await push(ref(db, "zoneItems/" + z), { id: "skill", qty: 1, ...sk });
+      toast(`วางม้วนสกิล ${sk.icon} ${sk.name} ไว้ใน ${ZONES[z].name} แล้ว (คนแรกที่เรียนรู้จะได้ไป)`);
+    } else {
+      const target = $("adm-target-id").value.trim();
+      if (!target) return toast("ใส่ Player ID ก่อน");
+      const t = await get(ref(db, "users/" + target));
+      if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+      const k = push(ref(db, `skills/${target}`)).key;
+      await set(ref(db, `skills/${target}/${k}`), sk);
+      toast(`เสกสกิล ${sk.icon} ${sk.name} ให้ ${t.val().username} แล้ว`);
+    }
+  } catch (e) { toast(errMsg(e)); }
+}
+
 $("adm-spawn").addEventListener("click", async () => {
-  const { itemId, qty, isFood, customData, def, single } = readAdminItem();
+  const R = readAdminItem();
+  if (R.itemId === "skill") { if (R.skill) await spawnSkill(R.skill); return; }
+  const { itemId, qty, isFood, customData, def, single } = R;
 
   try {
     if ($("adm-mode").value === "zone") {
@@ -2034,6 +2271,96 @@ $("adm-spawn").addEventListener("click", async () => {
     }
   } catch (e) { toast(errMsg(e)); }
 });
+
+
+// ---------- มอบสกิล custom (GM/Owner) ----------
+// [type, ป้ายชื่อ, ค่าต่ำสุด, ค่าสูงสุด]  (ค่าต้องตรงกับ rules → skills/$uid/$slot)
+const SKILL_TYPES = {
+  pve: [["power", "💥 ตีโดนแน่ (ดาเมจ ×ตัวคูณ)", 1.1, 2], ["guard", "🛡️ ลดดาเมจที่บอสสวนกลับ (%)", 10, 90], ["dodge", "💨 หลบ (บอสสวนกลับพลาดแน่)", 0, 0], ["heal", "✚ ฟื้น HP (จำนวน)", 10, 150]],
+  pvp: [["sharp", "🎯 ค่าทอยโจมตี + (แต้ม)", 1, 3], ["smash", "🔨 ดาเมจปะทะ ×ตัวคูณ", 1.1, 1.5], ["pierce", "🗡️ ทะลวงเกราะ (ไม่หัก tough)", 0, 0], ["brace", "🧱 ท่าตั้งรับ ลดดาเมจ (%) นาน 60 วิ", 10, 70]]
+};
+const SKILL_FIELDS = ["name", "icon", "kind", "type", "power", "cd", "uses"];
+const skillFields = (x) => SKILL_FIELDS.reduce((o, k) => { o[k] = x[k]; return o; }, {});   // เอาเฉพาะช่องที่ rules อนุญาต (skills/$uid/$slot)
+
+// K = คำนำหน้า id ของช่องกรอก: `${K}name` `${K}icon` `${K}kind` `${K}type` `${K}power` `${K}cd` `${K}uses`
+// ใช้ร่วมกัน 4 จุด: มอบสกิล (adm-sk-) / เสก (adm-spk-) / รางวัลภารกิจ (adm-q-spk-) / รางวัลบอสโลก (adm-wb-spk-)
+function syncSkillForm(K, resetType = true) {
+  const kind = $(K + "kind").value, sel = $(K + "type");
+  if (resetType) { sel.innerHTML = ""; SKILL_TYPES[kind].forEach(([v, label]) => { const o = document.createElement("option"); o.value = v; o.textContent = label; sel.append(o); }); }
+  const spec = SKILL_TYPES[kind].find((t) => t[0] === sel.value) || SKILL_TYPES[kind][0];
+  const noPower = spec[2] === 0 && spec[3] === 0;
+  $(K + "power").classList.toggle("hidden", noPower);
+  $(K + "power").placeholder = `ค่าของสกิล (${spec[2]} ถึง ${spec[3]})`;
+  $(K + "cd").placeholder = sel.value === "brace" ? "คูลดาวน์ (วินาที 60–3600)" : "คูลดาวน์ (วินาที 5–3600)";
+}
+// สร้างช่องกรอกสกิลลงในกล่อง boxId (ใช้กับฟอร์มที่ซ่อน/แสดงตามชนิดรางวัล)
+function buildSkillBox(boxId, K) {
+  const box = $(boxId); if (!box) return;
+  box.innerHTML = ""; box.style.cssText = "display:grid;gap:8px;margin-top:5px;padding-left:10px;border-left:2px solid var(--hazard)";
+  const inp = (id, ph, attrs) => { const i = document.createElement("input"); i.id = id; i.placeholder = ph; Object.assign(i, attrs); return i; };
+  const kind = document.createElement("select"); kind.id = K + "kind";
+  [["pve", "PvE — ใช้กับบอสประจำโซน / บอสโลก"], ["pvp", "PvP — ใช้ตอนปะทะผู้เล่น"]].forEach(([v, l]) => kind.append(new Option(l, v)));
+  const type = document.createElement("select"); type.id = K + "type";
+  box.append(
+    inp(K + "name", "ชื่อสกิล (เช่น คมดาบพิฆาต)", { maxLength: 20 }),
+    inp(K + "icon", "ไอคอน emoji (ไม่ใส่ = ✨)", { maxLength: 4 }),
+    kind, type,
+    inp(K + "power", "ค่าของสกิล", { type: "number", step: "0.1" }),
+    inp(K + "cd", "คูลดาวน์ (วินาที)", { type: "number", min: 5, max: 3600, value: 60 }),
+    inp(K + "uses", "จำนวนครั้งที่ใช้ได้ (เว้นว่าง = ไม่จำกัด)", { type: "number", min: 1, max: 999 })
+  );
+  kind.addEventListener("change", () => syncSkillForm(K, true));
+  type.addEventListener("change", () => syncSkillForm(K, false));
+  syncSkillForm(K, true);
+}
+// อ่าน+ตรวจค่าจากฟอร์มสกิล (ช่วงค่าต้องตรงกับ rules) — ไม่ผ่านจะ toast แล้วคืน null
+function readSkillForm(K) {
+  const kind = $(K + "kind").value, type = $(K + "type").value, spec = SKILL_TYPES[kind].find((t) => t[0] === type);
+  if (!spec) { toast("เลือกประเภทสกิลก่อน"); return null; }
+  const name = $(K + "name").value.trim(), icon = $(K + "icon").value.trim() || "✨";
+  const noPower = spec[2] === 0 && spec[3] === 0, power = noPower ? 0 : Number($(K + "power").value);
+  const cd = Math.floor(Number($(K + "cd").value)), usesRaw = $(K + "uses").value.trim(), uses = usesRaw === "" ? -1 : Math.floor(Number(usesRaw));
+  const bad = (m) => { toast(m); return null; };
+  if (!name || name.length > 20) return bad("ตั้งชื่อสกิล 1–20 ตัวอักษร");
+  if (!noPower && !(power >= spec[2] && power <= spec[3])) return bad(`ค่าของสกิลต้องอยู่ระหว่าง ${spec[2]} ถึง ${spec[3]}`);
+  if (!(cd >= (type === "brace" ? 60 : 5) && cd <= 3600)) return bad(`คูลดาวน์ต้องอยู่ระหว่าง ${type === "brace" ? 60 : 5} ถึง 3600 วินาที`);
+  if (!(uses === -1 || (uses >= 1 && uses <= 999))) return bad("จำนวนครั้ง: เว้นว่าง = ไม่จำกัด หรือ 1–999");
+  return { name, icon, kind, type, power, cd, uses };
+}
+$("adm-sk-kind").addEventListener("change", () => syncSkillForm("adm-sk-", true));
+$("adm-sk-type").addEventListener("change", () => syncSkillForm("adm-sk-", false));
+syncSkillForm("adm-sk-", true);
+$("adm-sk-grant").addEventListener("click", async () => {
+  const target = $("adm-sk-id").value.trim(); if (!target) return toast("ใส่ Player ID ก่อน");
+  const sk = readSkillForm("adm-sk-"); if (!sk) return;
+  try {
+    const t = await get(ref(db, "users/" + target));
+    if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+    const k = push(ref(db, `skills/${target}`)).key;
+    await set(ref(db, `skills/${target}/${k}`), sk);
+    toast(`มอบสกิล ${sk.icon} ${sk.name} ให้ ${t.val().username} แล้ว`);
+    loadAdminSkills();
+  } catch (e) { toast(errMsg(e)); }
+});
+async function loadAdminSkills() {
+  const target = $("adm-sk-id").value.trim(), ul = $("adm-sk-list"); ul.innerHTML = "";
+  if (!target) return toast("ใส่ Player ID ก่อน");
+  try {
+    const sv = (await get(ref(db, `skills/${target}`))).val() || {};
+    const ids = Object.keys(sv);
+    if (!ids.length) { ul.append(mk("li", "empty", "ผู้เล่นคนนี้ยังไม่มีสกิล custom")); return; }
+    ids.forEach((id) => {
+      const d = sv[id], li = mk("li");
+      li.append(mk("span", "", `${d.icon} ${d.name} — ${d.kind.toUpperCase()} · ${skillDesc({ ...d, basic: false })} · CD ${d.cd}s · ${d.uses === -1 ? "ไม่จำกัด" : `เหลือ ${d.uses} ครั้ง`}`));
+      li.append(btn("ถอน", async () => {
+        try { await update(ref(db), { [`skills/${target}/${id}`]: null, [`skillState/${target}/${id}`]: null }); toast("ถอนสกิลแล้ว"); loadAdminSkills(); }
+        catch (e) { toast(errMsg(e)); }
+      }, "btn danger mini"));
+      ul.append(li);
+    });
+  } catch (e) { toast(errMsg(e)); }
+}
+$("adm-sk-load").addEventListener("click", loadAdminSkills);
 
 // แก้สเตตัสถาวรของผู้เล่น (Owner แก้ได้ทุกคน / GM แก้ได้เฉพาะ role = player ตาม database rules)
 function buildStatEditor() {
@@ -2288,7 +2615,7 @@ $("adm-ev-auto").addEventListener("change", async (e) => {
    12) กระดานภารกิจ (GM โพสต์ → ผู้เล่นรับ/ส่งมอบ → GM ตรวจรับและมอบรางวัล)
    ========================================================= */
 const NEED_ITEMS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem"];
-const rewardText = (r) => { const d = defOf(r); return `${d?.icon || "🗡️"} ${d?.name || "ไอเทม"}${r.qty > 1 ? " ×" + r.qty : ""}`; };
+const rewardText = (r) => { if (r.id === "skill") return `📖 สกิล ${r.icon || "✨"} ${r.name}`; const d = defOf(r); return `${d?.icon || "🗡️"} ${d?.name || "ไอเทม"}${r.qty > 1 ? " ×" + r.qty : ""}`; };
 const needText = (n) => `${ITEMS[n.id].icon} ${ITEMS[n.id].name} ×${n.qty}`;
 
 function listenQuests() {
@@ -2365,7 +2692,8 @@ async function questDeliverAuto(id, q) {
     if (have < q.need.qty) return toast(`ของไม่พอ ต้องมี ${needText(q.need)}`);
     if (have > q.need.qty) u[`inventory/${uid}/${q.need.id}/qty`] = have - q.need.qty; else u[`inventory/${uid}/${q.need.id}`] = null;
   }
-  if (AUTO_STACK.includes(r.id)) u[`inventory/${uid}/${r.id}`] = { id: r.id, qty: Math.min(99, (state.inv[r.id]?.qty || 0) + r.qty) };
+  if (r.id === "skill") u[`skills/${uid}/q_${id}`] = skillFields(r);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
+  else if (AUTO_STACK.includes(r.id)) u[`inventory/${uid}/${r.id}`] = { id: r.id, qty: Math.min(99, (state.inv[r.id]?.qty || 0) + r.qty) };
   else u[`inventory/${uid}/q_${id}`] = { ...r };
   u[`questPayouts/${uid}`] = { qid: id, ts: serverTimestamp() };
   u[`quests/${id}`] = null;
@@ -2387,7 +2715,8 @@ async function questAbandon(id) {
   finally { state.busy = false; }
 }
 
-async function grantItem(target, spec) {
+async function grantItem(target, spec, qid) {
+  if (spec.id === "skill") { await set(ref(db, `skills/${target}/q_${qid}`), skillFields(spec)); return; }
   if (spec.id === "custom" || spec.id === "custom_food" || ITEMS[spec.id]?.type === "weapon") {
     const k = push(ref(db, `inventory/${target}`)).key;
     await set(ref(db, `inventory/${target}/${k}`), spec);
@@ -2400,7 +2729,7 @@ async function questApprove(id) {
   const q = state.quests[id]; if (!isStaff() || !q || q.status !== "submitted" || state.busy) return;
   state.busy = true;
   try {
-    await grantItem(q.claimer, q.reward);
+    await grantItem(q.claimer, q.reward, id);
     await remove(ref(db, "quests/" + id));
     await push(ref(db, "announcements"), { text: `📜 ${q.claimerName} ทำภารกิจ “${q.title}” สำเร็จ ได้รับ ${rewardText(q.reward)}`.slice(0, 200), zone: "all", by: state.profile.username, ts: serverTimestamp() });
     toast("อนุมัติและมอบรางวัลแล้ว");
@@ -2417,9 +2746,12 @@ async function questReject(id) {
 $("adm-q-post").addEventListener("click", async () => {
   const title = $("adm-q-title").value.trim().slice(0, 60);
   if (!title) return toast("ใส่ชื่อภารกิจก่อน");
-  const { itemId, qty, isFood, customData, def } = readAdminItem("adm-q-");
+  const R = readAdminItem("adm-q-");
+  if (R.itemId === "skill" && !R.skill) return;
+  const { itemId, qty, isFood, customData, def } = R;
   let reward;
-  if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
+  if (itemId === "skill") reward = { id: "skill", qty: 1, ...R.skill };
+  else if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
   else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
   else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
   else reward = { id: itemId, qty };

@@ -430,6 +430,11 @@ textarea#chat-input {
 .wb-box p { margin: 0; font-size: 13px; }
 .wb-box .bar { height: 24px; }
 .wb-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.wb-skills { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.sk-btn { padding: 8px 4px; font-size: 13px; }
+.sk-btn[disabled] { opacity: .45; }
+.sk-btn.on { background: var(--hazard); color: #111; border-color: var(--hazard); }
+.pvp-skills { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
 
 /* ---------- World Boss: แบบกะทัดรัดบนมือถือ (ไม่บังแชท) ---------- */
 .wb-head { cursor: pointer; }
@@ -449,6 +454,8 @@ textarea#chat-input {
   #wb-tag { grid-area: tag; }
   #wb-top { grid-area: top; }
   .wb-actions { grid-area: act; }
+  .wb-skills { grid-column: 1 / -1; }
+  .wb-box:not(.open) .wb-skills { display: none; }
   .wb-actions .btn { min-height: 34px; padding: 4px 10px; font-size: 14px; white-space: nowrap; }
   .wb-box:not(.open) #wb-tag, .wb-box:not(.open) #wb-top { display: none; }
 }
