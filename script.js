@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1712";
+const APP_VERSION = "2026-10-03.1743";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -150,6 +150,7 @@ const fxText = (d) => {
   return [on.length && `${on.join(" ")} นาน ${d.emin || 0} นาที`, cure.length && `รักษา ${cure.join("/")}`].filter(Boolean).join(" • ");
 };
 const SHOUT_COOLDOWN = 30000, BITE_FOOD = 25;
+const CHAT_COOLDOWN = 1000;   // ms ระหว่างข้อความแชต/กระซิบ — ต้องตรงกับ users/$uid/lastChat ใน database_rules.json (>= 1000)
 const CHAT_LIMIT = 100, ANN_LIMIT = 50, ATTACK_COOLDOWN = 10000, ATTACK_FALLBACK = 31000, UNARMED_DMG = 5;
 
 const FACTION = { human: { name: "มนุษย์", icon: "👤" }, zombie: { name: "ซอมบี้", icon: "🧟" } };
@@ -996,7 +997,12 @@ async function sendChat(raw) {
   const p = state.profile;
   if (!/^\/(help|\?|ช่วยเหลือ)\s*$/i.test(raw) && muteBlock()) return;
   const postZone = async (text, type) => {
-    await push(ref(db, "chats/" + state.zone), { uid: state.uid, name: p.username, faction: p.faction, text: text.slice(0, 200), type, ts: serverTimestamp() });
+    if (serverNow() - (typeof p.lastChat === "number" ? p.lastChat : 0) < CHAT_COOLDOWN) return toast("พิมพ์เร็วเกินไป รอสักครู่");
+    const k = push(ref(db, "chats/" + state.zone)).key;
+    await update(ref(db), {
+      [`chats/${state.zone}/${k}`]: { uid: state.uid, name: p.username, faction: p.faction, text: text.slice(0, 200), type, ts: serverTimestamp() },
+      [`users/${state.uid}/lastChat`]: serverTimestamp()
+    });
     trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
   };
   const cm = raw.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
@@ -1018,8 +1024,10 @@ async function sendChat(raw) {
       const t = findZonePlayer(rest);
       if (!t || !t.text) return toast("ใช้: /w ชื่อ ข้อความ (ต้องอยู่โซนเดียวกัน)");
       const text = t.text.slice(0, 200);
+      if (serverNow() - (typeof p.lastChat === "number" ? p.lastChat : 0) < CHAT_COOLDOWN) return toast("พิมพ์เร็วเกินไป รอสักครู่");
       const k1 = push(ref(db, `whispers/${t.uid}`)).key, k2 = push(ref(db, `whispers/${state.uid}`)).key;
       await update(ref(db), {
+        [`users/${state.uid}/lastChat`]: serverTimestamp(),
         [`whispers/${t.uid}/${k1}`]: { from: state.uid, fromName: p.username, toName: t.name, text, ts: serverTimestamp() },
         [`whispers/${state.uid}/${k2}`]: { from: state.uid, fromName: p.username, toName: t.name, text, out: true, ts: serverTimestamp() }
       });
