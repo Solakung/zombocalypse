@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1819";
+const APP_VERSION = "2026-10-03.1829";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3956,11 +3956,11 @@ function wallTimeText() {
 function wallStyle() {
   if ($("wall-style")) return;
   const st = document.createElement("style"); st.id = "wall-style";
-  st.textContent = ".wall-box{margin:8px 0;padding:8px 10px;border:1px solid var(--border,#444);border-radius:8px;background:rgba(0,0,0,.18)}"
-    + ".wall-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}"
-    + ".wall-bar{height:10px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden}"
+  st.textContent = ".wall-box{margin:4px 0;padding:4px 8px;border:1px solid var(--border,#444);border-radius:8px;background:rgba(0,0,0,.18);max-height:38vh;overflow:auto}"
+    + ".wall-head{display:flex;gap:8px;align-items:center;cursor:pointer;user-select:none;font-size:.9em}"
+    + ".wall-bar{flex:1;height:8px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden}"
     + ".wall-fill{height:100%;transition:width .4s;background:#5fb36b}.wall-fill.mid{background:#d9a441}.wall-fill.low,.wall-fill.bad{background:#c0392b}"
-    + ".wall-note{margin:6px 0;font-size:.85em}.wall-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}"
+    + ".wall-note{margin:6px 0;font-size:.85em}.wall-btns{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:6px 0}"
     + ".wall-box.broken{border-color:#c0392b}#btn-deep.active{outline:1px solid var(--hazard,#d9a441)}";
   document.head.append(st);
 }
@@ -3995,13 +3995,16 @@ function wallSync() {
 function wallRender() {
   const show = state.zone === "safe" && !!state.wall && wallHp() !== null;
   let box = $("wall-box");
-  if (!box) { if (!show || !$("zone-desc")) return; wallStyle(); box = mk("div", "wall-box"); box.id = "wall-box"; $("zone-desc").after(box); }
+  if (!box) { if (!show || !$("zone-desc")) return; wallStyle(); box = mk("div", "wall-box"); box.id = "wall-box"; $("zone-desc").after(box); }   // อยู่ในหัวห้องแชท: ย่อเป็นบรรทัดเดียวเสมอ ไม่ให้ดันช่องแชทหาย
   box.classList.toggle("hidden", !show); if (!show) return;
-  const p = state.profile, h = wallHp(), broken = h <= 0, pct = Math.round((100 * h) / WALL_MAX);
+  const p = state.profile, h = wallHp(), broken = h <= 0, pct = Math.round((100 * h) / WALL_MAX), open = !!state.wallOpen;
   box.classList.toggle("broken", broken); box.textContent = "";
-  const head = mk("div", "wall-head"); head.append(mk("b", "", "🧱 กำแพงค่ายพักพิง"), mk("span", "muted", broken ? "พังแล้ว" : `${Math.floor(h)}/${WALL_MAX}`));
-  const bar = mk("div", "wall-bar"), fill = mk("div", "wall-fill " + (broken ? "bad" : pct < 25 ? "low" : pct < 60 ? "mid" : "ok")); fill.style.width = pct + "%"; bar.append(fill);
-  box.append(head, bar, mk("div", "muted wall-note", broken
+  const head = mk("div", "wall-head"), bar = mk("div", "wall-bar"), fill = mk("div", "wall-fill " + (broken ? "bad" : pct < 25 ? "low" : pct < 60 ? "mid" : "ok")); fill.style.width = pct + "%"; bar.append(fill);
+  head.append(mk("span", "", broken ? "💥 กำแพงพัง" : "🧱 กำแพง"), bar, mk("span", "muted", broken ? "0" : `${Math.floor(h)}/${WALL_MAX}`), mk("span", "muted", open ? "▴" : "▾"));
+  head.addEventListener("click", () => { state.wallOpen = !state.wallOpen; wallRender(); });
+  box.append(head);
+  if (!open) return;
+  box.append(mk("div", "muted wall-note", broken
     ? "💥 กำแพงพัง! ซอมบี้บุกเข้ามาตอนค้นหา และต่อสู้กันได้ใน Safe Zone จนกว่าจะซ่อมกลับมา"
     : `ถ้าไม่มีใครซ่อม จะพังในอีกประมาณ ${wallTimeText()} • scrap 1 ชิ้น = +${WALL_PER} HP`));
   if (p?.faction === "human") {
