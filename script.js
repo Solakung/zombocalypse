@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1743";
+const APP_VERSION = "2026-10-03.1819";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -274,9 +274,10 @@ const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
 const nightMod = (z) => (z !== "safe" && isNight() ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
-const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (activeEvent(z)?.dmod || 0) + nightMod(z).dmod));
+const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z)));
 function effectiveDrops(z) {
-  const e = activeEvent(z), n = nightMod(z);
+  if (z === "safe" && wallBroken()) return [...ZONES.safe.drops, { id: "zombie", w: WALL_BREACH_Z }];   // กำแพงพัง → ซอมบี้บุก Safe Zone
+  const e = zoneEv(z), n = nightMod(z);
   const zm = (e?.zmod || 0) + n.zmod, nm = (e?.nmod || 0) + n.nmod;
   if (!zm && !nm) return ZONES[z].drops;
   return ZONES[z].drops.map((d) => d.id === "zombie" ? { ...d, w: Math.max(0, d.w + zm) } : d.id === null ? { ...d, w: Math.max(0, d.w + nm) } : d);
@@ -292,7 +293,7 @@ function dangerInfo(id) {
   const chance = Math.round((100 * (drops.find((d) => d.id === "zombie")?.w || 0)) / total);
   const level = effDanger(id);
   const tier = level === 0 ? 0 : level <= 3 ? 1 : level <= 6 ? 2 : level <= 8 ? 3 : 4;
-  return { chance, level, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier], ev: activeEvent(id) };
+  return { chance, level, tier, label: ["ปลอดภัย", "ต่ำ", "ปานกลาง", "สูง", "อันตรายมาก"][tier], ev: zoneEv(id) };
 }
 function renderZoneDanger(z) {
   const el = $("zone-danger"), evEl = $("zone-event"), tEl = $("zone-time"); if (!el) return;
@@ -308,7 +309,7 @@ function renderZoneDanger(z) {
   }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
-    if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — อีกประมาณ ${minsLeft(d.ev)} นาที`;
+    if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}`;
   }
 }
 
@@ -844,7 +845,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); wallListen(); deepInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -909,7 +910,7 @@ async function enterZone(z, initial = false, moved = false) {
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
     teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
-    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z);
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z); wallRender();
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
@@ -1124,6 +1125,7 @@ $("chat-input").addEventListener("input", function() {
 });
 
 function renderPlayers(snap) {
+  state.psnap = snap;
   const ul = $("player-list"); ul.innerHTML = ""; state.players = {};
   snap.forEach((c) => {
     const v = c.val(), me = c.key === state.uid;
@@ -1140,7 +1142,7 @@ function renderPlayers(snap) {
         $("adm-clear-zone").value = state.zone; watchMutes();
         $("admin-modal").classList.remove("hidden");
       }, "btn ghost mini"));
-      if (state.zone !== "safe") {
+      if (state.zone !== "safe" || wallBroken()) {
         const ab = btn("โจมตี", () => attack(c.key, v.name), "btn danger mini atk-btn");
         ab.dataset.uid = c.key; grp.append(ab);
       }
@@ -1170,6 +1172,7 @@ function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => {
 function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
   ul.innerHTML = "";
+  wallRender();
   Object.entries(state.inv).forEach(([slot, it]) => {
     const def = defOf(it); if (!def) return;
     const li = mk("li");
@@ -1566,7 +1569,9 @@ async function scavengeOnce() {
   if (!starving && cur < searchCost()) return toast("พลังงานไม่พอ");
   {
     const isZombie = p.faction === "zombie";
-    let found = rollDrop(isZombie ? zombieDrops(state.zone) : humanDrops(state.zone));
+    let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
+    if (state.deep && !starving) table = deepTable(table);   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
+    let found = rollDrop(table);
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
@@ -2215,7 +2220,7 @@ function updateAttackButtons() {
 
 async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.profile.hp <= 0) return;
-  if (state.zone === "safe") return toast("Safe Zone ต่อสู้ไม่ได้");
+  if (state.zone === "safe" && !wallBroken()) return toast("Safe Zone ต่อสู้ไม่ได้ (กำแพงยังแข็งแรง)");
   if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้จนกว่าจะหายหรือรักษา");
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
   const cd = attackCooldownLeft();
@@ -2800,7 +2805,7 @@ function renderZoneTags() {
     const d = dangerInfo(id);
     tag.className = "danger-tag d" + d.tier;
     tag.textContent = `${d.ev ? eventIcon(d.ev) + " " : ""}⚠ ${d.level}/10`;
-    b.title = `อันตราย ${d.level}/10 • เจอซอมบี้ ${d.chance}%` + (d.ev ? ` • ${d.ev.title} (อีก ~${minsLeft(d.ev)} นาที)` : "");
+    b.title = `อันตราย ${d.level}/10 • เจอซอมบี้ ${d.chance}%` + (d.ev ? ` • ${d.ev.title} (${d.ev.daily ? "ถึงเที่ยงคืน" : `อีก ~${minsLeft(d.ev)} นาที`})` : "");
   });
 }
 
@@ -3159,7 +3164,7 @@ function evoBonusAt(k, e) {
 }
 function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
 
-function searchCost() { return evoT("s") >= 2 ? 8 : STAMINA_COST; }                 // ค้นหาไว: เสียพลังงาน −20%
+function searchCost() { return (evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? 2 : 1); }                 // ค้นหาไว: เสียพลังงาน −20%
 function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.9)) : dmg; }   // ไขมันเกราะ: −10%
 function evoTitleKey() { const e = state.evo; return !e || state.profile?.faction !== "zombie" ? null : e.h === 4 ? "hunter" : e.g === 4 ? "giant" : e.s === 4 ? "shade" : null; }
 function evoTitleText(key) { const L = EVO_LINES[key]; return L ? `${L.icon}${L.title}` : ""; }
@@ -3184,7 +3189,7 @@ function listenEvo() {
   onValue(ref(db, "evo/" + state.uid), (s) => {
     state.evo = s.val(); state.evoResolve?.();
     renderBars(); syncEvoTitle();
-    $("btn-scavenge").textContent = `ค้นหาไอเทม (−${searchCost()} พลังงาน)`;
+    scavLabel();
     if (!$("evo-modal")?.classList.contains("hidden")) renderEvo();
   }, (e) => { console.error("evo", e); state.evoResolve?.(); });
   setInterval(evoHungerTick, 30000);
@@ -3777,7 +3782,7 @@ function gachaAdminPanel(box, row) {
    รอบเวลาใช้เวลาไทย (UTC+7): รายวันรีเซ็ตเที่ยงคืน / รายสัปดาห์รีเซ็ตเที่ยงคืนคืนวันอาทิตย์→จันทร์
    ========================================================= */
 const QP_PERIODS = [["daily", "📅 รายวัน"], ["weekly", "🗓️ รายสัปดาห์"], ["newbie", "🌱 ผู้เล่นใหม่ (ทำครั้งเดียว)"]];
-const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท";
+const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย";
 const QP_GAP_MS = 4200;                       // rules: แต่ละเควสนับได้อย่างน้อยห่างกัน 4 วินาที
 const QP_TZ_MS = 7 * 3600000, QP_DAY_MS = 86400000;
 // ค่าเริ่มต้น (ปุ่ม "เติมเควสเริ่มต้น" ของเจ้าของ) — ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น (rules จำกัด) / f = จำกัดฝ่าย (ไม่ใส่ = ทั้งสองฝ่าย)
@@ -3792,7 +3797,8 @@ const QP_SEED = {
     w2: { title: "โจมตีบอสโลก 3 ครั้ง", ev: "wboss", need: 3, r: { human: { id: "stim_shot", qty: 1 }, zombie: { id: "stim_shot", qty: 1 } } },
     w3: { title: "ซื้อ/ขายในตลาด 3 ครั้ง", ev: "market", need: 3, r: { human: { id: "water_jug", qty: 1 }, zombie: { id: "water_jug", qty: 1 } } },
     w4: { title: "เดินทางระหว่างโซน 10 ครั้ง", ev: "travel", need: 10, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } },
-    w5: { title: "คราฟต์ 5 ครั้ง", ev: "craft", need: 5, f: "human", r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "army_meal", qty: 1 } } }
+    w5: { title: "คราฟต์ 5 ครั้ง", ev: "craft", need: 5, f: "human", r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "army_meal", qty: 1 } } },
+    w6: { title: "ซ่อมกำแพงค่าย 5 ครั้ง", ev: "wall", need: 5, f: "human", r: { human: { id: "bandage", qty: 2 }, zombie: { id: "bandage", qty: 2 } } }
   },
   newbie: {
     n1: { title: "ออกค้นหาไอเทมครั้งแรก", desc: "กดปุ่ม ค้นหาไอเทม", ev: "search", need: 1, r: { human: { id: "scrap", qty: 2 }, zombie: { id: "rotten_meat", qty: 1 } } },
@@ -3923,4 +3929,147 @@ function qpRender() {
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
     const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini")); c.append(r); body.append(c);
   }
+}
+
+
+/* =========================================================
+   19) กำแพง Safe Zone • สภาพโซนรายวัน • ค้นลึก
+   - กำแพง: wall/safe = {hp, ts} ผุเอง 1 HP ต่อ 259,200 ms (1000 HP ≈ 3 วัน) คำนวณจากเวลา ไม่ต้องมีตัวจับเวลา
+     มนุษย์ซ่อมด้วย scrap (1 ชิ้น = +10 HP, ครั้งละ ≤ 20) / HP = 0 → Safe Zone เปิด PvP + ซอมบี้บุกตอนค้นหา
+     ตัวเลขทั้งหมดต้องตรงกับ wall / wallLog / attacks ใน database_rules.json (v7)
+   - สภาพโซนรายวัน: สุ่มจากวัน (เวลาไทย) + โซน ทุกคนเห็นตรงกัน ไม่ต้องเก็บข้อมูล
+   - ค้นลึก: พลังงาน ×2 ของหายากออกง่ายขึ้น แต่ซอมบี้มากขึ้น (ฝั่ง client ล้วน rules ไม่เปลี่ยน)
+   ========================================================= */
+const WALL_MAX = 1000, WALL_DIV = 259200, WALL_PER = 10, WALL_SPEND = 20, WALL_BREACH_Z = 25;
+
+function wallHp() {
+  const w = state.wall; if (!w || typeof w.hp !== "number" || typeof w.ts !== "number") return null;
+  return Math.max(0, w.hp - (serverNow() - w.ts) / WALL_DIV);
+}
+function wallBroken() { const h = wallHp(); return h !== null && h <= 0; }
+function wallDmod(z) { return z === "safe" && wallBroken() ? 6 : 0; }
+function wallTimeText() {
+  const h = wallHp(); if (h === null) return "";
+  const mins = (h * WALL_DIV) / 60000;
+  return mins >= 2880 ? `${(mins / 1440).toFixed(1)} วัน` : mins >= 120 ? `${Math.round(mins / 60)} ชั่วโมง` : `${Math.max(1, Math.round(mins))} นาที`;
+}
+function wallStyle() {
+  if ($("wall-style")) return;
+  const st = document.createElement("style"); st.id = "wall-style";
+  st.textContent = ".wall-box{margin:8px 0;padding:8px 10px;border:1px solid var(--border,#444);border-radius:8px;background:rgba(0,0,0,.18)}"
+    + ".wall-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}"
+    + ".wall-bar{height:10px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden}"
+    + ".wall-fill{height:100%;transition:width .4s;background:#5fb36b}.wall-fill.mid{background:#d9a441}.wall-fill.low,.wall-fill.bad{background:#c0392b}"
+    + ".wall-note{margin:6px 0;font-size:.85em}.wall-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}"
+    + ".wall-box.broken{border-color:#c0392b}#btn-deep.active{outline:1px solid var(--hazard,#d9a441)}";
+  document.head.append(st);
+}
+function wallListen() {
+  if (state.wallOn || !state.uid) return; state.wallOn = true;
+  state.wall = null; state.wallLog = {}; state.wallBusy = false; state.wallWasBroken = null; state.wallWarned = false;
+  wallStyle();
+  onValue(ref(db, "wall/safe"), (s) => {
+    state.wall = s.val();
+    if (!state.wall && !state.wallMaking) {   // ยังไม่มีกำแพง → ใครก็ได้สร้างให้เต็ม 1000 (rules อนุญาตเฉพาะตอนยังไม่มี)
+      state.wallMaking = true;
+      set(ref(db, "wall/safe"), { hp: WALL_MAX, ts: serverTimestamp() }).catch(() => {}).finally(() => { state.wallMaking = false; });
+    }
+    wallSync();
+  }, (e) => console.error("wall", e));
+  onValue(ref(db, "wallLog"), (s) => { state.wallLog = s.val() || {}; wallRender(); }, (e) => console.error("wallLog", e));
+  setInterval(wallSync, 30000);
+}
+function wallSync() {
+  const h = wallHp(), broken = h !== null && h <= 0;
+  if (state.wallWasBroken !== null && state.wallWasBroken !== broken) {
+    logLine(broken ? "💥 กำแพงค่ายพังแล้ว! Safe Zone ไม่ปลอดภัย — ซอมบี้บุกตอนค้นหาและต่อสู้กันได้ ช่วยกันซ่อมด่วน!" : "🧱 กำแพงค่ายซ่อมกลับมาแล้ว Safe Zone ปลอดภัยอีกครั้ง", broken ? "system" : "info");
+    if (state.psnap) renderPlayers(state.psnap);
+    renderZoneTags();
+  }
+  state.wallWasBroken = broken;
+  if (h !== null && !broken && h < 250 && !state.wallWarned) { state.wallWarned = true; logLine(`⚠️ กำแพงค่ายใกล้พัง (เหลือ ${Math.floor(h)}/${WALL_MAX}) ใครมี scrap ช่วยซ่อมที่ Safe Zone`, "system"); }
+  if (h !== null && h > 400) state.wallWarned = false;
+  if (state.zone) renderZoneDanger(state.zone);
+  wallRender();
+}
+function wallRender() {
+  const show = state.zone === "safe" && !!state.wall && wallHp() !== null;
+  let box = $("wall-box");
+  if (!box) { if (!show || !$("zone-desc")) return; wallStyle(); box = mk("div", "wall-box"); box.id = "wall-box"; $("zone-desc").after(box); }
+  box.classList.toggle("hidden", !show); if (!show) return;
+  const p = state.profile, h = wallHp(), broken = h <= 0, pct = Math.round((100 * h) / WALL_MAX);
+  box.classList.toggle("broken", broken); box.textContent = "";
+  const head = mk("div", "wall-head"); head.append(mk("b", "", "🧱 กำแพงค่ายพักพิง"), mk("span", "muted", broken ? "พังแล้ว" : `${Math.floor(h)}/${WALL_MAX}`));
+  const bar = mk("div", "wall-bar"), fill = mk("div", "wall-fill " + (broken ? "bad" : pct < 25 ? "low" : pct < 60 ? "mid" : "ok")); fill.style.width = pct + "%"; bar.append(fill);
+  box.append(head, bar, mk("div", "muted wall-note", broken
+    ? "💥 กำแพงพัง! ซอมบี้บุกเข้ามาตอนค้นหา และต่อสู้กันได้ใน Safe Zone จนกว่าจะซ่อมกลับมา"
+    : `ถ้าไม่มีใครซ่อม จะพังในอีกประมาณ ${wallTimeText()} • scrap 1 ชิ้น = +${WALL_PER} HP`));
+  if (p?.faction === "human") {
+    const have = state.inv?.scrap?.qty || 0, room = Math.ceil((WALL_MAX - h) / WALL_PER), all = Math.min(have, WALL_SPEND, room);
+    const row = mk("div", "wall-btns");
+    [1, 5].forEach((n) => { const b = btn(`ซ่อม ×${n}`, () => wallRepair(n), "btn ghost mini"); b.disabled = state.wallBusy || have < n || room < 1 || (p.hp || 0) <= 0; row.append(b); });
+    if (all > 5) row.append(btn(`ซ่อม ×${all}`, () => wallRepair(all), "btn primary mini"));
+    row.append(mk("span", "muted", `scrap ในกระเป๋า ${have}`));
+    box.append(row);
+  } else if (p) box.append(mk("div", "muted wall-note", "🧟 ซอมบี้ซ่อมกำแพงไม่ได้ — ปล่อยให้มันผุพังเองก็พอ"));
+  const top = Object.values(state.wallLog || {}).filter((x) => x && x.n).sort((a, b) => b.n - a.n).slice(0, 3);
+  if (top.length) box.append(mk("div", "muted wall-note", "🏅 ผู้ซ่อมสูงสุด: " + top.map((x) => `${x.name} (${x.n})`).join(" • ")));
+}
+async function wallRepair(n) {
+  const p = state.profile; if (!p || p.hp <= 0 || p.faction !== "human" || state.zone !== "safe" || state.wallBusy) return;
+  const h = wallHp(); if (h === null) return;
+  const have = state.inv?.scrap?.qty || 0; n = Math.min(n, have, WALL_SPEND);
+  if (n < 1) return toast("ไม่มี scrap สำหรับซ่อม");
+  if (h >= WALL_MAX) return toast("กำแพงเต็มแล้ว");
+  state.wallBusy = true; wallRender();
+  try {
+    const hp = Math.min(WALL_MAX, Math.floor(h + n * WALL_PER) - 1);   // ลบ 1 ไว้กันเวลาเพี้ยน (rules ยอมคลาดเคลื่อนไม่เกิน 2)
+    const u = {
+      "wall/safe": { hp, ts: serverTimestamp() },
+      [`wallLog/${state.uid}`]: { n: (state.wallLog?.[state.uid]?.n || 0) + n, ts: serverTimestamp(), name: p.username }
+    };
+    if (have - n > 0) u[`inventory/${state.uid}/scrap/qty`] = have - n; else u[`inventory/${state.uid}/scrap`] = null;
+    await update(ref(db), u);
+    logLine(`🧱 ซ่อมกำแพงด้วย scrap ×${n} (+${n * WALL_PER} HP)`, "info");
+    questBump("wall");
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.wallBusy = false; wallRender(); }
+}
+
+// ---- สภาพโซนรายวัน (เวลาไทย) ----
+function dailyEvent(z) {
+  if (z === "safe" || !ZONES[z]) return null;
+  const TZ = 7 * 3600000, DAY = 86400000;   // (ไม่ใช้ QP_* เพราะอาจถูกเรียกก่อนที่ const เหล่านั้นจะถูกสร้าง)
+  const day = Math.floor((serverNow() + TZ) / DAY), zi = Object.keys(ZONES).indexOf(z);
+  let h = (Math.imul(day, 2654435761) ^ Math.imul(zi + 1, 40503)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0; h = Math.imul(h ^ (h >>> 13), 3266489909) >>> 0; h = (h ^ (h >>> 16)) >>> 0;
+  const r = h % 100, type = r < 9 ? "supply" : r < 17 ? "horde" : r < 27 ? "fog" : r < 35 ? "calm" : null;
+  if (!type) return null;
+  const t = EVENT_TYPES[type];
+  return { type, title: `${t.name} (ประจำวัน)`, endsAt: (day + 1) * DAY - TZ, dmod: t.dmod, zmod: t.zmod, nmod: t.nmod, daily: true };
+}
+function zoneEv(z) { return activeEvent(z) || dailyEvent(z); }
+function dailyNews() {
+  const list = Object.keys(ZONES).map((z) => [z, dailyEvent(z)]).filter(([, e]) => e);
+  if (!list.length) return logLine("📰 ข่าววันนี้: ทุกโซนเป็นปกติ", "info");
+  logLine("📰 ข่าววันนี้: " + list.map(([z, e]) => `${eventIcon(e)} ${ZONES[z].name} — ${EVENT_TYPES[e.type].name}`).join(" • "), "info");
+}
+
+// ---- ค้นลึก ----
+function deepTable(t) {
+  return t.map((d) => d.id === null ? { ...d, w: d.w * 0.5 }
+    : d.id === "zombie" ? { ...d, w: d.w * 1.5 }
+    : (d.id === "boss" || d.id === "rotten_meat") ? d
+    : d.w <= 5 ? { ...d, w: d.w * 2 } : d);
+}
+function scavLabel() { $("btn-scavenge").textContent = `ค้นหาไอเทม${state.deep ? " (ลึก)" : ""} (−${searchCost()} พลังงาน)`; }
+function deepSync() {
+  const b = $("btn-deep"); if (b) { b.textContent = state.deep ? "🔦 ค้นลึก: เปิด" : "🔦 โหมดค้น: ปกติ"; b.classList.toggle("active", !!state.deep); }
+  scavLabel(); renderBars();
+}
+function deepInit() {
+  if (state.deepOn) return; state.deepOn = true; state.deep = false;
+  const b = btn("🔦 โหมดค้น: ปกติ", () => { state.deep = !state.deep; deepSync(); }, "btn ghost mini"); b.id = "btn-deep";
+  b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50%";
+  $("btn-scavenge").after(b); deepSync(); dailyNews();
 }
