@@ -353,7 +353,8 @@ function hungerShift(u, k, delta) {
   if (typeof ts !== "number" || !delta) return hungerLeft(k);   // ข้อมูลเก่ายังไม่ถูกย้าย (ทำตอนเข้าเกม) → ข้ามไปก่อน
   const kw = Math.floor(Math.max(0, serverNow() - 2500 - ts) / ms), empty = v <= kw;   // −2.5 วิ: กัน timestamp เกินเวลาเซิร์ฟเวอร์
   const n = Math.max(0, Math.min(100, (empty ? 0 : v - kw) + delta)), base = `users/${state.uid}/${k}`;
-  if (empty) { if (n === v) return n; u[base] = n; u[base + "Ts"] = serverTimestamp(); }
+  // หมดอยู่ (ค่าจริง 0): ข้ามเฉพาะเมื่อไม่มีอะไรต้องเปลี่ยนจริงๆ (n=0 และค่าที่เก็บ=0) — ถ้าค่าที่เก็บเป็น 100 แต่เวลาทำให้ค่าจริงเป็น 0 ต้องเขียนรีเซ็ต ts ด้วย
+  if (empty) { if (n === 0 && v === 0) return n; u[base] = n; u[base + "Ts"] = serverTimestamp(); }
   else { u[base] = n; if (kw > 0) u[base + "Ts"] = ts + kw * ms; }
   return n;
 }
@@ -643,7 +644,7 @@ onAuthStateChanged(auth, async (user) => {
     state.uid = user.uid;
     const snap = await get(ref(db, "users/" + user.uid));
     if (snap.exists()) { startGame(); return; }
-    await signOut(auth); show("login"); $("login-error").textContent = "ไม่พบตัวละคร กรุณาสร้างใหม่";
+    await signOut(auth); show("login"); $("login-error").textContent = "ไม่พบตัวละคร (ข้อมูลถูกรีเซ็ต) กรุณากด สร้างตัวละคร โดยใช้ชื่อและรหัสผ่านเดิม";
   } catch (e) { show("login"); console.error(e); }
 });
 
@@ -722,9 +723,15 @@ $("stat-save").addEventListener("click", async () => {
 });
 
 async function register(name, email, pw) {
-  state.registering = true; let cred;
+  state.registering = true; let cred, adopted = false;
   try {
-    cred = await createUserWithEmailAndPassword(auth, email, pw);
+    try { cred = await createUserWithEmailAndPassword(auth, email, pw); }
+    catch (e) {
+      // บัญชีล็อกอินเดิมยังอยู่ แต่ตัวละครในฐานข้อมูลหาย → ถ้ารหัสผ่านถูก ใช้บัญชีเดิมสร้างตัวละครใหม่ได้
+      if (e?.code !== "auth/email-already-in-use") throw e;
+      cred = await signInWithEmailAndPassword(auth, email, pw);
+      adopted = true;
+    }
     const uid = cred.user.uid;
     await set(ref(db, "usernames/" + nameKey(name)), uid);
     const stats = { ...regPicker.vals };
@@ -738,7 +745,11 @@ async function register(name, email, pw) {
       ["stats/" + uid]: stats
     });
     state.uid = uid; startGame();
-  } catch (e) { if (cred) await deleteUser(cred.user).catch(() => {}); throw e; } 
+  } catch (e) {
+    if (adopted) await signOut(auth).catch(() => {});
+    else if (cred) await deleteUser(cred.user).catch(() => {});
+    throw e;
+  }
   finally { state.registering = false; }
 }
 
