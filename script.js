@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1829";
+const APP_VERSION = "2026-10-03.1854";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -299,7 +299,9 @@ function renderZoneDanger(z) {
   const el = $("zone-danger"), evEl = $("zone-event"), tEl = $("zone-time"); if (!el) return;
   const d = dangerInfo(z), base = ZONES[z].danger;
   el.className = "danger-line d" + d.tier;
-  el.textContent = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${z === "safe" ? "ต่อสู้ระหว่างผู้เล่นไม่ได้" : "ผู้เล่นโจมตีกันได้"}`;
+  const pvpTxt = z === "safe" ? (wallBroken() ? "กำแพงพัง ต่อสู้กันได้" : "ต่อสู้ไม่ได้") : "ผู้เล่นโจมตีกันได้";
+  el.textContent = `⚠️ ${d.level}/10 (${d.label})${d.level !== base ? ` ปกติ ${base}` : ""} • เจอซอมบี้ ${d.chance}% • ${pvpTxt}`;
+  el.title = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${pvpTxt}`;
   if (tEl) {
     const night = isNight();
     tEl.className = "time-line " + (night ? "night" : "day");
@@ -845,7 +847,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); wallListen(); deepInit();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); wallListen(); deepInit(); headCompactInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -4075,4 +4077,18 @@ function deepInit() {
   const b = btn("🔦 โหมดค้น: ปกติ", () => { state.deep = !state.deep; deepSync(); }, "btn ghost mini"); b.id = "btn-deep";
   b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50%";
   $("btn-scavenge").after(b); deepSync(); dailyNews();
+}
+
+
+// ---- หัวห้องแชทแบบย่อ: ชื่อโซน + บรรทัดสถานะ แตะชื่อเพื่อดูคำอธิบาย ช่องแชทได้พื้นที่มากขึ้น ----
+function headCompactInit() {
+  if ($("head-style")) return;
+  const st = document.createElement("style"); st.id = "head-style";
+  st.textContent = ".chat-head h2#zone-title{cursor:pointer;user-select:none;margin-bottom:2px}"
+    + ".chat-head h2#zone-title::after{content:' ▾';font-size:.6em;opacity:.6}.chat-head.open h2#zone-title::after{content:' ▴'}"
+    + ".chat-head #zone-desc{display:none;margin:2px 0;font-size:13px}.chat-head.open #zone-desc{display:block}"
+    + ".chat-head #zone-danger,.chat-head #zone-time,.chat-head #zone-event{font-size:12px;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+    + ".chat-head.open #zone-danger,.chat-head.open #zone-time,.chat-head.open #zone-event{white-space:normal}";
+  document.head.append(st);
+  const t = $("zone-title"); if (t) t.addEventListener("click", () => t.closest(".chat-head")?.classList.toggle("open"));
 }
