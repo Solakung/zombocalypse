@@ -833,7 +833,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -3444,6 +3444,7 @@ function renderMarket() {
   }
 
   if (typeof bmRender === "function") bmRender(body, card, row);   // ตลาดมืด (ข้อ 16)
+  if (typeof gachaRender === "function") gachaRender(body, card, row);   // ตู้กาชา (ข้อ 17)
   const mine = [1, 2, 3].map((i) => [`${state.uid}_${i}`, state.market?.[`${state.uid}_${i}`]]).filter(([, l]) => l);
   const c2 = card(`📦 ประกาศของฉัน (${mine.length}/${MKT_SLOTS})`);
   mine.forEach(([lid, l]) => { const r = row(); r.append(mk("span", "", `ขาย ${mktLabel(l.give.id)} ×${l.give.qty} → ต้องการ ${mktLabel(l.want.id)} ×${l.want.qty}`), btn("ยกเลิก", () => mktCancel(lid), "btn danger mini")); c2.append(r); });
@@ -3582,4 +3583,165 @@ function bmRender(body, card, row) {
     });
   }
   body.append(box);
+}
+
+/* =========================================================
+   17) ตู้กาชา — หมุนด้วยทรัพยากร ได้ของเอาชีวิตรอด (แยกกองมนุษย์/ซอมบี้)
+   gachaPool/{fac}/{slot} = { id, qty }  ← กองรางวัลที่แอดมินใส่ไว้ล่วงหน้า (ผู้เล่นอ่านไม่ได้ ยกเว้นช่องของตั๋วตัวเอง)
+   gachaMeta/{fac}/{slot} = true          ← ช่องที่ยังไม่ถูกหมุน (ผู้เล่นเห็นแค่จำนวน ไม่เห็นว่าข้างในคืออะไร)
+   gachaTickets/{uid} = { f, slot, ts }   ← ตั๋ว: หมุน = หักของ + ลบช่องออกจาก meta + สร้างตั๋วในคำสั่งเดียว แล้วค่อยรับของตามช่องนั้น
+   ราคา / รายการของที่ใส่ได้ ต้องตรงกับ database_rules.json (gachaTickets / gachaPool)
+   ========================================================= */
+const GACHA_COST = { human: { id: "scrap", qty: 5 }, zombie: { id: "rotten_meat", qty: 2 } };
+const GACHA_ITEMS = {
+  human: ["canned_food", "water", "bandage", "medkit", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar"],
+  zombie: ["water", "water_jug", "bandage", "medkit", "moss", "energy_drink", "stim_shot", "antidote", "trauma_kit", "rotten_meat"]
+};
+const GACHA_QTY_MAX = 5;
+// กองเริ่มต้น 100 ช่องต่อฝั่ง [id, qty ต่อช่อง, จำนวนช่อง] — มนุษย์คืนมูลค่า ~67% ของราคา / ซอมบี้ ~86% (เนื้อเน่ามีค่าสูงกว่า scrap จริง จึงตั้งให้คืนมากกว่า)
+const GACHA_SEED = {
+  human: [["water", 1, 14], ["canned_food", 1, 12], ["bread", 1, 10], ["bandage", 1, 12], ["fruit", 1, 8], ["moss", 1, 6],
+    ["water_jug", 1, 6], ["soup", 1, 6], ["choco_bar", 1, 5], ["energy_drink", 1, 5], ["medkit", 1, 6],
+    ["army_meal", 1, 3], ["antidote", 1, 2], ["stim_shot", 1, 2], ["trauma_kit", 1, 2], ["serum", 1, 1]],
+  zombie: [["water", 1, 28], ["bandage", 1, 24], ["rotten_meat", 1, 24], ["moss", 1, 12],
+    ["water_jug", 1, 5], ["medkit", 1, 3], ["energy_drink", 1, 2],
+    ["stim_shot", 1, 1], ["trauma_kit", 1, 1]]
+};
+// รหัสช่องสุ่ม (ห้ามใช้ push id เพราะเรียงตามเวลา — จะเดาได้ว่าช่องไหนใส่ทีหลัง)
+const gachaKey = () => { const c = "abcdefghijklmnopqrstuvwxyz0123456789", a = new Uint8Array(12); crypto.getRandomValues(a); return [...a].map((x) => c[x % 36]).join(""); };
+const gachaIsPerm = (e) => String(e?.code || e).includes("PERMISSION_DENIED");
+
+function listenGacha() {
+  if (state.gaOn || !state.profile?.faction) return; state.gaOn = true;
+  state.gaMeta = null; state.gaFac = ""; state.gaTicket = null; state.gaForm = state.gaForm || { f: "", id: "water", qty: 1, n: 10 };
+  const sub = () => {
+    const fac = state.profile?.faction; if (!fac || fac === state.gaFac) return;
+    if (state.gaOff) state.gaOff();
+    state.gaFac = fac; state.gaMeta = null;
+    state.gaOff = onValue(ref(db, "gachaMeta/" + fac), (s) => { state.gaMeta = s.val() || {}; gachaRefresh(); }, (e) => console.error("gachaMeta", e));
+  };
+  sub(); setInterval(sub, 5000);   // ติดเชื้อกลายเป็นซอมบี้ → เปลี่ยนไปฟังกองของฝั่งใหม่
+  // ตั๋วค้าง (ปิดเกมระหว่างหมุน) → รับของต่อให้อัตโนมัติ
+  onValue(ref(db, "gachaTickets/" + state.uid), (s) => { state.gaTicket = s.val(); gachaRefresh(); if (s.val()) setTimeout(() => gachaClaim(), 500); }, (e) => console.error("gachaTickets", e));
+}
+function gachaRefresh() {
+  const m = $("mkt-modal"); if (!m || m.classList.contains("hidden")) return;
+  if (document.activeElement?.tagName === "INPUT" && m.contains(document.activeElement)) return;
+  renderMarket();
+}
+
+// หมุน: จ่ายของ + เอาช่องสุ่มออกจาก meta + สร้างตั๋ว ในคำสั่งเดียว (ใครแย่งช่องเดียวกันก่อน = rules ปฏิเสธ ลองใหม่ได้ ไม่เสียของ)
+async function gachaPull() {
+  const p = state.profile, fac = p?.faction, cost = GACHA_COST[fac];
+  if (!cost || state.gaBusy || state.gaTicket || !mktGuard()) return;
+  const keys = Object.keys(state.gaMeta || {});
+  if (!keys.length) return toast("ตู้กาชาว่างแล้ว รอแอดมินเติมของ");
+  if (mktHave(cost.id) < cost.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(cost.id)} ×${cost.qty}`);
+  const slot = keys[Math.floor(Math.random() * keys.length)];
+  const u = { [`gachaTickets/${state.uid}`]: { f: fac, slot, ts: serverTimestamp() }, [`gachaMeta/${fac}/${slot}`]: null };
+  mktDebit(u, cost.id, cost.qty);
+  state.gaBusy = true;
+  try { await update(ref(db), u); }
+  catch (e) { state.gaBusy = false; return toast(gachaIsPerm(e) ? "หมุนไม่สำเร็จ — อาจมีคนหมุนช่องเดียวกันก่อน ลองอีกครั้ง (ของยังไม่ถูกหัก)" : "ทำรายการไม่สำเร็จ"); }
+  state.gaBusy = false;
+  await gachaClaim({ f: fac, slot });
+}
+// รับของตามตั๋ว: เติมของเข้ากระเป๋า + ลบตั๋ว + ลบช่องออกจากกอง ในคำสั่งเดียว (rules บังคับให้ของตรงกับช่องและจำนวนไม่เกิน)
+async function gachaClaim(ticket) {
+  const t = ticket || state.gaTicket, uid = state.uid; if (!t || state.gaBusy) return;
+  state.gaBusy = true;
+  try {
+    const prize = (await get(ref(db, `gachaPool/${t.f}/${t.slot}`))).val();
+    const u = { [`gachaTickets/${uid}`]: null };
+    if (prize) {
+      const have = (await get(ref(db, `inventory/${uid}/${prize.id}/qty`))).val() || 0, after = Math.min(99, have + prize.qty);
+      u[`inventory/${uid}/${prize.id}`] = { id: prize.id, qty: after };
+      u[`gachaPool/${t.f}/${t.slot}`] = null;
+    }
+    await update(ref(db), u);
+    state.gaTicket = null;
+    if (prize) {
+      state.gaLast = { id: prize.id, qty: prize.qty };
+      toast(`🎰 ได้ ${mktLabel(prize.id)} ×${prize.qty}`);
+      logLine(`🎰 หมุนตู้กาชา ได้ ${mktLabel(prize.id)} ×${prize.qty}`, "system");
+    } else toast("ช่องนี้ว่างแล้ว (แอดมินล้างตู้) — ตั๋วถูกยกเลิก");
+  } catch (e) { console.error("gachaClaim", e?.code || e); toast("รับของไม่สำเร็จ — กด “รับของที่ค้างอยู่” อีกครั้ง"); }
+  finally { state.gaBusy = false; gachaRefresh(); }
+}
+
+/* ---------- แอดมิน ---------- */
+async function gachaChunks(u) {   // แบ่งเขียนทีละ ≤200 เส้นทาง
+  const ks = Object.keys(u);
+  for (let i = 0; i < ks.length; i += 200) await update(ref(db), Object.fromEntries(ks.slice(i, i + 200).map((k) => [k, u[k]])));
+}
+async function gachaAdminAdd(f, id, qty, n) {
+  if (!isStaff() || !GACHA_ITEMS[f]) return;
+  if (!GACHA_ITEMS[f].includes(id)) return toast("ไอเทมนี้ใส่ตู้ฝั่งนี้ไม่ได้");
+  const q = Math.max(1, Math.min(GACHA_QTY_MAX, parseInt(qty, 10) || 1)), c = Math.max(1, Math.min(100, parseInt(n, 10) || 1)), u = {};
+  for (let i = 0; i < c; i++) { const k = gachaKey(); u[`gachaPool/${f}/${k}`] = { id, qty: q }; u[`gachaMeta/${f}/${k}`] = true; }
+  try { await gachaChunks(u); toast(`เพิ่ม ${mktLabel(id)} ×${q} จำนวน ${c} ช่อง เข้าตู้${FACTION[f].name}แล้ว`); gachaRefresh(); }
+  catch (e) { toast(errMsg(e)); }
+}
+async function gachaAdminSeed(f) {
+  if (!isStaff() || !GACHA_SEED[f]) return;
+  if (!confirm(`เติมกองเริ่มต้น 100 ช่องให้ตู้${FACTION[f].name}? (ของที่มีอยู่แล้วในตู้จะยังอยู่ ไม่ถูกลบ)`)) return;
+  const u = {};
+  GACHA_SEED[f].forEach(([id, qty, n]) => { for (let i = 0; i < n; i++) { const k = gachaKey(); u[`gachaPool/${f}/${k}`] = { id, qty }; u[`gachaMeta/${f}/${k}`] = true; } });
+  try { await gachaChunks(u); toast(`เติมกองเริ่มต้นตู้${FACTION[f].name}แล้ว (${Object.keys(u).length / 2} ช่อง)`); gachaRefresh(); }
+  catch (e) { toast(errMsg(e)); }
+}
+async function gachaAdminClear(f) {
+  if (!isStaff() || !GACHA_ITEMS[f]) return;
+  if (!confirm(`ล้างตู้${FACTION[f].name}ทั้งหมด? ช่องที่เหลือจะหายไป (ผู้เล่นที่ถือตั๋วค้างอยู่จะไม่ได้ของ)`)) return;
+  try {
+    const [pool, meta] = await Promise.all([get(ref(db, "gachaPool/" + f)), get(ref(db, "gachaMeta/" + f))]), u = {};
+    Object.keys(pool.val() || {}).forEach((k) => { u[`gachaPool/${f}/${k}`] = null; });
+    Object.keys(meta.val() || {}).forEach((k) => { u[`gachaMeta/${f}/${k}`] = null; });
+    await gachaChunks(u); toast(`ล้างตู้${FACTION[f].name}แล้ว`); gachaRefresh();
+  } catch (e) { toast(errMsg(e)); }
+}
+async function gachaAdminPeek(f) {   // ดูองค์ประกอบของที่เหลือในตู้ (เฉพาะแอดมินอ่านได้)
+  if (!isStaff()) return;
+  try {
+    const pool = (await get(ref(db, "gachaPool/" + f))).val() || {}, meta = (await get(ref(db, "gachaMeta/" + f))).val() || {}, cnt = {};
+    Object.entries(pool).forEach(([k, v]) => { if (meta[k]) { const key = `${v.id}|${v.qty}`; cnt[key] = (cnt[key] || 0) + 1; } });
+    state.gaPeek = { f, rows: Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, n]) => { const [id, q] = k.split("|"); return `${mktLabel(id)} ×${q} : ${n} ช่อง`; }) };
+    gachaRefresh(); renderMarket();
+  } catch (e) { toast(errMsg(e)); }
+}
+
+function gachaRender(body, card, row) {
+  const fac = state.profile?.faction, cost = GACHA_COST[fac]; if (!cost) return;
+  const safe = state.zone === "safe", left = state.gaMeta ? Object.keys(state.gaMeta).length : null, enough = mktHave(cost.id) >= cost.qty;
+  const box = card("🎰 ตู้กาชา");
+  box.append(mk("span", "muted", `หมุน 1 ครั้ง = จ่าย ${mktLabel(cost.id)} ×${cost.qty} (ของที่จ่ายหายไปจากระบบ) • ได้ของเอาชีวิตรอด 1 ชุดจากกองของ${FACTION[fac].name} • ของหายากมีจำนวนจำกัด หมดแล้วหมดเลย • หมุนได้เฉพาะใน Safe Zone • ถ้าของในกระเป๋าครบ 99 ส่วนเกินจะหาย`));
+  const r = row();
+  r.append(mk("span", "", left === null ? "กำลังโหลด…" : left > 0 ? `ในตู้เหลือ ${left} ช่อง` : "ตู้ว่าง — รอแอดมินเติมของ"));
+  if (state.gaTicket) r.append(btn("รับของที่ค้างอยู่", () => gachaClaim(), "btn primary mini"));
+  else {
+    const b = btn(state.gaBusy ? "กำลังหมุน…" : "หมุน", gachaPull, "btn primary mini");
+    b.disabled = !!state.gaBusy || !safe || !enough || !left;
+    b.title = !safe ? "หมุนได้เฉพาะใน Safe Zone" : !enough ? "ของไม่พอ" : !left ? "ตู้ว่าง" : "";
+    r.append(b);
+  }
+  box.append(r);
+  if (state.gaLast) box.append(mk("span", "", `ครั้งล่าสุดได้: ${mktLabel(state.gaLast.id)} ×${state.gaLast.qty}`));
+  if (isStaff()) gachaAdminPanel(box, row);
+  body.append(box);
+}
+function gachaAdminPanel(box, row) {
+  const F = state.gaForm; if (!F.f) F.f = state.profile?.faction || "human";
+  const wrap = mk("div"); wrap.style.cssText = "border-top:1px dashed var(--line);margin-top:6px;padding-top:8px;display:grid;gap:6px";
+  wrap.append(mk("b", "", "🛠️ แอดมิน — จัดการตู้"));
+  const r0 = row(); r0.append(mk("span", "", "ตู้ฝั่ง"), mktSelect(["human", "zombie"].map((x) => x), F.f, (v) => { F.f = v; if (!GACHA_ITEMS[v].includes(F.id)) F.id = GACHA_ITEMS[v][0]; renderMarket(); }));
+  r0.firstChild.nextSibling.querySelectorAll("option").forEach((o) => { o.textContent = FACTION[o.value].icon + " " + FACTION[o.value].name; });
+  if (!GACHA_ITEMS[F.f].includes(F.id)) F.id = GACHA_ITEMS[F.f][0];
+  const r1 = row(), num = (key, max) => { const i = mk("input"); i.type = "number"; i.min = 1; i.max = max; i.value = F[key]; i.style.cssText = "width:60px"; i.addEventListener("input", () => { F[key] = i.value; }); return i; };
+  r1.append(mk("span", "", "ของ"), mktSelect(GACHA_ITEMS[F.f], F.id, (v) => { F.id = v; }), mk("span", "muted", "ชิ้น/ช่อง"), num("qty", GACHA_QTY_MAX), mk("span", "muted", "× ช่อง"), num("n", 100));
+  const r2 = row(); r2.append(btn("เพิ่มเข้าตู้", () => gachaAdminAdd(F.f, F.id, F.qty, F.n), "btn primary mini"), btn("เติมกองเริ่มต้น 100 ช่อง", () => gachaAdminSeed(F.f), "btn ghost mini"));
+  const r3 = row(); r3.append(btn("ดูของที่เหลือ", () => gachaAdminPeek(F.f), "btn ghost mini"), btn("ล้างตู้", () => gachaAdminClear(F.f), "btn danger mini"));
+  wrap.append(r0, r1, r2, r3);
+  if (state.gaPeek && state.gaPeek.f === F.f) { const pk = mk("div", "muted", state.gaPeek.rows.length ? "ในตู้ตอนนี้: " + state.gaPeek.rows.join(" • ") : "ตู้ว่าง"); wrap.append(pk); }
+  wrap.append(mk("span", "muted", `ใส่ได้เฉพาะของเอาชีวิตรอดของฝั่งนั้น (ไม่มีอาวุธ) ชิ้นละ ≤ ${GACHA_QTY_MAX} ต่อช่อง — ผู้เล่นเห็นแค่จำนวนช่อง ไม่เห็นว่าข้างในคืออะไร`));
+  box.append(wrap);
 }
