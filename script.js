@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1914";
+const APP_VERSION = "2026-10-03.1942";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -189,7 +189,23 @@ const ITEMS = {
   stim_shot: { name: "ยากระตุ้น", icon: "💊", type: "consumable", stamina: 60 },
   choco_bar: { name: "ช็อกโกแลตแท่ง", icon: "🍫", type: "consumable", food: 10, stamina: 15 },
   // อาหารรองของซอมบี้: ค้นหาเจอได้เฉพาะฝั่งซอมบี้ และกินได้เฉพาะซอมบี้ (ค่าอาหารต้องตรงกับ rules)
-  rotten_meat: { name: "เนื้อเน่า", icon: "🥩", type: "consumable", food: 20, zombieOnly: true }
+  rotten_meat: { name: "เนื้อเน่า", icon: "🥩", type: "consumable", food: 20, zombieOnly: true },
+  // ชุดสวมใส่ (มนุษย์ 2 ช่อง: เกราะ arm / อุปกรณ์เสริม acc) และอวัยวะกลายพันธุ์ (ซอมบี้ 3 ช่อง: เขี้ยว mf / หนัง mh / จมูก mn)
+  // type "gear" = ซ้อนกันได้เหมือนของสิ้นเปลือง (ช่อง = id) แต่ "ใช้" ไม่ได้ ต้องกด "สวม" / ผลอยู่ในส่วนที่ 20 ท้ายไฟล์ / ตัวเลข red ต้องตรงกับ GEAR_FX
+  rag_vest: { name: "เสื้อผ้าพันตัว", icon: "🧥", type: "gear", slot: "arm", red: 5 },
+  scrap_plate: { name: "เกราะเศษเหล็ก", icon: "🛡️", type: "gear", slot: "arm", red: 10 },
+  riot_vest: { name: "เสื้อปราบจลาจล", icon: "🦺", type: "gear", slot: "arm", red: 15 },
+  army_vest: { name: "เกราะทหาร", icon: "🪖", type: "gear", slot: "arm", red: 20 },
+  lucky_charm: { name: "เครื่องรางนำโชค", icon: "🍀", type: "gear", slot: "acc" },
+  headlamp: { name: "ไฟฉายคาดหัว", icon: "🔦", type: "gear", slot: "acc" },
+  gas_mask: { name: "หน้ากากกันแก๊ส", icon: "😷", type: "gear", slot: "acc" },
+  toolkit: { name: "กล่องเครื่องมือ", icon: "🛠️", type: "gear", slot: "acc" },
+  mut_fang1: { name: "เขี้ยวแหลม", icon: "🦷", type: "gear", slot: "mf", zombieOnly: true },
+  mut_fang2: { name: "เขี้ยวเหล็กไน", icon: "🐍", type: "gear", slot: "mf", zombieOnly: true },
+  mut_hide1: { name: "หนังหนา", icon: "🦴", type: "gear", slot: "mh", red: 8, zombieOnly: true },
+  mut_hide2: { name: "เกล็ดซาก", icon: "🐢", type: "gear", slot: "mh", red: 16, zombieOnly: true },
+  mut_nose1: { name: "จมูกไว", icon: "👃", type: "gear", slot: "mn", zombieOnly: true },
+  mut_nose2: { name: "จมูกล่าซาก", icon: "🐽", type: "gear", slot: "mn", zombieOnly: true }
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
@@ -205,7 +221,11 @@ const RECIPES = {
   antidote: { need: { chem: 2, scrap: 1 }, out: "antidote", qty: 1 },
   trauma_kit: { need: { medkit: 1, bandage: 2, chem: 1 }, out: "trauma_kit", qty: 1 },
   soup: { need: { canned_food: 1, water: 1 }, out: "soup", qty: 1 },
-  stim_shot: { need: { chem: 3, energy_drink: 1 }, out: "stim_shot", qty: 1 }
+  stim_shot: { need: { chem: 3, energy_drink: 1 }, out: "stim_shot", qty: 1 },
+  rag_vest: { need: { scrap: 5 }, out: "rag_vest", qty: 1 },
+  scrap_plate: { need: { scrap: 10, chem: 2 }, out: "scrap_plate", qty: 1 },
+  headlamp: { need: { scrap: 4, energy_drink: 1 }, out: "headlamp", qty: 1 },
+  toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -272,7 +292,7 @@ const DAY_CYCLE = 100 * 60000, NIGHT_START = 60 * 60000;
 const NIGHT_MOD = { dmod: 2, zmod: 10, nmod: 0 };
 const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
-const nightMod = (z) => (z !== "safe" && isNight() ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
+const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
 const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z)));
 function effectiveDrops(z) {
@@ -285,15 +305,22 @@ function effectiveDrops(z) {
 
 // เนื้อเน่า: น้ำหนักดรอปเพิ่มเฉพาะฝั่งซอมบี้ (นอก Safe Zone)
 const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10, safe: 6 };
-function humanDrops(z) { const d = effectiveDrops(z), w = BOSS_W[z]; return w ? [...d, { id: "boss", w }] : d; }   // ตารางค้นหาของมนุษย์ = ตารางโซน + โอกาสเจอบอส
+function humanDrops(z) {
+  const d = effectiveDrops(z), w = BOSS_W[z], g = GEAR_DROPS[z];
+  let t = w ? [...d, { id: "boss", w }] : d;
+  if (g) t = [...t, ...Object.entries(g).map(([id, gw]) => ({ id, w: gw }))];   // ชุดสวมใส่ประจำโซน
+  return t;
+}   // ตารางค้นหาของมนุษย์ = ตารางโซน + โอกาสเจอบอส
 // ซอมบี้: "เจอซอมบี้" = ตามรอยฝูงไปเจอซากที่ทิ้งไว้ (เนื้อเน่า) แทนที่จะเมินไปเฉยๆ → ฝูงบุก/กำแพงพังจึงเป็นข่าวดีของฝั่งซอมบี้
 function zombieDrops(z) {
-  const d = effectiveDrops(z).map((x) => x.id === "zombie" ? { id: "rotten_meat", w: x.w * 0.4 } : x), w = ZOMBIE_EXTRA[z];
-  return w ? [...d, { id: "rotten_meat", w }] : d;
+  const d = effectiveDrops(z).map((x) => x.id === "zombie" ? { id: "rotten_meat", w: x.w * 0.4 } : x), w = ZOMBIE_EXTRA[z], m = MUT_DROPS[z];
+  let t = w ? [...d, { id: "rotten_meat", w }] : d;
+  if (m) t = [...t, ...Object.entries(m).map(([id, mw]) => ({ id, w: mw }))];   // อวัยวะกลายพันธุ์ประจำโซน
+  return t;
 }
 
 function dangerInfo(id) {
-  const drops = effectiveDrops(id), total = drops.reduce((t, d) => t + d.w, 0) || 1;
+  const drops = gearTable(effectiveDrops(id)), total = drops.reduce((t, d) => t + d.w, 0) || 1;
   const chance = Math.round((100 * (drops.find((d) => d.id === "zombie")?.w || 0)) / total);
   const level = effDanger(id);
   const tier = level === 0 ? 0 : level <= 3 ? 1 : level <= 6 ? 2 : level <= 8 ? 3 : 4;
@@ -513,9 +540,16 @@ function openGuide() {
   sec("ฝ่ายซอมบี้", [
     "กินอาหารคนทั่วไปไม่ได้ ต้องหาอาหารจากการกัดผู้เล่นหรือเก็บ 🥩 เนื้อเน่า (+20) ที่ค้นเจอนอก Safe Zone",
     "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง",
+    "อวัยวะกลายพันธุ์ 3 ช่อง (ได้จากการค้นหาและภารกิจ): 🦷 เขี้ยว = ทุบกำแพงแรงขึ้น • 🦴 หนัง = ลดดาเมจที่โดน • 👃 จมูก = เจอเนื้อเน่าบ่อยขึ้น — เปิดกระเป๋าแล้วกด “สวม”",
     `ใน Safe Zone ซอมบี้ทุบกำแพงได้ (−${SMASH_DMG} HP กำแพงต่อครั้ง เสียพลังงาน ${SMASH_STAM} คูลดาวน์ ${SMASH_CD / 1000} วิ) ถ้ากำแพงพัง จะล่าเหยื่อในค่ายได้`,
     `ทุบครบทุก ${SMASH_EVERY} ครั้งได้ 🥩+1 • คนทุบจนพังได้ 🥩+${SMASH_BREAK_BONUS} • แชมป์ทุบสูงสุดประจำสัปดาห์ (อย่างน้อย ${PRIZE_MIN} ครั้ง) รับ 🥩+${PRIZE_MEAT} ได้สัปดาห์ถัดไป`,
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
+  ]);
+  sec("ชุดสวมใส่ (ฝ่ายมนุษย์)", [
+    "มี 2 ช่อง: 🛡️ เกราะ (ลดดาเมจที่โดน 5–20% ทั้งตอนโดนซอมบี้ โดนผู้เล่นตีสู้ และโดนบอส) และ 🎒 อุปกรณ์เสริม (🍀 เครื่องราง ค้นเจอของง่ายขึ้น • 🔦 ไฟฉาย กลางคืนไม่อันตรายขึ้น • 😷 หน้ากาก เจอซอมบี้น้อยลง • 🛠️ กล่องเครื่องมือ ค้นลึกเสียพลังงานน้อยลง)",
+    "ได้จากการค้นหา (แต่ละโซนมีชุดประจำของมัน) คราฟต์ที่ Safe Zone (เสื้อผ้าพันตัว เกราะเศษเหล็ก ไฟฉาย กล่องเครื่องมือ) และรางวัลภารกิจรายวัน — เปิดกระเป๋าแล้วกด “สวม”",
+    "ถ้าทิ้งหรือทำลายชุดที่สวมอยู่ ชุดจะถูกถอดอัตโนมัติ ชุดไม่หายตอนตาย",
+    "ภารกิจรายวันผูกโซน: ทุกวันมีภารกิจประจำวันนั้น (ค้นหา/โจมตี ฯลฯ ในโซนที่กำหนด) ดูที่ปุ่ม ภารกิจ"
   ]);
   sec("ของบนพื้น", [
     "กดวางไอเทมลงพื้นเพื่อแบ่งให้คนในโซนเดียวกัน ใครอยู่ในโซนก็เก็บได้",
@@ -1102,6 +1136,7 @@ function listenBites() {
       
       await update(ref(db), u);
       logLine((gain > 0 ? `🦷 คุณกัดเหยื่อ! อาหาร +${gain}` : "🦷 คุณกัดเหยื่อ (อิ่มอยู่แล้ว)") + evoMsg, "combat");
+      questBump("bite");
     } catch (e) { console.error(e); }
     finally { state.claimingBite = false; }
   });
@@ -1201,6 +1236,16 @@ function renderInv() {
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
+    } else if (def.type === "gear") {
+      const worn = state.profile?.[def.slot] === it.id, mine = (state.profile?.faction === "zombie") === !!def.zombieOnly;
+      if (worn) li.classList.add("equipped");
+      const lbl = mk("span", "", `${def.icon} ${def.name} ×${it.qty}`); lbl.append(mk("small", "muted", ` (${GEAR_SLOTS[def.slot]}: ${GEAR_FX[it.id]})`)); li.append(lbl);
+      const btnGrp = mk("div", "row-btns");
+      const wb = btn(worn ? "ถอด" : "สวม", () => gearToggle(it.id), "btn ghost mini"); wb.disabled = !mine; if (!mine) wb.title = def.zombieOnly ? "เฉพาะซอมบี้" : "เฉพาะมนุษย์";
+      btnGrp.append(wb);
+      btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      li.append(btnGrp);
     } else {
       const lbl = mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`);
       const fx = effectText(def); if (fx) lbl.append(mk("small", "muted", ` (${fx})`));
@@ -1215,7 +1260,7 @@ function renderInv() {
     ul.append(li);
   });
   if (!ul.children.length) ul.append(mk("li", "empty", "กระเป๋าว่างเปล่า"));
-  renderCraft();
+  renderCraft(); gearBar(); gearAutoFix();
 }
 
 function renderCraft() {
@@ -1579,7 +1624,8 @@ async function scavengeOnce() {
   {
     const isZombie = p.faction === "zombie";
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
-    if (state.deep && !starving) table = deepTable(table, isZombie);   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
+    if (state.deep && !starving) table = deepTable(table, isZombie);
+    table = gearTable(table);   // เครื่องราง/หน้ากาก/จมูกกลายพันธุ์ ปรับน้ำหนักตาราง   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
     let found = rollDrop(table);
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
@@ -1648,9 +1694,9 @@ async function zombieEncounter(u, hpNow) {
   const rollTxt = `🎲 ทอย ${r}${bonus ? ` + ${bonus} (${w.def.name})` : ""} = ${total}`;
   let dmg = 0, verdict, loot = null, won = false;
 
-  if (r === 1) { dmg = Math.min(40, Math.round(base * 1.5)); verdict = `พลาดท่า! ซอมบี้งับเต็มแรง −${dmg} HP`; }
-  else if (total <= 3) { dmg = base; verdict = `ซอมบี้พุ่งออกมาจากที่ซ่อน โดนกัด −${dmg} HP`; }
-  else if (total === 4) { dmg = Math.ceil(base / 2); verdict = `ถอยทันแต่ยังโดนข่วน −${dmg} HP`; }
+  if (r === 1) { dmg = gearCut(Math.min(40, Math.round(base * 1.5))); verdict = `พลาดท่า! ซอมบี้งับเต็มแรง −${dmg} HP`; }
+  else if (total <= 3) { dmg = gearCut(base); verdict = `ซอมบี้พุ่งออกมาจากที่ซ่อน โดนกัด −${dmg} HP`; }
+  else if (total === 4) { dmg = gearCut(Math.ceil(base / 2)); verdict = `ถอยทันแต่ยังโดนข่วน −${dmg} HP`; }
   else if (total === 5) { verdict = "หลบและหนีออกมาได้อย่างหวุดหวิด"; }
   else { won = true; verdict = w ? `ฟาด${w.def.name}ใส่จนซอมบี้ล้มลง!` : "สู้ซอมบี้ล้มได้ด้วยมือเปล่า!"; }
 
@@ -1903,7 +1949,7 @@ async function bossRound(action) {
       if (Math.random() < b.flee) { u[`bossFights/${uid}`] = null; strike = false; line = "🏃 คุณวิ่งหนีออกมาได้!"; }
       else line = "🏃 หนีไม่พ้น! มันขวางทางไว้";
     }
-    if (strike) { const s = strikeWith(b, skillUsed); hp = Math.max(0, hp - s.total); line += ` • ${s.text}`; }
+    if (strike) { const s = strikeWith(b, skillUsed), cut = gearCut(s.total); hp = Math.max(0, hp - cut); line += ` • ${s.text}${cut < s.total ? ` (🛡️ ชุดลดเหลือ −${cut})` : ""}`; }
     if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
@@ -1942,7 +1988,7 @@ $("boss-claim").addEventListener("click", claimBossReward);
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
    ข้อมูล: worldBosses/{zone} (สถานะบอส) / worldBossHits/{zone}/{uid} (ดาเมจสะสมของแต่ละคน) / worldBossClaims/{zone}/{uid} (รับรางวัลแล้ว)
    ========================================================= */
-const WB_REWARD_IDS = [...Object.keys(ITEMS).filter((id) => ITEMS[id].type !== "material" || id === "scrap" || id === "chem")].filter((id) => id !== "rotten_meat");
+const WB_REWARD_IDS = [...Object.keys(ITEMS).filter((id) => (ITEMS[id].type !== "material" || id === "scrap" || id === "chem") && ITEMS[id].type !== "gear")].filter((id) => id !== "rotten_meat");
 const wbOf = (z) => { const b = state.wb?.[z]; return b && typeof b.hp === "number" && typeof b.startedAt === "number" ? b : null; };
 const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow();
 const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
@@ -2378,6 +2424,7 @@ async function resolveAttack(key, a) {
   let dmg = landed ? Math.max(1, rawDmg - tough) : 0;
   if (braced) dmg = Math.max(1, Math.floor(dmg * (1 - bi.pct / 100)));
   if (landed) dmg = evoCutDmg(dmg);   // ซากหนาขั้น 2
+  if (landed) dmg = gearCut(dmg);     // เกราะ / หนังกลายพันธุ์
   const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
@@ -3173,7 +3220,7 @@ function evoBonusAt(k, e) {
 }
 function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
 
-function searchCost() { return (evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? 2 : 1); }                 // ค้นหาไว: เสียพลังงาน −20%
+function searchCost() { return Math.ceil((evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? (gearHas("toolkit") ? 1.6 : 2) : 1)); }                 // ค้นหาไว: เสียพลังงาน −20%
 function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.9)) : dmg; }   // ไขมันเกราะ: −10%
 function evoTitleKey() { const e = state.evo; return !e || state.profile?.faction !== "zombie" ? null : e.h === 4 ? "hunter" : e.g === 4 ? "giant" : e.s === 4 ? "shade" : null; }
 function evoTitleText(key) { const L = EVO_LINES[key]; return L ? `${L.icon}${L.title}` : ""; }
@@ -3791,7 +3838,7 @@ function gachaAdminPanel(box, row) {
    รอบเวลาใช้เวลาไทย (UTC+7): รายวันรีเซ็ตเที่ยงคืน / รายสัปดาห์รีเซ็ตเที่ยงคืนคืนวันอาทิตย์→จันทร์
    ========================================================= */
 const QP_PERIODS = [["daily", "📅 รายวัน"], ["weekly", "🗓️ รายสัปดาห์"], ["newbie", "🌱 ผู้เล่นใหม่ (ทำครั้งเดียว)"]];
-const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย";
+const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย, smash=ทุบกำแพง(ซอมบี้), bite=กัดเหยื่อ(ซอมบี้) — เควสรายวันผูกโซนใส่ฟิลด์ z=รหัสโซน และ dw=วันในสัปดาห์ (0=จันทร์…6=อาทิตย์)";
 const QP_GAP_MS = 4200;                       // rules: แต่ละเควสนับได้อย่างน้อยห่างกัน 4 วินาที
 const QP_TZ_MS = 7 * 3600000, QP_DAY_MS = 86400000;
 // ค่าเริ่มต้น (ปุ่ม "เติมเควสเริ่มต้น" ของเจ้าของ) — ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น (rules จำกัด) / f = จำกัดฝ่าย (ไม่ใส่ = ทั้งสองฝ่าย)
@@ -3828,7 +3875,7 @@ function qpResetIn(per, ms = serverNow()) {
 }
 function qpFmt(ms) { const m = Math.max(0, Math.ceil(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60); return d ? `${d} วัน ${h} ชม.` : h ? `${h} ชม. ${m % 60} นาที` : `${m} นาที`; }
 function qpList(per) {   // เควสที่ฝ่ายของฉันทำได้ เรียงตามรหัส
-  return Object.entries(state.qDefs?.[per] || {}).filter(([, d]) => d && !d.f || d && d.f === state.profile?.faction)
+  return Object.entries(state.qDefs?.[per] || {}).filter(([, d]) => d && (d.dw === undefined || d.dw === qpWd())).filter(([, d]) => d && !d.f || d && d.f === state.profile?.faction)
     .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }));
 }
 function qpState(per, qid) {
@@ -3845,6 +3892,7 @@ async function qpBumpRun(evName) {
   const uid = state.uid; if (!state.qDefs || !uid || !state.profile || state.profile.banned) return;
   for (const [per] of QP_PERIODS) for (const [qid, d] of qpList(per)) {
     if (d.ev !== evName) continue;
+    if (d.z && d.z !== state.zone) continue;   // เควสผูกโซน: นับเฉพาะตอนอยู่โซนนั้น (rules ตรวจโซนปัจจุบันซ้ำ)
     const x = qpState(per, qid);
     if (x.done || x.claimed) continue;
     if (x.n > 0 && serverNow() - x.ts < QP_GAP_MS) continue;   // ถี่เกินกว่าที่ rules ยอม — ครั้งนี้ไม่นับ
@@ -3922,7 +3970,7 @@ function qpRender() {
     if (!allClaimed) list.forEach(([qid, d]) => {
       const x = qpState(per, qid), rw = d.r && d.r[state.profile?.faction];
       const box = mk("div"); box.style.cssText = "display:grid;gap:4px;padding-top:6px;border-top:1px dashed var(--line)";
-      const r1 = row(); r1.append(mk("span", "", (x.claimed ? "✅ " : x.done ? "🎁 " : "▫️ ") + d.title), mk("span", "muted", `${x.n}/${d.need}`));
+      const r1 = row(); r1.append(mk("span", "", (x.claimed ? "✅ " : x.done ? "🎁 " : "▫️ ") + (d.z && ZONES[d.z] ? ZONES[d.z].icon + " " : "") + d.title), mk("span", "muted", `${x.n}/${d.need}`));
       const bar = mk("div"); bar.style.cssText = "height:6px;border-radius:3px;background:var(--line);overflow:hidden";
       const fill = mk("div"); fill.style.cssText = `height:100%;width:${Math.min(100, Math.round(x.n / d.need * 100))}%;background:var(--accent, #e0a030)`; bar.append(fill);
       const r2 = row(); r2.append(mk("span", "muted", rw ? `รางวัล: ${mktLabel(rw.id)} ×${rw.qty}` : ""));
@@ -3936,7 +3984,7 @@ function qpRender() {
   if (state.profile?.role === "owner") {
     const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
-    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini")); c.append(r); body.append(c);
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini")); c.append(r); body.append(c);
   }
 }
 
@@ -4034,7 +4082,7 @@ function wallRender() {
     box.append(row);
   } else if (p) {
     const cdLeft = Math.max(0, SMASH_CD - (serverNow() - (p.lastSmash || 0))), row = mk("div", "wall-btns");
-    const b = btn(`💢 ทุบกำแพง (−${SMASH_DMG} HP กำแพง • −${SMASH_STAM} พลังงาน)`, wallSmash, "btn danger mini");
+    const b = btn(`💢 ทุบกำแพง (−${SMASH_DMG + fangBonus()} HP กำแพง • −${SMASH_STAM} พลังงาน)`, wallSmash, "btn danger mini");
     b.disabled = state.wallBusy || broken || cdLeft > 0 || (p.hp || 0) <= 0; row.append(b);
     row.append(mk("span", "muted", broken ? "กำแพงพังแล้ว — เข้าไปล่าเหยื่อได้เลย" : cdLeft > 0 ? `รออีก ${Math.ceil(cdLeft / 1000)} วิ` : "คูลดาวน์ 30 วิ"));
     const nh = state.wallHit?.[state.uid]?.n || 0;
@@ -4060,7 +4108,7 @@ async function wallSmash() {
   const cur = curStamina(); if (cur < SMASH_STAM) return toast("พลังงานไม่พอ");
   state.wallBusy = true; wallRender();
   try {
-    const hp = Math.max(0, Math.floor(h) - SMASH_DMG), uid = state.uid;
+    const hp = Math.max(0, Math.floor(h) - SMASH_DMG - fangBonus()), uid = state.uid;
     const n = (state.wallHit?.[uid]?.n || 0) + 1, wk = wallWk(), wr = state.wallWeek, wn = (wr && wr.wk === wk ? wr.n : 0) + 1;
     const breaker = hp <= 0, meat = (n % SMASH_EVERY === 0 ? 1 : 0) + (breaker ? SMASH_BREAK_BONUS : 0);
     const u = {
@@ -4074,7 +4122,7 @@ async function wallSmash() {
     if (meat > 0) invAddUpdate(u, "rotten_meat", meat);
     await update(ref(db), u);
     logLine((breaker ? "💥 คุณทุบกำแพงจนพังทลาย! ค่ายไม่ปลอดภัยอีกต่อไป" : `💢 คุณทุบกำแพงค่าย กำแพงเหลือ ${hp}/${WALL_MAX}`) + (meat ? ` • ได้ 🥩 เนื้อเน่า +${meat}${breaker ? " (โบนัสทุบพัง)" : ""}` : ""), "combat");
-    setTimeout(wallRender, SMASH_CD + 300);
+    setTimeout(wallRender, SMASH_CD + 300); questBump("smash");
   } catch (e) { toast(errMsg(e)); }
   finally { state.wallBusy = false; wallRender(); }
 }
@@ -4167,4 +4215,104 @@ function headCompactInit() {
     + ".chat-head.open #zone-danger,.chat-head.open #zone-time,.chat-head.open #zone-event{white-space:normal}";
   document.head.append(st);
   const t = $("zone-title"); if (t) t.addEventListener("click", () => t.closest(".chat-head")?.classList.toggle("open"));
+}
+
+
+/* =========================================================
+   20) ชุดสวมใส่ (มนุษย์) • อวัยวะกลายพันธุ์ (ซอมบี้) • เควสรายวันผูกโซน
+   - ของชนิด type "gear" ซ้อนได้ (ช่อง = id) สวมแล้วเก็บ id ไว้ที่ users/{uid}/{arm|acc|mf|mh|mn} (rules ตรวจว่ามีของในกระเป๋าและตรงฝ่าย/ช่อง)
+   - ผลลัพธ์ทั้งหมดเกิดฝั่ง client เท่านั้น (ลดดาเมจที่ตัวเองโดน / ปรับน้ำหนักตารางค้นหา / ต้นทุนค้นลึก) ยกเว้นเขี้ยวที่ rules รู้ (ทุบกำแพงแรงขึ้น +3/+6)
+   - ถ้าแก้ตัวเลข: GEAR_DROPS/MUT_DROPS ต้องตรงกับรายการโซนใน rules (ช่อง inventory) และ RECIPES ต้องตรงกับสูตรคราฟต์ใน rules
+   - เควสโซนรายวัน: นิยามอยู่ที่ config/questDefs/daily/zd{วัน}{h|z}{1-3} มี z (โซน) และ dw (วัน 0=จันทร์) — ปุ่มเจ้าของ “เติมเควสโซนรายวัน”
+   ========================================================= */
+const GEAR_SLOTS = { arm: "🛡️ เกราะ", acc: "🎒 อุปกรณ์", mf: "🦷 เขี้ยว", mh: "🦴 หนัง", mn: "👃 จมูก" };
+const GEAR_FX = {
+  rag_vest: "ลดดาเมจที่โดน 5%", scrap_plate: "ลดดาเมจที่โดน 10%", riot_vest: "ลดดาเมจที่โดน 15%", army_vest: "ลดดาเมจที่โดน 20%",
+  lucky_charm: "ค้นหาแล้ว “ไม่เจออะไร” น้อยลง 20%", headlamp: "กลางคืนไม่เพิ่มอันตรายตอนค้นหา", gas_mask: "เจอซอมบี้ตอนค้นหาน้อยลง 25%", toolkit: "ค้นลึกเสียพลังงาน ×1.6 แทน ×2",
+  mut_fang1: "ทุบกำแพงแรงขึ้น +3", mut_fang2: "ทุบกำแพงแรงขึ้น +6", mut_hide1: "ลดดาเมจที่โดน 8%", mut_hide2: "ลดดาเมจที่โดน 16%",
+  mut_nose1: "เจอเนื้อเน่าบ่อยขึ้น ×1.3", mut_nose2: "เจอเนื้อเน่าบ่อยขึ้น ×1.7 และไม่เจออะไรน้อยลง 20%"
+};
+const GEAR_DROPS = {   // ฝั่งมนุษย์ (น้ำหนักเทียบกับตารางโซน) — ต้องตรงกับ rules
+  ruins: { rag_vest: 3 }, mall: { rag_vest: 2, lucky_charm: 2 }, hospital: { gas_mask: 3, riot_vest: 1 }, police: { riot_vest: 2, headlamp: 2, gas_mask: 1 },
+  forest: { lucky_charm: 1, rag_vest: 1 }, factory: { scrap_plate: 3, headlamp: 2, toolkit: 3 }, port: { scrap_plate: 2, toolkit: 2, lucky_charm: 1 },
+  base: { army_vest: 2, riot_vest: 2, gas_mask: 2 }, tunnel: { army_vest: 1, headlamp: 2, toolkit: 1 }
+};
+const MUT_DROPS = {    // ฝั่งซอมบี้
+  ruins: { mut_hide1: 2, mut_nose1: 3, mut_fang1: 2 }, mall: { mut_nose1: 3, mut_fang1: 2 }, hospital: { mut_hide1: 2, mut_nose2: 1 },
+  police: { mut_fang1: 3, mut_hide1: 2, mut_fang2: 1 }, forest: { mut_nose1: 4, mut_hide1: 2 }, factory: { mut_hide1: 2, mut_fang1: 2, mut_hide2: 1 },
+  port: { mut_nose1: 3, mut_hide1: 2, mut_nose2: 1 }, base: { mut_fang2: 1, mut_hide2: 1, mut_fang1: 2 }, tunnel: { mut_fang2: 2, mut_hide2: 2, mut_nose2: 2 }
+};
+const GEAR_SLOT_BY_FAC = { human: ["arm", "acc"], zombie: ["mf", "mh", "mn"] };
+// ของที่สวมอยู่จริง: ต้องมี id นั้นในช่อง และยังมีของในกระเป๋า
+function gearId(slot) { const id = state.profile?.[slot]; return id && ITEMS[id]?.slot === slot && (state.inv?.[id]?.qty || 0) > 0 ? id : null; }
+function gearHas(id) { return !!ITEMS[id] && gearId(ITEMS[id].slot) === id; }
+function gearRed() { let red = 0; for (const s of ["arm", "mh"]) { const id = gearId(s); if (id) red += ITEMS[id].red || 0; } return Math.min(40, red); }
+function gearCut(dmg) { const red = gearRed(); return dmg > 0 && red ? Math.max(1, Math.round(dmg * (1 - red / 100))) : dmg; }
+function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang1" ? 3 : 0; }
+function gearTable(t) {
+  let out = t;
+  if (gearHas("lucky_charm")) out = out.map((d) => d.id === null ? { ...d, w: d.w * 0.8 } : d);
+  if (gearHas("gas_mask")) out = out.map((d) => d.id === "zombie" ? { ...d, w: d.w * 0.75 } : d);
+  const n = gearId("mn");
+  if (n) out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * (n === "mut_nose2" ? 1.7 : 1.3) } : d.id === null && n === "mut_nose2" ? { ...d, w: d.w * 0.8 } : d);
+  return out;
+}
+async function gearToggle(id) {
+  const d = ITEMS[id], p = state.profile; if (!d || !p || state.gearBusy) return;
+  if ((p.faction === "zombie") !== !!d.zombieOnly) return toast(d.zombieOnly ? "อวัยวะกลายพันธุ์ใช้ได้เฉพาะซอมบี้" : "ชุดนี้ใช้ได้เฉพาะมนุษย์");
+  if (!(state.inv?.[id]?.qty > 0)) return;
+  const worn = p[d.slot] === id; state.gearBusy = true;
+  try { await set(ref(db, `users/${state.uid}/${d.slot}`), worn ? null : id); toast(worn ? `ถอด ${d.name} แล้ว` : `สวม ${d.name} แล้ว — ${GEAR_FX[id]}`); }
+  catch (e) { toast(errMsg(e)); } finally { state.gearBusy = false; }
+}
+// ของหมดจากกระเป๋า (ทิ้ง/ขาย/ทำลาย) → ถอดให้อัตโนมัติ ไม่ให้ค้างอยู่ในช่อง
+function gearAutoFix() {
+  const p = state.profile; if (!p || !state.invLoaded || state.gearFixing) return;
+  for (const slot of ["arm", "acc", "mf", "mh", "mn"]) {
+    const id = p[slot]; if (!id) continue;
+    const ok = (state.inv?.[id]?.qty || 0) > 0 && GEAR_SLOT_BY_FAC[p.faction]?.includes(slot);
+    if (ok) continue;
+    state.gearFixing = true;
+    set(ref(db, `users/${state.uid}/${slot}`), null).catch(() => {}).finally(() => { state.gearFixing = false; });
+    return;
+  }
+}
+function gearBar() {
+  const ul = $("inv-list"), p = state.profile; if (!ul || !p) return;
+  let bar = $("gear-bar");
+  if (!bar) { bar = mk("div", "muted"); bar.id = "gear-bar"; bar.style.cssText = "margin:4px 0 8px;font-size:13px"; ul.before(bar); }
+  const slots = GEAR_SLOT_BY_FAC[p.faction] || [];
+  bar.textContent = slots.map((s) => `${GEAR_SLOTS[s]}: ${gearId(s) ? ITEMS[gearId(s)].icon + " " + ITEMS[gearId(s)].name : "—"}`).join(" • ") + (gearRed() ? ` • ลดดาเมจรวม ${gearRed()}%` : "");
+}
+
+// ---- เควสรายวันผูกโซน (นิยามสร้างจากสูตรนี้ เจ้าของกดเติมได้) ----
+const WD_NAMES = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"];
+const qpWd = () => (qpDayKey(serverNow()) + 3) % 7;   // 0 = จันทร์ (เวลาไทย)
+function zoneQuestSeed() {
+  const Z = ["ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel"];
+  const HR = { ruins: ["canned_food", 2], mall: ["soup", 1], hospital: ["medkit", 1], police: ["scrap", 4], forest: ["moss", 3], factory: ["chem", 2], port: ["water_jug", 1], base: ["army_meal", 1], tunnel: ["trauma_kit", 1] };
+  const R = (id, qty) => ({ id, qty }), zn = (z) => ZONES[z].name;
+  const H3 = [["hit", 3, "rag_vest"], ["search", 8, "lucky_charm"], ["craft", 2, "headlamp"], ["hit", 4, "gas_mask"], ["wall", 4, "toolkit"], ["hit", 6, "riot_vest"], ["search", 10, "scrap_plate"]];
+  const Z3 = [["smash", 3, "mut_hide1"], ["search", 8, "mut_nose1"], ["bite", 2, "mut_fang1"], ["smash", 5, "mut_hide1"], ["hit", 3, "mut_nose1"], ["bite", 3, "mut_fang1"], ["search", 10, "mut_nose1"]];
+  const EV = { search: "ค้นหา", hit: "โจมตี", craft: "คราฟต์", wall: "ซ่อมกำแพงค่าย", smash: "ทุบกำแพงค่าย", bite: "กัดเหยื่อ" };
+  const out = {};
+  for (let d = 0; d < 7; d++) {
+    const z1 = Z[(d * 2) % 9], z2 = Z[(d * 2 + 1) % 9], z3 = Z[(d * 2 + 5) % 9];
+    const [h1id, h1q] = HR[z1], [h2id] = HR[z2];
+    out[`zd${d}h1`] = { title: `ค้นหา 4 ครั้งที่${zn(z1)}`, ev: "search", need: 4, z: z1, dw: d, f: "human", r: { human: R(h1id, h1q), zombie: R("water", 1) } };
+    out[`zd${d}h2`] = { title: `ค้นหา 6 ครั้งที่${zn(z2)}`, ev: "search", need: 6, z: z2, dw: d, f: "human", r: { human: R("scrap", 3), zombie: R("water", 1) } };
+    const [e3, n3, g3] = H3[d], needZ = ["hit", "search"].includes(e3);
+    out[`zd${d}h3`] = { title: `${EV[e3]} ${n3} ครั้ง${needZ ? "ที่" + zn(z3) : ""}`, ev: e3, need: n3, ...(needZ ? { z: z3 } : {}), dw: d, f: "human", r: { human: R(g3, 1), zombie: R("water", 1) } };
+    out[`zd${d}z1`] = { title: `ค้นหา 4 ครั้งที่${zn(z2)}`, ev: "search", need: 4, z: z2, dw: d, f: "zombie", r: { human: R("water", 1), zombie: R("rotten_meat", 2) } };
+    out[`zd${d}z2`] = { title: `ค้นหา 6 ครั้งที่${zn(z1)}`, ev: "search", need: 6, z: z1, dw: d, f: "zombie", r: { human: R("water", 1), zombie: R("rotten_meat", 3) } };
+    const [e4, n4, g4] = Z3[d], zz = ["hit", "search", "bite"].includes(e4);
+    out[`zd${d}z3`] = { title: `${EV[e4]} ${n4} ครั้ง${zz ? "ที่" + zn(z3) : ""}`, ev: e4, need: n4, ...(zz ? { z: z3 } : {}), dw: d, f: "zombie", r: { human: R("water", 1), zombie: R(g4, 1) } };
+  }
+  return out;
+}
+async function qpSeedZone() {
+  if (state.profile?.role !== "owner") return;
+  if (!confirm("เติมเควสโซนรายวัน?\nจะเพิ่ม/อัปเดตเควส zd0h1…zd6z3 (42 ข้อ) ใน config/questDefs/daily โดยไม่แตะเควสอื่น")) return;
+  try { await update(ref(db, "config/questDefs/daily"), zoneQuestSeed()); toast("เติมเควสโซนรายวันแล้ว"); }
+  catch (e) { console.error("qpSeedZone", e?.code || e); toast(errMsg(e)); }
 }
