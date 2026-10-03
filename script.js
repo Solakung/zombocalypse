@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1859";
+const APP_VERSION = "2026-10-03.1914";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -514,6 +514,7 @@ function openGuide() {
     "กินอาหารคนทั่วไปไม่ได้ ต้องหาอาหารจากการกัดผู้เล่นหรือเก็บ 🥩 เนื้อเน่า (+20) ที่ค้นเจอนอก Safe Zone",
     "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง",
     `ใน Safe Zone ซอมบี้ทุบกำแพงได้ (−${SMASH_DMG} HP กำแพงต่อครั้ง เสียพลังงาน ${SMASH_STAM} คูลดาวน์ ${SMASH_CD / 1000} วิ) ถ้ากำแพงพัง จะล่าเหยื่อในค่ายได้`,
+    `ทุบครบทุก ${SMASH_EVERY} ครั้งได้ 🥩+1 • คนทุบจนพังได้ 🥩+${SMASH_BREAK_BONUS} • แชมป์ทุบสูงสุดประจำสัปดาห์ (อย่างน้อย ${PRIZE_MIN} ครั้ง) รับ 🥩+${PRIZE_MEAT} ได้สัปดาห์ถัดไป`,
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
   sec("ของบนพื้น", [
@@ -3948,6 +3949,8 @@ function qpRender() {
    - สภาพโซนรายวัน: สุ่มจากวัน (เวลาไทย) + โซน ทุกคนเห็นตรงกัน ไม่ต้องเก็บข้อมูล
    - ค้นลึก: พลังงาน ×2 ของหายากออกง่ายขึ้น แต่ซอมบี้มากขึ้น (ฝั่ง client ล้วน rules ไม่เปลี่ยน)
    ========================================================= */
+const SMASH_EVERY = 5, SMASH_BREAK_BONUS = 3, PRIZE_MEAT = 5, PRIZE_MIN = 10, WEEK_MS = 604800000, WEEK_OFF = -320400000;   // รางวัลทุบกำแพง (ตรงกับ inventory/wallWeek/wallTop/wallPrize ใน rules) / สัปดาห์เริ่มจันทร์ 00:00 เวลาไทย
+const wallWk = () => Math.floor((serverNow() + WEEK_OFF) / WEEK_MS);
 const SMASH_DMG = 10, SMASH_STAM = 15, SMASH_CD = 30000;   // ซอมบี้ทุบกำแพง: ต้องตรงกับ wall/safe + users.lastSmash ใน rules (คลาดเคลื่อน ≤2)
 const WALL_MAX = 1000, WALL_DIV = 259200, WALL_PER = 10, WALL_SPEND = 20, WALL_BREACH_Z = 25;
 
@@ -3977,7 +3980,10 @@ function wallListen() {
   if (state.wallOn || !state.uid) return; state.wallOn = true;
   state.wall = null; state.wallLog = {}; state.wallBusy = false; state.wallWasBroken = null; state.wallWarned = false;
   wallStyle();
-  state.wallHit = {};
+  state.wallHit = {}; state.wallTop = {}; state.wallWeek = null; state.wallPrize = null;
+  onValue(ref(db, "wallTop"), (s) => { state.wallTop = s.val() || {}; wallRender(); }, (e) => console.error("wallTop", e));
+  onValue(ref(db, "wallWeek/" + state.uid), (s) => { state.wallWeek = s.val(); wallRender(); }, (e) => console.error("wallWeek", e));
+  onValue(ref(db, "wallPrize/" + state.uid), (s) => { state.wallPrize = s.val(); wallRender(); }, (e) => console.error("wallPrize", e));
   onValue(ref(db, "wallHit"), (s) => { state.wallHit = s.val() || {}; wallRender(); }, (e) => console.error("wallHit", e));
   onValue(ref(db, "wall/safe"), (s) => {
     const before = wallHp(); state.wall = s.val(); const after = wallHp();
@@ -4031,7 +4037,15 @@ function wallRender() {
     const b = btn(`💢 ทุบกำแพง (−${SMASH_DMG} HP กำแพง • −${SMASH_STAM} พลังงาน)`, wallSmash, "btn danger mini");
     b.disabled = state.wallBusy || broken || cdLeft > 0 || (p.hp || 0) <= 0; row.append(b);
     row.append(mk("span", "muted", broken ? "กำแพงพังแล้ว — เข้าไปล่าเหยื่อได้เลย" : cdLeft > 0 ? `รออีก ${Math.ceil(cdLeft / 1000)} วิ` : "คูลดาวน์ 30 วิ"));
-    box.append(row);
+    const nh = state.wallHit?.[state.uid]?.n || 0;
+    box.append(row, mk("div", "muted wall-note", `ทุบสะสม ${nh} ครั้ง • อีก ${SMASH_EVERY - (nh % SMASH_EVERY)} ครั้งได้ 🥩+1 • ทุบจนพังได้ 🥩+${SMASH_BREAK_BONUS}`));
+    const due = prizeDue();
+    if (due) { const pb = btn(`🏆 รับรางวัลแชมป์สัปดาห์ก่อน (🥩+${PRIZE_MEAT})`, () => wallPrizeClaim(due), "btn primary mini"); pb.disabled = state.wallBusy; box.append(pb); }
+  }
+  {
+    const wk = wallWk(), tn = state.wallTop?.["w" + wk], tl = state.wallTop?.["w" + (wk - 1)];
+    if (tn) box.append(mk("div", "muted wall-note", `👑 ราชาทุบกำแพงสัปดาห์นี้: ${tn.name} (${tn.n})`));
+    if (tl) box.append(mk("div", "muted wall-note", `🏆 แชมป์สัปดาห์ก่อน: ${tl.name} (${tl.n})`));
   }
   const hits = Object.values(state.wallHit || {}).filter((x) => x && x.n).sort((a, b) => b.n - a.n).slice(0, 3);
   if (hits.length) box.append(mk("div", "muted wall-note", "💢 ผู้ทุบสูงสุด: " + hits.map((x) => `${x.name} (${x.n})`).join(" • ")));
@@ -4047,15 +4061,38 @@ async function wallSmash() {
   state.wallBusy = true; wallRender();
   try {
     const hp = Math.max(0, Math.floor(h) - SMASH_DMG), uid = state.uid;
-    await update(ref(db), {
+    const n = (state.wallHit?.[uid]?.n || 0) + 1, wk = wallWk(), wr = state.wallWeek, wn = (wr && wr.wk === wk ? wr.n : 0) + 1;
+    const breaker = hp <= 0, meat = (n % SMASH_EVERY === 0 ? 1 : 0) + (breaker ? SMASH_BREAK_BONUS : 0);
+    const u = {
       "wall/safe": { hp, ts: serverTimestamp() },
       [`users/${uid}/lastSmash`]: serverTimestamp(),
       [`users/${uid}/stamina`]: cur - SMASH_STAM, [`users/${uid}/staminaTs`]: serverTimestamp(),
-      [`wallHit/${uid}`]: { n: (state.wallHit?.[uid]?.n || 0) + 1, ts: serverTimestamp(), name: p.username }
-    });
-    logLine(hp <= 0 ? "💥 คุณทุบกำแพงจนพังทลาย! ค่ายไม่ปลอดภัยอีกต่อไป" : `💢 คุณทุบกำแพงค่าย กำแพงเหลือ ${hp}/${WALL_MAX}`, "combat");
+      [`wallHit/${uid}`]: { n, ts: serverTimestamp(), name: p.username },
+      [`wallWeek/${uid}`]: { wk, n: wn, name: p.username, ts: serverTimestamp() }
+    };
+    if (wn > (state.wallTop?.["w" + wk]?.n || 0)) u[`wallTop/w${wk}`] = { uid, name: p.username, n: wn, wk, ts: serverTimestamp() };   // ทำลายสถิติสัปดาห์นี้
+    if (meat > 0) invAddUpdate(u, "rotten_meat", meat);
+    await update(ref(db), u);
+    logLine((breaker ? "💥 คุณทุบกำแพงจนพังทลาย! ค่ายไม่ปลอดภัยอีกต่อไป" : `💢 คุณทุบกำแพงค่าย กำแพงเหลือ ${hp}/${WALL_MAX}`) + (meat ? ` • ได้ 🥩 เนื้อเน่า +${meat}${breaker ? " (โบนัสทุบพัง)" : ""}` : ""), "combat");
     setTimeout(wallRender, SMASH_CD + 300);
   } catch (e) { toast(errMsg(e)); }
+  finally { state.wallBusy = false; wallRender(); }
+}
+// แชมป์ทุบกำแพงสัปดาห์ที่ผ่านมา (อย่างน้อย PRIZE_MIN ครั้ง) รับ 🥩 ได้ครั้งเดียวต่อสัปดาห์
+function prizeDue() {
+  const wk = wallWk(), me = state.uid; let best = null;
+  for (const e of Object.values(state.wallTop || {})) if (e && e.uid === me && e.wk < wk && e.n >= PRIZE_MIN && (!state.wallPrize || state.wallPrize.wk < e.wk) && (!best || e.wk > best.wk)) best = e;
+  return best;
+}
+async function wallPrizeClaim(e) {
+  if (!state.profile || state.profile.faction !== "zombie" || state.wallBusy) return;
+  state.wallBusy = true; wallRender();
+  try {
+    const u = { [`wallPrize/${state.uid}`]: { wk: e.wk, ts: serverTimestamp() } };
+    invAddUpdate(u, "rotten_meat", PRIZE_MEAT);
+    await update(ref(db), u);
+    logLine(`🏆 คุณรับรางวัลแชมป์ทุบกำแพง (ทุบ ${e.n} ครั้ง) 🥩 +${PRIZE_MEAT}`, "system");
+  } catch (er) { toast(errMsg(er)); }
   finally { state.wallBusy = false; wallRender(); }
 }
 async function wallRepair(n) {
