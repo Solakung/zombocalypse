@@ -675,7 +675,17 @@ $("auth-form").addEventListener("submit", async (e) => {
     const email = await emailFor(name);
     if (mode === "login") await signInWithEmailAndPassword(auth, email, pw);
     else await register(name, email, pw);
-  } catch (ex) { $("login-error").textContent = "ทำรายการไม่สำเร็จ กรุณาลองใหม่"; }
+  } catch (ex) {
+    console.error("auth", ex);
+    const c = String(ex?.code || ex);
+    $("login-error").textContent =
+      c.includes("invalid-credential") || c.includes("wrong-password") ? (mode === "register" ? "ชื่อนี้เคยมีบัญชีอยู่แล้ว — ต้องใช้รหัสผ่านเดิมเท่านั้น (ถ้าจำไม่ได้ ให้แจ้งแอดมินลบบัญชีเดิม)" : "ชื่อหรือรหัสผ่านไม่ถูกต้อง")
+      : c.includes("user-not-found") ? "ไม่พบบัญชีนี้"
+      : c.includes("too-many-requests") ? "ลองหลายครั้งเกินไป รอสักครู่แล้วลองใหม่"
+      : c.includes("network") ? "เครือข่ายมีปัญหา ลองใหม่อีกครั้ง"
+      : c.includes("PERMISSION_DENIED") ? "สร้างตัวละครไม่สำเร็จ (ระบบไม่อนุญาต) — แจ้งแอดมินพร้อมชื่อตัวละคร"
+      : "ทำรายการไม่สำเร็จ กรุณาลองใหม่ (" + (ex?.code || "unknown") + ")";
+  }
   finally { $("auth-submit").disabled = false; }
 });
 
@@ -833,7 +843,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -893,6 +903,7 @@ async function enterZone(z, initial = false, moved = false) {
           [`users/${state.uid}/zone`]: z, [`users/${state.uid}/lastTravel`]: serverTimestamp(),
           [`users/${state.uid}/stamina`]: cur - cost, [`users/${state.uid}/staminaTs`]: serverTimestamp()
         });
+        questBump("travel");
       }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
@@ -989,7 +1000,7 @@ async function sendChat(raw) {
     trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
   };
   const cm = raw.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
-  if (!cm) return postZone(raw, "chat");
+  if (!cm) { await postZone(raw, "chat"); questBump("chat"); return; }
 
   const cmd = cm[1].toLowerCase(), rest = (cm[2] || "").trim();
   switch (cmd) {
@@ -1215,7 +1226,7 @@ async function craft(id) {
     u[`inventory/${state.uid}/${m}` + (left > 0 ? "/qty" : "")] = left > 0 ? left : null;
   }
   invAddUpdate(u, r.out, r.qty);
-  try { await update(ref(db), u); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+  try { await update(ref(db), u); questBump("craft"); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
   catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
@@ -1475,7 +1486,7 @@ async function useItem(slot) {
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
-  try { await update(ref(db), u); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
+  try { await update(ref(db), u); questBump("use"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
   catch (e) { toast(errMsg(e)); }
 }
 
@@ -1583,6 +1594,7 @@ async function scavengeOnce() {
       logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : "คุณค้นหา… ไม่เจออะไรเลย", "info");
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
+    questBump("search");
   }
 }
 
@@ -1873,6 +1885,7 @@ async function bossRound(action) {
     if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
+    if (action === "attack" || skillUsed?.type === "power") questBump("hit");
     bossLog(line);
     if (killed) { logLine(`${b.icon} คุณล้ม${b.name}ได้สำเร็จ!`, "combat"); bossLog(`🏆 ${b.name}ล้มลงแล้ว!`); }
     else if (hp === 0) logLine(`${b.icon} ${b.name}สู้คุณจนล้มลง…`, "system");
@@ -1991,6 +2004,7 @@ async function wbAttack(retry = true, skill = null) {
     }
     state.wbDbgU = u;
     await update(ref(db), u);
+    if (dmg > 0) { questBump("wboss"); questBump("hit"); }
     logLine(`${b.icon || "👹"} ${line}`, "combat");
     if (killed) logLine(`🏆 ${b.name}ล้มลงแล้ว! กดรับรางวัลได้เลย`, "system");
     else if (hp === 0) logLine(`${b.icon || "👹"} ${b.name}สู้คุณจนล้มลง…`, "system");
@@ -2241,6 +2255,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 
   try {
     await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, ...selfUpdate });
+    questBump("hit");
 
     if (attackerDied) {
       state.pending.delete(targetUid);
@@ -3347,6 +3362,7 @@ async function mktRun(u, okMsg, tag = "") {
     // timeout กัน mktBusy ค้างเป็น true (ปุ่มตลาดทุกปุ่มจะเงียบ) ถ้าคำขอไม่ตอบกลับ
     await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
     toast(okMsg);
+    return true;
   } catch (e) {
     console.error("market", tag, e?.code || e, JSON.stringify(u), "inv:", JSON.stringify(state.inv));   // ส่ง log นี้มาดูได้ว่าเขียนอะไรแล้วโดนปฏิเสธ
     toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : mktErr(e) + (tag ? ` [${tag}]` : ""));
@@ -3370,7 +3386,7 @@ async function mktCreate() {
   if (!n) return toast(`ลงขายได้สูงสุด ${MKT_SLOTS} ประกาศ — ยกเลิกอันเก่าก่อน`);
   const u = { [`market/${p.faction}/${state.uid}_${n}`]: { seller: state.uid, sellerName: p.username, give: { id: f.g, qty: gq }, want: { id: f.w, qty: wq }, ts: serverTimestamp() } };
   mktDebit(u, f.g, gq);
-  await mktRun(u, `ลงขาย ${ITEMS[f.g].name} ×${gq} แล้ว`);
+  if (await mktRun(u, `ลงขาย ${ITEMS[f.g].name} ×${gq} แล้ว`)) questBump("market");
 }
 // ซื้อ: จ่ายของที่ขอ → ได้ของในประกาศ • ผู้ขายได้ใบรับของ (ซื้อทั้งประกาศ ไม่แบ่งซื้อ)
 async function mktBuy(lid) {
@@ -3384,7 +3400,7 @@ async function mktBuy(lid) {
     [`marketPayouts/${l.seller}/${lid}_${l.ts}`]: { id: l.want.id, qty: l.want.qty, lid }
   };
   mktDebit(u, l.want.id, l.want.qty); mktCredit(u, l.give.id, l.give.qty);
-  await mktRun(u, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`);
+  if (await mktRun(u, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`)) questBump("market");
 }
 // ยกเลิกประกาศของตัวเอง: ของกลับเข้าคลัง
 async function mktCancel(lid) {
@@ -3552,7 +3568,7 @@ async function bmBuy(k) {
     [`marketTx/${state.uid}`]: { op: "bmbuy", k, ts: serverTimestamp() }
   };
   mktDebit(u, o.want.id, o.want.qty); mktCredit(u, o.give.id, o.give.qty);
-  await mktRun(u, `ซื้อ ${ITEMS[o.give.id].name} จากตลาดมืดแล้ว`);
+  if (await mktRun(u, `ซื้อ ${ITEMS[o.give.id].name} จากตลาดมืดแล้ว`)) questBump("market");
 }
 
 // วาดการ์ด "ตลาดมืด" ในหน้าต่างตลาดเดิม (renderMarket เรียกให้ พร้อมส่งตัวช่วย card/row มา)
@@ -3662,7 +3678,7 @@ async function gachaClaim(ticket) {
     state.gaTicket = null;
     if (prize) {
       state.gaLast = { id: prize.id, qty: prize.qty };
-      toast(`🎰 ได้ ${mktLabel(prize.id)} ×${prize.qty}`);
+      toast(`🎰 ได้ ${mktLabel(prize.id)} ×${prize.qty}`); questBump("gacha");
       logLine(`🎰 หมุนตู้กาชา ได้ ${mktLabel(prize.id)} ×${prize.qty}`, "system");
     } else toast("ช่องนี้ว่างแล้ว (แอดมินล้างตู้) — ตั๋วถูกยกเลิก");
   } catch (e) { console.error("gachaClaim", e?.code || e); toast("รับของไม่สำเร็จ — กด “รับของที่ค้างอยู่” อีกครั้ง"); }
@@ -3744,4 +3760,159 @@ function gachaAdminPanel(box, row) {
   if (state.gaPeek && state.gaPeek.f === F.f) { const pk = mk("div", "muted", state.gaPeek.rows.length ? "ในตู้ตอนนี้: " + state.gaPeek.rows.join(" • ") : "ตู้ว่าง"); wrap.append(pk); }
   wrap.append(mk("span", "muted", `ใส่ได้เฉพาะของเอาชีวิตรอดของฝั่งนั้น (ไม่มีอาวุธ) ชิ้นละ ≤ ${GACHA_QTY_MAX} ต่อช่อง — ผู้เล่นเห็นแค่จำนวนช่อง ไม่เห็นว่าข้างในคืออะไร`));
   box.append(wrap);
+}
+
+/* =========================================================
+   18) ภารกิจรายวัน / รายสัปดาห์ / ผู้เล่นใหม่
+   นิยามเควสอยู่ที่ config/questDefs (เจ้าของเขียนได้) — เพิ่ม/แก้เควสได้โดยไม่ต้องแตะ rules
+   ความคืบหน้า = questProg/{uid}/{daily|weekly|newbie}/{qid} = { k: รอบเวลา, n: จำนวน, ts, c?: รับรางวัลแล้ว }
+   รอบเวลาใช้เวลาไทย (UTC+7): รายวันรีเซ็ตเที่ยงคืน / รายสัปดาห์รีเซ็ตเที่ยงคืนคืนวันอาทิตย์→จันทร์
+   ========================================================= */
+const QP_PERIODS = [["daily", "📅 รายวัน"], ["weekly", "🗓️ รายสัปดาห์"], ["newbie", "🌱 ผู้เล่นใหม่ (ทำครั้งเดียว)"]];
+const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท";
+const QP_GAP_MS = 4200;                       // rules: แต่ละเควสนับได้อย่างน้อยห่างกัน 4 วินาที
+const QP_TZ_MS = 7 * 3600000, QP_DAY_MS = 86400000;
+// ค่าเริ่มต้น (ปุ่ม "เติมเควสเริ่มต้น" ของเจ้าของ) — ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น (rules จำกัด) / f = จำกัดฝ่าย (ไม่ใส่ = ทั้งสองฝ่าย)
+const QP_SEED = {
+  daily: {
+    d1: { title: "ออกค้นหา 5 ครั้ง", ev: "search", need: 5, r: { human: { id: "scrap", qty: 2 }, zombie: { id: "rotten_meat", qty: 1 } } },
+    d2: { title: "โจมตี 3 ครั้ง (ซอมบี้/บอส/ผู้เล่น)", ev: "hit", need: 3, r: { human: { id: "bandage", qty: 1 }, zombie: { id: "bandage", qty: 1 } } },
+    d3: { title: "ใช้ไอเทม 2 ครั้ง", ev: "use", need: 2, r: { human: { id: "water", qty: 1 }, zombie: { id: "water", qty: 1 } } }
+  },
+  weekly: {
+    w1: { title: "ออกค้นหา 40 ครั้ง", ev: "search", need: 40, r: { human: { id: "scrap", qty: 8 }, zombie: { id: "rotten_meat", qty: 4 } } },
+    w2: { title: "โจมตีบอสโลก 3 ครั้ง", ev: "wboss", need: 3, r: { human: { id: "stim_shot", qty: 1 }, zombie: { id: "stim_shot", qty: 1 } } },
+    w3: { title: "ซื้อ/ขายในตลาด 3 ครั้ง", ev: "market", need: 3, r: { human: { id: "water_jug", qty: 1 }, zombie: { id: "water_jug", qty: 1 } } },
+    w4: { title: "เดินทางระหว่างโซน 10 ครั้ง", ev: "travel", need: 10, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } },
+    w5: { title: "คราฟต์ 5 ครั้ง", ev: "craft", need: 5, f: "human", r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "army_meal", qty: 1 } } }
+  },
+  newbie: {
+    n1: { title: "ออกค้นหาไอเทมครั้งแรก", desc: "กดปุ่ม ค้นหาไอเทม", ev: "search", need: 1, r: { human: { id: "scrap", qty: 2 }, zombie: { id: "rotten_meat", qty: 1 } } },
+    n2: { title: "ส่งข้อความในแชท", desc: "พิมพ์ทักทายผู้เล่นในโซน", ev: "chat", need: 1, r: { human: { id: "water", qty: 1 }, zombie: { id: "water", qty: 1 } } },
+    n3: { title: "ใช้ไอเทมครั้งแรก", desc: "เปิดกระเป๋าแล้วกดใช้ของสักชิ้น", ev: "use", need: 1, r: { human: { id: "bandage", qty: 1 }, zombie: { id: "bandage", qty: 1 } } },
+    n4: { title: "เดินทางไปโซนอื่น", desc: "ใช้พลังงานเดินทางออกจากโซนปัจจุบัน", ev: "travel", need: 1, r: { human: { id: "canned_food", qty: 2 }, zombie: { id: "rotten_meat", qty: 2 } } },
+    n5: { title: "ซื้อหรือลงขายของในตลาด", desc: "ปุ่ม ตลาด (ต้องอยู่ Safe Zone)", ev: "market", need: 1, r: { human: { id: "scrap", qty: 3 }, zombie: { id: "rotten_meat", qty: 1 } } },
+    n6: { title: "โจมตีครั้งแรก", desc: "สู้กับซอมบี้/บอส/ผู้เล่นนอก Safe Zone", ev: "hit", need: 1, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "medkit", qty: 1 } } },
+    n7: { title: "คราฟต์ไอเทมครั้งแรก", desc: "มนุษย์เท่านั้น — ทำที่ Safe Zone", ev: "craft", need: 1, f: "human", r: { human: { id: "bread", qty: 2 }, zombie: { id: "bread", qty: 2 } } }
+  }
+};
+const qpDayKey = (ms) => Math.floor((ms + QP_TZ_MS) / QP_DAY_MS);
+function qpKey(per, ms = serverNow()) { const d = qpDayKey(ms); return per === "daily" ? d : per === "weekly" ? Math.floor((d + 3) / 7) : 0; }
+function qpResetIn(per, ms = serverNow()) {
+  if (per === "newbie") return null;
+  const d = qpDayKey(ms), next = per === "daily" ? d + 1 : (Math.floor((d + 3) / 7) + 1) * 7 - 3;
+  return next * QP_DAY_MS - QP_TZ_MS - ms;
+}
+function qpFmt(ms) { const m = Math.max(0, Math.ceil(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60); return d ? `${d} วัน ${h} ชม.` : h ? `${h} ชม. ${m % 60} นาที` : `${m} นาที`; }
+function qpList(per) {   // เควสที่ฝ่ายของฉันทำได้ เรียงตามรหัส
+  return Object.entries(state.qDefs?.[per] || {}).filter(([, d]) => d && !d.f || d && d.f === state.profile?.faction)
+    .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }));
+}
+function qpState(per, qid) {
+  const d = state.qDefs?.[per]?.[qid], cur = state.qProg?.[per]?.[qid], same = !!cur && cur.k === qpKey(per);
+  const n = same ? Math.min(cur.n, d ? d.need : cur.n) : 0;
+  return { d, n, claimed: same && cur.c === true, done: !!d && n >= d.need, ts: same ? cur.ts : 0, cur: same ? cur : null };
+}
+const qpClaimable = () => QP_PERIODS.reduce((s, [per]) => s + qpList(per).filter(([qid]) => { const x = qpState(per, qid); return x.done && !x.claimed; }).length, 0);
+
+// เรียกจากจุดต่างๆ ของเกมหลังทำสำเร็จ — ไม่รอ ไม่โยน error (ความคืบหน้าพลาดไม่กระทบการกระทำจริง)
+let qpChain = Promise.resolve();
+function questBump(evName) { qpChain = qpChain.then(() => qpBumpRun(evName)).catch((e) => console.warn("quest", e?.code || e)); }
+async function qpBumpRun(evName) {
+  const uid = state.uid; if (!state.qDefs || !uid || !state.profile || state.profile.banned) return;
+  for (const [per] of QP_PERIODS) for (const [qid, d] of qpList(per)) {
+    if (d.ev !== evName) continue;
+    const x = qpState(per, qid);
+    if (x.done || x.claimed) continue;
+    if (x.n > 0 && serverNow() - x.ts < QP_GAP_MS) continue;   // ถี่เกินกว่าที่ rules ยอม — ครั้งนี้ไม่นับ
+    try {
+      await set(ref(db, `questProg/${uid}/${per}/${qid}`), { k: qpKey(per), n: x.n + 1, ts: serverTimestamp() });
+      if (x.n + 1 >= d.need) toast(`📜 ภารกิจสำเร็จ: ${d.title} — กดปุ่ม “ภารกิจ” เพื่อรับรางวัล`);
+    } catch (e) { console.warn("quest progress", per, qid, e?.code || e); }
+  }
+}
+
+async function qpClaim(per, qid) {
+  const x = qpState(per, qid), p = state.profile, uid = state.uid;
+  if (!x.d || !x.cur || !x.done || x.claimed || state.qpBusy || !p) return false;
+  const rw = x.d.r && x.d.r[p.faction]; if (!rw) return false;
+  state.qpBusy = true; qpRefresh();
+  try {
+    const have = (await get(ref(db, `inventory/${uid}/${rw.id}/qty`))).val() || 0;
+    if (have >= 99) { toast(`ช่อง ${mktLabel(rw.id)} เต็ม (99) — ใช้หรือขายก่อนจึงรับรางวัลได้`); return false; }
+    const u = {
+      [`questProg/${uid}/${per}/${qid}`]: { k: x.cur.k, n: x.cur.n, ts: x.cur.ts, c: true },
+      [`questClaim/${uid}`]: { t: per, q: qid, ts: serverTimestamp() },
+      [`inventory/${uid}/${rw.id}`]: { id: rw.id, qty: Math.min(99, have + rw.qty) }
+    };
+    await update(ref(db), u);
+    toast(`🎁 รับรางวัล ${mktLabel(rw.id)} ×${rw.qty}`); logLine(`📜 ภารกิจ “${x.d.title}” สำเร็จ — ได้ ${mktLabel(rw.id)} ×${rw.qty}`, "system");
+    return true;
+  } catch (e) { console.error("qpClaim", e?.code || e); toast(String(e?.code || e).includes("PERMISSION_DENIED") ? "รับรางวัลไม่สำเร็จ — ลองใหม่อีกครั้ง (ข้อมูลอาจเพิ่งเปลี่ยนรอบ)" : "ทำรายการไม่สำเร็จ"); return false; }
+  finally { state.qpBusy = false; qpRefresh(); }
+}
+async function qpClaimAll() {
+  for (const [per] of QP_PERIODS) for (const [qid] of qpList(per)) { const x = qpState(per, qid); if (x.done && !x.claimed) { if (!(await qpClaim(per, qid))) return; } }
+}
+async function qpSeed() {
+  if (state.profile?.role !== "owner") return;
+  if (!confirm("เติมเควสเริ่มต้น?\nนิยามเควสทั้งหมดใน config/questDefs จะถูกแทนที่ด้วยชุดเริ่มต้น (ความคืบหน้าของผู้เล่นไม่หาย)")) return;
+  try { await set(ref(db, "config/questDefs"), QP_SEED); toast("เติมเควสเริ่มต้นแล้ว"); }
+  catch (e) { console.error("qpSeed", e?.code || e); toast(errMsg(e)); }
+}
+
+function qpListen() {
+  if (state.qpOn || !state.uid) return; state.qpOn = true;
+  state.qDefs = null; state.qProg = {};
+  const b = btn("📜 ภารกิจ", qpOpen, "btn ghost mini"); b.id = "btn-quests"; $("btn-profile").before(b);
+  onValue(ref(db, "config/questDefs"), (s) => { state.qDefs = s.val() || {}; qpRefresh(); }, (e) => console.error("questDefs", e));
+  onValue(ref(db, "questProg/" + state.uid), (s) => { state.qProg = s.val() || {}; qpRefresh(); }, (e) => console.error("questProg", e));
+  setInterval(qpRefresh, 30000);   // อัปเดตนับถอยหลัง/ข้ามรอบเที่ยงคืน
+}
+function qpRefresh() {
+  const b = $("btn-quests"); if (b) { const n = qpClaimable(); b.textContent = n ? `📜 ภารกิจ (${n} รับได้)` : "📜 ภารกิจ"; }
+  const m = $("qp-modal"); if (m && !m.classList.contains("hidden")) qpRender();
+}
+function qpOpen() {
+  if (!$("qp-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "qp-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "📜 ภารกิจ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "qp-body"; body.style.cssText = "display:grid;gap:12px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  qpRender(); $("qp-modal").classList.remove("hidden");
+}
+function qpRender() {
+  const body = $("qp-body"); if (!body) return; body.innerHTML = "";
+  const row = () => { const r = mk("div"); r.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px"; return r; };
+  const card = (title) => { const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px"; c.append(mk("b", "", title)); return c; };
+  const n = qpClaimable();
+  if (n > 1) { const r = row(); r.append(mk("span", "", `มีรางวัลรอรับ ${n} รายการ`), btn("รับทั้งหมด", qpClaimAll, "btn primary mini")); body.append(r); }
+  if (state.qDefs === null) body.append(mk("span", "muted", "กำลังโหลด…"));
+  let any = false;
+  for (const [per, label] of QP_PERIODS) {
+    const list = qpList(per); if (!list.length) continue; any = true;
+    const allClaimed = per === "newbie" && list.every(([qid]) => qpState(per, qid).claimed);
+    const left = qpResetIn(per);
+    const c = card(allClaimed ? "🌱 ภารกิจผู้เล่นใหม่ — รับครบแล้ว ✓" : label + (left !== null ? ` — รีเซ็ตในอีก ${qpFmt(left)}` : ""));
+    if (!allClaimed) list.forEach(([qid, d]) => {
+      const x = qpState(per, qid), rw = d.r && d.r[state.profile?.faction];
+      const box = mk("div"); box.style.cssText = "display:grid;gap:4px;padding-top:6px;border-top:1px dashed var(--line)";
+      const r1 = row(); r1.append(mk("span", "", (x.claimed ? "✅ " : x.done ? "🎁 " : "▫️ ") + d.title), mk("span", "muted", `${x.n}/${d.need}`));
+      const bar = mk("div"); bar.style.cssText = "height:6px;border-radius:3px;background:var(--line);overflow:hidden";
+      const fill = mk("div"); fill.style.cssText = `height:100%;width:${Math.min(100, Math.round(x.n / d.need * 100))}%;background:var(--accent, #e0a030)`; bar.append(fill);
+      const r2 = row(); r2.append(mk("span", "muted", rw ? `รางวัล: ${mktLabel(rw.id)} ×${rw.qty}` : ""));
+      if (x.claimed) r2.append(mk("span", "muted", "รับแล้ว"));
+      else { const b = btn(x.done ? "รับรางวัล" : "ยังไม่ครบ", () => qpClaim(per, qid), "btn primary mini"); b.disabled = !x.done || !!state.qpBusy; r2.append(b); }
+      box.append(r1, bar); if (d.desc && !x.done) box.append(mk("span", "muted", d.desc)); box.append(r2); c.append(box);
+    });
+    body.append(c);
+  }
+  if (!any && state.qDefs !== null) body.append(mk("span", "muted", "ยังไม่มีภารกิจในตอนนี้"));
+  if (state.profile?.role === "owner") {
+    const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
+    c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini")); c.append(r); body.append(c);
+  }
 }
