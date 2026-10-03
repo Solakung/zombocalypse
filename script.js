@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1942";
+const APP_VERSION = "2026-10-03.2001";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -209,7 +209,8 @@ const ITEMS = {
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
-const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) || hasFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
+const gearFields = (x) => ({ name: x.name, gslot: x.gslot, red: x.red, type: "gear", ...(x.icon ? { icon: x.icon } : {}) });   // เกราะ/อุปกรณ์ custom ที่แอดมินเสก
+const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_gear" ? { icon: "🛡️", ...x, slot: x.gslot, type: "gear" } : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) || hasFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
 const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin", ...FX_KEYS.map((t) => "e_" + t), "emin", ...FX_CURE_KEYS.map((t) => "c_" + t)];
 const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...ITEM_NUM_KEYS.reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
 const effectText = (d) => [d.heal && `HP ${sgn(d.heal)}`, d.food && `อาหาร ${sgn(d.food)}`, d.water && `น้ำ ${sgn(d.water)}`, d.stamina && `พลังงาน ${sgn(d.stamina)}`,
@@ -1237,11 +1238,11 @@ function renderInv() {
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
     } else if (def.type === "gear") {
-      const worn = state.profile?.[def.slot] === it.id, mine = (state.profile?.faction === "zombie") === !!def.zombieOnly;
+      const worn = state.profile?.[def.slot] === slot, mine = (state.profile?.faction === "zombie") === !!def.zombieOnly;
       if (worn) li.classList.add("equipped");
-      const lbl = mk("span", "", `${def.icon} ${def.name} ×${it.qty}`); lbl.append(mk("small", "muted", ` (${GEAR_SLOTS[def.slot]}: ${GEAR_FX[it.id]})`)); li.append(lbl);
+      const lbl = mk("span", "", `${def.icon} ${def.name}${it.qty > 1 ? " ×" + it.qty : ""}`); lbl.append(mk("small", "muted", ` (${GEAR_SLOTS[def.slot]}: ${gearFx(it)})`)); li.append(lbl);
       const btnGrp = mk("div", "row-btns");
-      const wb = btn(worn ? "ถอด" : "สวม", () => gearToggle(it.id), "btn ghost mini"); wb.disabled = !mine; if (!mine) wb.title = def.zombieOnly ? "เฉพาะซอมบี้" : "เฉพาะมนุษย์";
+      const wb = btn(worn ? "ถอด" : "สวม", () => gearToggle(slot), "btn ghost mini"); wb.disabled = !mine; if (!mine) wb.title = def.zombieOnly ? "เฉพาะซอมบี้" : "เฉพาะมนุษย์";
       btnGrp.append(wb);
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
@@ -1401,7 +1402,8 @@ async function dropItem(slot) {
     ...(it.dur ? { dur: it.dur } : {}),
     ...(it.maxDur && it.id !== "custom" && it.id !== "custom_food" ? { maxDur: it.maxDur } : {}),   // ความทนสูงสุดที่ลดจากการซ่อมต้องติดไปด้วย (กันทิ้งแล้วเก็บคืนเพื่อรีเซ็ต)
     ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {}),
-    ...(it.id === "custom_food" ? foodFields(it) : {})
+    ...(it.id === "custom_food" ? foodFields(it) : {}),
+    ...(it.id === "custom_gear" ? gearFields(it) : {})
   };
 
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
@@ -1444,6 +1446,11 @@ function invAddUpdate(u, itemId, qty, src, dur, customData, maxDur) {
     u[`inventory/${state.uid}/${k}`] = { id: "custom_food", qty: 1, ...foodFields(customData), ...(src ? { src } : {}) };
     return;
   }
+  if (itemId === "custom_gear" && customData) {
+    const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
+    u[`inventory/${state.uid}/${k}`] = { id: "custom_gear", qty: 1, ...gearFields(customData), ...(src ? { src } : {}) };
+    return;
+  }
   const def = ITEMS[itemId];
   if (def.type === "weapon") {
     const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
@@ -1472,7 +1479,7 @@ async function pickup(key, btnEl) {
   const g = state.ground[key]; if (!g) return;
   if (g.id === "skill") return learnScroll(key, btnEl);
   const u = { [`zoneItems/${state.zone}/${key}`]: null };
-  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : g.id === "custom_food" ? g : null;
+  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : (g.id === "custom_food" || g.id === "custom_gear") ? g : null;
   
   invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData, g.maxDur);
   try { await update(ref(db), u); toast(`เก็บ ${defOf(g).name} แล้ว`); } 
@@ -1993,7 +2000,7 @@ const wbOf = (z) => { const b = state.wb?.[z]; return b && typeof b.hp === "numb
 const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow();
 const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
 const wbMine = (b) => { const h = state.wbHits?.[state.uid]; return h && h.bid === b.startedAt ? h : null; };
-const wbRewardText = (b) => { if (b.rid === "skill" && b.rsk) return `📖 สกิล ${b.rsk.icon || "✨"} ${b.rsk.name}`; const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
+const wbRewardText = (b) => { if (b.rid === "skill" && b.rsk) return `📖 สกิล ${b.rsk.icon || "✨"} ${b.rsk.name}`; if (b.rid === "custom_gear" && b.rcg) return `${b.rcg.icon || "🛡️"} ${b.rcg.name}`; const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
 
 function renderWB() {
   const box = $("wb-box"); if (!box) return;
@@ -2093,6 +2100,8 @@ async function wbClaim() {
   state.wbBusy = true; renderWB();
   try {
     const u = { [`worldBossClaims/${z}/${state.uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
+    if (b.rid === "custom_gear") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(b.rcg) };
+    else
     if (b.rid === "skill") u[`skills/${state.uid}/wb_${z}_${b.startedAt}`] = skillFields(b.rsk);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
     else if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
     else u[`inventory/${state.uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
@@ -2128,15 +2137,16 @@ async function wbRemove(z) {
 
 function buildAdminWB() {
   fillSelect($("adm-wb-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, `${z.icon} ${z.name}`]));
-  fillSelect($("adm-wb-reward"), [...WB_REWARD_IDS.map((id) => [id, `${ITEMS[id].icon} ${ITEMS[id].name}${ITEMS[id].type === "weapon" ? " (อาวุธ)" : ""}`]), ["skill", "📖 สกิลเอง (custom)"]]);
+  fillSelect($("adm-wb-reward"), [...WB_REWARD_IDS.map((id) => [id, `${ITEMS[id].icon} ${ITEMS[id].name}${ITEMS[id].type === "weapon" ? " (อาวุธ)" : ""}`]), ["custom_gear", "🛡️ เกราะ/อุปกรณ์เอง (custom)"], ["skill", "📖 สกิลเอง (custom)"]]);
   buildSkillBox("adm-wb-skill-box", "adm-wb-spk-");
   syncWbRewardFields();
 }
 function syncWbRewardFields() {
-  const isSk = $("adm-wb-reward").value === "skill";
+  const isSk = $("adm-wb-reward").value === "skill", isCg = $("adm-wb-reward").value === "custom_gear";
   $("adm-wb-skill-box").classList.toggle("hidden", !isSk);
-  $("adm-wb-rqty").classList.toggle("hidden", isSk);
-  $("adm-wb-rdur").classList.toggle("hidden", isSk);
+  $("adm-wb-gear-fields").classList.toggle("hidden", !isCg);
+  $("adm-wb-rqty").classList.toggle("hidden", isSk || isCg);
+  $("adm-wb-rdur").classList.toggle("hidden", isSk || isCg);
 }
 $("adm-wb-reward").addEventListener("change", syncWbRewardFields);
 
@@ -2148,12 +2158,14 @@ $("adm-wb-spawn").addEventListener("click", async () => {
   const num = (id, lo, hi, def) => { const n = parseInt($(id).value, 10); return Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : def)); };
   const hp = num("adm-wb-hp", 1, 100000, 2000), dlo = num("adm-wb-dlo", 1, 200, 15), dhi = Math.max(dlo, num("adm-wb-dhi", 1, 200, 30));
   const hits = num("adm-wb-hits", 1, 5, 1), acc = num("adm-wb-acc", 10, 100, 75) / 100, mins = num("adm-wb-mins", 0, 700, 0);
-  const rid = $("adm-wb-reward").value, isSk = rid === "skill", def = isSk ? null : ITEMS[rid], isW = !isSk && def.type === "weapon";
+  const rid = $("adm-wb-reward").value, isSk = rid === "skill", isCg = rid === "custom_gear", def = isSk || isCg ? null : ITEMS[rid], isW = !!def && def.type === "weapon";
+  const rcg = isCg ? { name: $("adm-wb-gear-name").value.trim().slice(0, 40) || "เกราะปริศนา", gslot: $("adm-wb-gear-slot").value === "acc" ? "acc" : "arm", red: Math.max(1, Math.min(GEAR_CUSTOM_MAX, parseInt($("adm-wb-gear-red").value, 10) || 10)), ...([...$("adm-wb-gear-icon").value.trim()].slice(0, 2).join("") ? { icon: [...$("adm-wb-gear-icon").value.trim()].slice(0, 2).join("") } : {}) } : null;
   const sk = isSk ? readSkillForm("adm-wb-spk-") : null; if (isSk && !sk) return;
   const icon = $("adm-wb-icon").value.trim().slice(0, 4), tag = $("adm-wb-tag").value.trim().slice(0, 80), intro = $("adm-wb-intro").value.trim().slice(0, 120);
   const b = {
-    name, hp, max: hp, zone: z, by: state.profile.username, startedAt: serverTimestamp(), dmgLo: dlo, dmgHi: dhi, hits, acc, rid, rqty: isW || isSk ? 1 : num("adm-wb-rqty", 1, 50, 1),
+    name, hp, max: hp, zone: z, by: state.profile.username, startedAt: serverTimestamp(), dmgLo: dlo, dmgHi: dhi, hits, acc, rid, rqty: isW || isSk || isCg ? 1 : num("adm-wb-rqty", 1, 50, 1),
     ...(isSk ? { rsk: skillFields(sk) } : {}),
+    ...(isCg ? { rcg } : {}),
     ...(isW ? { rdur: num("adm-wb-rdur", 1, 60, Math.min(30, def.maxDur)) } : {}),
     ...(icon ? { icon } : {}), ...(tag ? { tag } : {}), ...(intro ? { intro } : {}), ...(mins ? { endsAt: serverNow() + mins * 60000 } : {})
   };
@@ -2489,7 +2501,7 @@ function buildAdmin() {
   fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
   fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
+  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
   buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor();
@@ -2510,6 +2522,7 @@ $("adm-mode").addEventListener("change", (e) => {
 ["adm-", "adm-q-"].forEach((P) => $(P + "item").addEventListener("change", (e) => {
   $(P + "custom-fields").classList.toggle("hidden", e.target.value !== "custom");
   $(P + "food-fields").classList.toggle("hidden", e.target.value !== "custom_food");
+  $(P + "gear-fields").classList.toggle("hidden", e.target.value !== "custom_gear");
   $(P + "skill-box").classList.toggle("hidden", e.target.value !== "skill");
   $(P + "qty").classList.toggle("hidden", e.target.value === "skill");   // สกิลไม่มีจำนวนชิ้น
 }));
@@ -2529,7 +2542,7 @@ function readAdminItem(P = "adm-") {
   // สกิล: คืน skill (null ถ้ากรอกไม่ผ่าน — readSkillForm toast บอกเหตุผลแล้ว) ผู้เรียกต้องเช็กก่อนใช้
   if (itemId === "skill") return { itemId, skill: readSkillForm(P + "spk-") };
   const qty = Math.max(1, Math.min(99, parseInt($(P + "qty").value, 10) || 1));
-  const isFood = itemId === "custom_food";
+  const isFood = itemId === "custom_food", isGear = itemId === "custom_gear";
   let customData = null, def = ITEMS[itemId];
 
   if (itemId === "custom") {
@@ -2554,8 +2567,12 @@ function readAdminItem(P = "adm-") {
     customData.type = (customData.food || customData.water || customData.heal || customData.stamina || hasStatFx(customData) || hasFx(customData)) ? "consumable" : "material";
     def = { name: customData.name, type: customData.type };
   }
-  const single = def.type === "weapon" || isFood;   // ไอเทมที่วางบนพื้นทีละชิ้น
-  return { itemId, qty, isFood, customData, def, single };
+  if (isGear) {
+    customData = { name: $(P + "gear-name").value.trim().slice(0, 40) || "เกราะปริศนา", gslot: $(P + "gear-slot").value === "acc" ? "acc" : "arm", red: Math.max(1, Math.min(GEAR_CUSTOM_MAX, parseInt($(P + "gear-red").value, 10) || 10)), icon: [...$(P + "gear-icon").value.trim()].slice(0, 2).join("") };
+    def = { name: customData.name, type: "gear" };
+  }
+  const single = def.type === "weapon" || isFood || isGear;   // ไอเทมที่วางบนพื้นทีละชิ้น
+  return { itemId, qty, isFood, isGear, customData, def, single };
 }
 
 // เสกสกิล: เข้าผู้เล่นโดยตรง (เหมือนมอบสกิล) หรือวาง "ม้วนสกิล" ไว้กลางโซน — คนแรกที่กดเรียนรู้จะได้สกิล (ม้วนหายไป)
@@ -2580,7 +2597,7 @@ async function spawnSkill(sk) {
 $("adm-spawn").addEventListener("click", async () => {
   const R = readAdminItem();
   if (R.itemId === "skill") { if (R.skill) await spawnSkill(R.skill); return; }
-  const { itemId, qty, isFood, customData, def, single } = R;
+  const { itemId, qty, isFood, isGear, customData, def, single } = R;
 
   try {
     if ($("adm-mode").value === "zone") {
@@ -2591,7 +2608,8 @@ $("adm-spawn").addEventListener("click", async () => {
           id: itemId, qty: single ? 1 : qty,
           ...(def.type === "weapon" ? { dur: def.maxDur } : {}),
           ...(itemId === "custom" ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon" } : {}),
-          ...(isFood ? foodFields(customData) : {})
+          ...(isFood ? foodFields(customData) : {}),
+          ...(isGear ? gearFields(customData) : {})
         });
       }
       toast(`วาง ${def.name} ไว้ใน ${ZONES[z].name} แล้ว`);
@@ -2601,7 +2619,12 @@ $("adm-spawn").addEventListener("click", async () => {
       const t = await get(ref(db, "users/" + target));
       if (!t.exists()) return toast("ไม่พบ Player ID นี้");
 
-      if (isFood) {
+      if (isGear) {
+        for (let i = 0; i < Math.min(qty, 10); i++) {
+          const k = push(ref(db, `inventory/${target}`)).key;
+          await set(ref(db, `inventory/${target}/${k}`), { id: "custom_gear", qty: 1, ...gearFields(customData) });
+        }
+      } else if (isFood) {
         const k = push(ref(db, `inventory/${target}`)).key;
         await set(ref(db, `inventory/${target}/${k}`), { id: "custom_food", qty, ...foodFields(customData) });
       } else if (def.type === "weapon") {
@@ -3081,7 +3104,7 @@ async function questAbandon(id) {
 
 async function grantItem(target, spec, qid) {
   if (spec.id === "skill") { await set(ref(db, `skills/${target}/q_${qid}`), skillFields(spec)); return; }
-  if (spec.id === "custom" || spec.id === "custom_food" || ITEMS[spec.id]?.type === "weapon") {
+  if (spec.id === "custom" || spec.id === "custom_food" || spec.id === "custom_gear" || ITEMS[spec.id]?.type === "weapon") {
     const k = push(ref(db, `inventory/${target}`)).key;
     await set(ref(db, `inventory/${target}/${k}`), spec);
   } else {
@@ -3112,11 +3135,12 @@ $("adm-q-post").addEventListener("click", async () => {
   if (!title) return toast("ใส่ชื่อภารกิจก่อน");
   const R = readAdminItem("adm-q-");
   if (R.itemId === "skill" && !R.skill) return;
-  const { itemId, qty, isFood, customData, def } = R;
+  const { itemId, qty, isFood, isGear, customData, def } = R;
   let reward;
   if (itemId === "skill") reward = { id: "skill", qty: 1, ...R.skill };
   else if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
   else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
+  else if (isGear) reward = { id: "custom_gear", qty: 1, ...gearFields(customData) };
   else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
   else reward = { id: itemId, qty };
   const auto = $("adm-q-mode").value === "auto";
@@ -3128,7 +3152,7 @@ $("adm-q-post").addEventListener("click", async () => {
   try {
     await push(ref(db, "quests"), quest);
     ["adm-q-title", "adm-q-desc"].forEach((i) => { $(i).value = ""; });
-    ["adm-q-custom-name", "adm-q-food-name"].forEach((i) => { $(i).value = ""; });
+    ["adm-q-custom-name", "adm-q-food-name", "adm-q-gear-name"].forEach((i) => { $(i).value = ""; });
     toast(`โพสต์ภารกิจ “${title}” (รางวัล ${rewardText(reward)} • ${auto ? "อัตโนมัติ" : "รออนุมัติ"}) แล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
@@ -4225,6 +4249,7 @@ function headCompactInit() {
    - ถ้าแก้ตัวเลข: GEAR_DROPS/MUT_DROPS ต้องตรงกับรายการโซนใน rules (ช่อง inventory) และ RECIPES ต้องตรงกับสูตรคราฟต์ใน rules
    - เควสโซนรายวัน: นิยามอยู่ที่ config/questDefs/daily/zd{วัน}{h|z}{1-3} มี z (โซน) และ dw (วัน 0=จันทร์) — ปุ่มเจ้าของ “เติมเควสโซนรายวัน”
    ========================================================= */
+const GEAR_CUSTOM_MAX = 35;   // ลดดาเมจสูงสุดของเกราะ custom (ต้องตรง rules)
 const GEAR_SLOTS = { arm: "🛡️ เกราะ", acc: "🎒 อุปกรณ์", mf: "🦷 เขี้ยว", mh: "🦴 หนัง", mn: "👃 จมูก" };
 const GEAR_FX = {
   rag_vest: "ลดดาเมจที่โดน 5%", scrap_plate: "ลดดาเมจที่โดน 10%", riot_vest: "ลดดาเมจที่โดน 15%", army_vest: "ลดดาเมจที่โดน 20%",
@@ -4244,9 +4269,12 @@ const MUT_DROPS = {    // ฝั่งซอมบี้
 };
 const GEAR_SLOT_BY_FAC = { human: ["arm", "acc"], zombie: ["mf", "mh", "mn"] };
 // ของที่สวมอยู่จริง: ต้องมี id นั้นในช่อง และยังมีของในกระเป๋า
-function gearId(slot) { const id = state.profile?.[slot]; return id && ITEMS[id]?.slot === slot && (state.inv?.[id]?.qty || 0) > 0 ? id : null; }
+const gearFx = (it) => (it.id === "custom_gear" ? `ลดดาเมจที่โดน ${it.red}%` : GEAR_FX[it.id]);
+// ช่องสวมเก็บ "ชื่อสล็อตในกระเป๋า" (ของในเกม = id เดียวกับสล็อต, ของ custom = key สุ่ม)
+function gearDef(slot) { const k = state.profile?.[slot], it = k && state.inv?.[k], d = it && defOf(it); return d && d.type === "gear" && d.slot === slot && it.qty > 0 ? d : null; }
+function gearId(slot) { return gearDef(slot) ? state.profile[slot] : null; }
 function gearHas(id) { return !!ITEMS[id] && gearId(ITEMS[id].slot) === id; }
-function gearRed() { let red = 0; for (const s of ["arm", "mh"]) { const id = gearId(s); if (id) red += ITEMS[id].red || 0; } return Math.min(40, red); }
+function gearRed() { let red = 0; for (const s of ["arm", "acc", "mh"]) { const d = gearDef(s); if (d) red += d.red || 0; } return Math.min(40, red); }
 function gearCut(dmg) { const red = gearRed(); return dmg > 0 && red ? Math.max(1, Math.round(dmg * (1 - red / 100))) : dmg; }
 function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang1" ? 3 : 0; }
 function gearTable(t) {
@@ -4257,12 +4285,12 @@ function gearTable(t) {
   if (n) out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * (n === "mut_nose2" ? 1.7 : 1.3) } : d.id === null && n === "mut_nose2" ? { ...d, w: d.w * 0.8 } : d);
   return out;
 }
-async function gearToggle(id) {
-  const d = ITEMS[id], p = state.profile; if (!d || !p || state.gearBusy) return;
+async function gearToggle(key) {
+  const it = state.inv?.[key], d = it && defOf(it), p = state.profile; if (!d || d.type !== "gear" || !p || state.gearBusy) return;
   if ((p.faction === "zombie") !== !!d.zombieOnly) return toast(d.zombieOnly ? "อวัยวะกลายพันธุ์ใช้ได้เฉพาะซอมบี้" : "ชุดนี้ใช้ได้เฉพาะมนุษย์");
-  if (!(state.inv?.[id]?.qty > 0)) return;
-  const worn = p[d.slot] === id; state.gearBusy = true;
-  try { await set(ref(db, `users/${state.uid}/${d.slot}`), worn ? null : id); toast(worn ? `ถอด ${d.name} แล้ว` : `สวม ${d.name} แล้ว — ${GEAR_FX[id]}`); }
+  if (!(it.qty > 0)) return;
+  const worn = p[d.slot] === key; state.gearBusy = true;
+  try { await set(ref(db, `users/${state.uid}/${d.slot}`), worn ? null : key); toast(worn ? `ถอด ${d.name} แล้ว` : `สวม ${d.name} แล้ว — ${gearFx(it)}`); }
   catch (e) { toast(errMsg(e)); } finally { state.gearBusy = false; }
 }
 // ของหมดจากกระเป๋า (ทิ้ง/ขาย/ทำลาย) → ถอดให้อัตโนมัติ ไม่ให้ค้างอยู่ในช่อง
@@ -4270,7 +4298,7 @@ function gearAutoFix() {
   const p = state.profile; if (!p || !state.invLoaded || state.gearFixing) return;
   for (const slot of ["arm", "acc", "mf", "mh", "mn"]) {
     const id = p[slot]; if (!id) continue;
-    const ok = (state.inv?.[id]?.qty || 0) > 0 && GEAR_SLOT_BY_FAC[p.faction]?.includes(slot);
+    const ok = !!gearDef(slot) && GEAR_SLOT_BY_FAC[p.faction]?.includes(slot);
     if (ok) continue;
     state.gearFixing = true;
     set(ref(db, `users/${state.uid}/${slot}`), null).catch(() => {}).finally(() => { state.gearFixing = false; });
@@ -4282,7 +4310,7 @@ function gearBar() {
   let bar = $("gear-bar");
   if (!bar) { bar = mk("div", "muted"); bar.id = "gear-bar"; bar.style.cssText = "margin:4px 0 8px;font-size:13px"; ul.before(bar); }
   const slots = GEAR_SLOT_BY_FAC[p.faction] || [];
-  bar.textContent = slots.map((s) => `${GEAR_SLOTS[s]}: ${gearId(s) ? ITEMS[gearId(s)].icon + " " + ITEMS[gearId(s)].name : "—"}`).join(" • ") + (gearRed() ? ` • ลดดาเมจรวม ${gearRed()}%` : "");
+  bar.textContent = slots.map((s) => `${GEAR_SLOTS[s]}: ${gearDef(s) ? gearDef(s).icon + " " + gearDef(s).name : "—"}`).join(" • ") + (gearRed() ? ` • ลดดาเมจรวม ${gearRed()}%` : "");
 }
 
 // ---- เควสรายวันผูกโซน (นิยามสร้างจากสูตรนี้ เจ้าของกดเติมได้) ----

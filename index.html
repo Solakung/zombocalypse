@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-03.1942">
+  <link rel="stylesheet" href="style.css?v=2026-10-03.2001">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -286,6 +286,13 @@
           <input id="adm-custom-dur" type="number" min="1" max="999" placeholder="ความคงทน (จำนวนครั้งที่ฟันได้)">
         </div>
 
+        <div id="adm-gear-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-gear-name" maxlength="40" placeholder="ชื่อเกราะ/อุปกรณ์ (เช่น เกราะมังกร)">
+          <input id="adm-gear-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ = 🛡️)">
+          <select id="adm-gear-slot"><option value="arm">🛡️ ช่องเกราะ</option><option value="acc">🎒 ช่องอุปกรณ์เสริม</option></select>
+          <input id="adm-gear-red" type="number" min="1" max="35" placeholder="ลดดาเมจที่โดน % (1–35 • รวมกับชุดอื่นสูงสุด 40%)">
+        </div>
+
         <div id="adm-food-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
           <input id="adm-food-name" maxlength="40" placeholder="ชื่อไอเทม (เช่น ซุปร้อน / น้ำมนต์ / กุญแจห้องนิรภัย)">
           <input id="adm-food-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ก็ได้ เช่น 🍲)">
@@ -365,6 +372,12 @@
         <p class="label" style="margin-top: 8px;">🎁 รางวัลของผู้ร่วมโจมตี (ทุกคนที่ตีบอสอย่างน้อย 1 ครั้งรับได้คนละครั้ง)</p>
         <select id="adm-wb-reward"></select>
         <div id="adm-wb-skill-box" class="hidden"></div>
+        <div id="adm-wb-gear-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-wb-gear-name" maxlength="40" placeholder="ชื่อเกราะ/อุปกรณ์ (เช่น เกราะมังกร)">
+          <input id="adm-wb-gear-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ = 🛡️)">
+          <select id="adm-wb-gear-slot"><option value="arm">🛡️ ช่องเกราะ</option><option value="acc">🎒 ช่องอุปกรณ์เสริม</option></select>
+          <input id="adm-wb-gear-red" type="number" min="1" max="35" placeholder="ลดดาเมจที่โดน % (1–35 • รวมกับชุดอื่นสูงสุด 40%)">
+        </div>
         <input id="adm-wb-rqty" type="number" min="1" max="50" value="1" placeholder="จำนวนรางวัล (อาวุธได้ 1 ชิ้นเสมอ)">
         <input id="adm-wb-rdur" type="number" min="1" max="60" placeholder="ความทนอาวุธรางวัล (เฉพาะอาวุธ)">
         <input id="adm-wb-mins" type="number" min="0" max="700" value="0" placeholder="หายไปเองใน (นาที) — 0 = ไม่หาย">
@@ -386,6 +399,13 @@
           <input id="adm-q-custom-name" placeholder="ชื่ออาวุธ (เช่น ดาบเลเซอร์)">
           <input id="adm-q-custom-dmg" type="number" min="1" max="999" placeholder="พลังโจมตี (ดาเมจ)">
           <input id="adm-q-custom-dur" type="number" min="1" max="999" placeholder="ความคงทน (จำนวนครั้งที่ฟันได้)">
+        </div>
+
+        <div id="adm-q-gear-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
+          <input id="adm-q-gear-name" maxlength="40" placeholder="ชื่อเกราะ/อุปกรณ์ (เช่น เกราะมังกร)">
+          <input id="adm-q-gear-icon" maxlength="4" placeholder="ไอคอน emoji (ไม่ใส่ = 🛡️)">
+          <select id="adm-q-gear-slot"><option value="arm">🛡️ ช่องเกราะ</option><option value="acc">🎒 ช่องอุปกรณ์เสริม</option></select>
+          <input id="adm-q-gear-red" type="number" min="1" max="35" placeholder="ลดดาเมจที่โดน % (1–35 • รวมกับชุดอื่นสูงสุด 40%)">
         </div>
 
         <div id="adm-q-food-fields" class="hidden" style="display: grid; gap: 8px; margin-top: 5px; padding-left: 10px; border-left: 2px solid var(--hazard);">
@@ -462,6 +482,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-03.1942"></script>
+  <script type="module" src="script.js?v=2026-10-03.2001"></script>
 </body>
 </html>
