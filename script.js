@@ -722,6 +722,12 @@ $("stat-save").addEventListener("click", async () => {
   catch (e) { toast(errMsg(e)); $("stat-save").disabled = false; }
 });
 
+// ชุดเริ่มต้นของผู้เล่นใหม่ — ต้องตรงกับ rules (inventory/$uid/$slot ท่อนแรกของ .write) ทุกตัวเลข ถ้าแก้ตรงนี้ต้อง publish rules ใหม่ด้วย
+const START_KIT = {
+  human: { canned_food: 2, water: 2, bandage: 2, scrap: 3 },
+  zombie: { rotten_meat: 3, water: 2, bandage: 2 }
+};
+
 async function register(name, email, pw) {
   state.registering = true; let cred, adopted = false;
   try {
@@ -735,7 +741,7 @@ async function register(name, email, pw) {
     const uid = cred.user.uid;
     await set(ref(db, "usernames/" + nameKey(name)), uid);
     const stats = { ...regPicker.vals };
-    await update(ref(db), {
+    const base = {
       ["users/" + uid]: {
         username: name, faction: pickedFaction, role: "player", banned: false, zone: "safe",
         stamina: STAMINA_BASE + 10 * stats.st, staminaTs: serverTimestamp(), hp: HP_BASE + 10 * stats.hp,
@@ -743,8 +749,19 @@ async function register(name, email, pw) {
         createdAt: serverTimestamp()
       },
       ["stats/" + uid]: stats
-    });
+    };
+    // ชุดเริ่มต้น: เขียนพร้อมตัวละครในคำสั่งเดียว (rules ตรวจว่าเป็นตัวละครที่เพิ่งสร้างและจำนวนตรงตาม START_KIT)
+    const kit = {};
+    Object.entries(START_KIT[pickedFaction] || {}).forEach(([id, qty]) => { kit[`inventory/${uid}/${id}`] = { id, qty }; });
+    let gotKit = true;
+    try { await update(ref(db), { ...base, ...kit }); }
+    catch (e) {
+      // กันสมัครไม่ได้ทั้งระบบ: ถ้า rules ยังไม่รองรับชุดเริ่มต้น ให้สมัครแบบไม่มีชุดแทน
+      if (!String(e?.code || e).includes("PERMISSION_DENIED")) throw e;
+      gotKit = false; await update(ref(db), base);
+    }
     state.uid = uid; startGame();
+    if (gotKit) toast("ได้รับชุดเริ่มต้นแล้ว — เปิดกระเป๋าดูได้เลย");
   } catch (e) {
     if (adopted) await signOut(auth).catch(() => {});
     else if (cred) await deleteUser(cred.user).catch(() => {});
