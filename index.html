@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-03.2001">
+  <link rel="stylesheet" href="style.css?v=2026-10-04.0634">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -119,6 +119,7 @@
               <button id="wb-attack" class="btn danger" type="button">⚔️ โจมตีบอสโลก</button>
               <button id="wb-claim" class="btn primary hidden" type="button">🎁 รับรางวัล</button>
             </div>
+            <div id="wb-swap" class="swap-bar"></div>
             <div id="wb-skills" class="wb-skills"></div>
           </div>
         </div>
@@ -159,6 +160,7 @@
       <div class="bar boss"><i id="bar-boss"></i><span id="txt-boss"></span></div>
       <div class="bar hp" style="margin-top: 6px;"><i id="bar-boss-me"></i><span id="txt-boss-me"></span></div>
       <p id="boss-weapon" class="muted" style="margin: 8px 0 4px; font-size: 13px;"></p>
+      <div id="boss-swap" class="swap-bar"></div>
       <ul id="boss-log" class="boss-log"></ul>
       <div class="boss-actions">
         <button id="boss-attack" class="btn primary">⚔️ โจมตี</button>
@@ -380,6 +382,9 @@
         </div>
         <input id="adm-wb-rqty" type="number" min="1" max="50" value="1" placeholder="จำนวนรางวัล (อาวุธได้ 1 ชิ้นเสมอ)">
         <input id="adm-wb-rdur" type="number" min="1" max="60" placeholder="ความทนอาวุธรางวัล (เฉพาะอาวุธ)">
+        <label class="muted" style="display: flex; gap: 6px; align-items: center;"><input id="adm-wb-loot" type="checkbox" checked> 🎲 ให้ระบบสุ่มเกราะรางวัล (ชิ้นที่ 2 ของทุกคน + ชิ้นพิเศษอันดับ 1)</label>
+        <input id="adm-wb-pool" type="number" min="1" max="12" value="8" placeholder="จำนวนชิ้นในคลัง (1–12 = จำนวนผู้ร่วมโจมตีที่จะได้เกราะ)">
+        <select id="adm-wb-tier"><option value="auto">ระดับเกราะ: ตามความแรงบอส</option><option value="1">ระดับ 1 (ลด 3–6%)</option><option value="2">ระดับ 2 (6–10%)</option><option value="3">ระดับ 3 (9–13%)</option><option value="4">ระดับ 4 (13–19%)</option><option value="5">ระดับ 5 (19–26%)</option><option value="6">ระดับ 6 (26–35%)</option></select>
         <input id="adm-wb-mins" type="number" min="0" max="700" value="0" placeholder="หายไปเองใน (นาที) — 0 = ไม่หาย">
         <button id="adm-wb-spawn" class="btn danger">เรียกบอสโลก</button>
         <ul id="adm-wb-list" class="list"></ul>
@@ -482,6 +487,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-03.2001"></script>
+  <script type="module" src="script.js?v=2026-10-04.0634"></script>
 </body>
 </html>

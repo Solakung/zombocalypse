@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.2001";
+const APP_VERSION = "2026-10-04.0634";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -143,6 +143,50 @@ const FX_TYPES = {
 const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
 const FX_TICK = 15000, FX_MAX_TICKS = 40, POISON_STAMINA = 2, FX_MAX_MIN = 720;
 const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
+// สถานะจากมอนสเตอร์: โดนตีจริง (HP ลด) → สุ่มติดอย่างมาก 1 อย่าง [โอกาส %, ค่า v, นาที] — เพดานตรงกับ rules: bleed/poison v≤3, stun 1 นาที, dice −1..−2, ทุกอย่าง ≤5 นาที
+const MON_FX = {
+  zombie: { bleed: [18, 2, 3], poison: [10, 1, 4] },
+  ruins: { bleed: [30, 2, 3] }, mall: { dice: [30, -2, 3] }, hospital: { poison: [30, 2, 4], bleed: [15, 2, 3] }, police: { stun: [20, 1, 1], dice: [20, -1, 3] },
+  forest: { poison: [30, 1, 5] }, factory: { bleed: [30, 3, 3] }, port: { stun: [25, 1, 1] }, base: { bleed: [20, 2, 3], stun: [15, 1, 1] },
+  tunnel: { poison: [25, 2, 5], dice: [25, -2, 5], stun: [10, 1, 1] },
+  wboss: { bleed: [15, 2, 4], poison: [12, 2, 5], stun: [8, 1, 1], dice: [15, -2, 4] }
+};
+function monFx(u, src, loss, hpAfter) {
+  if (!(loss > 0) || !(hpAfter > 0)) return "";
+  for (const [t, [pc, v, mins]] of Object.entries(MON_FX[src] || {})) {
+    if (Math.random() * 100 >= pc || effActive(t)) continue;
+    u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() };
+    return ` ⚠️ ติด${FX_TYPES[t].icon}${FX_TYPES[t].name}`;
+  }
+  return "";
+}
+const pveD6 = () => Math.max(1, d6() + Math.min(0, effV("dice")));   // ติดสถานะอ่อนแรง (dice ติดลบ) → ทอยสู้มอนสเตอร์แย่ลง; บัฟบวกไม่มีผลกับ PvE
+// อาวุธคมมีโอกาสทำให้บอสประจำโซนเลือดไหล (ฝั่งเกมล้วน ๆ: บอสเสียเลือดเพิ่ม BOSS_BLEED/รอบ นาน BOSS_BLEED_N รอบ) — สกิลโจมตีโดนแน่ได้โอกาส ×2
+const WPN_PROC = { knife: 20, spiked_bat: 25, fire_axe: 25, samurai_sword: 25, pocket_knife: 15 }, BOSS_BLEED = 3, BOSS_BLEED_N = 3;
+// สลับอาวุธระหว่างสู้: หน้าบอส/บอสโลกมีแถบสลับ — ถ้าอาวุธพังจนมือเปล่าจะสลับได้ทันที ไม่งั้นติดคูลดาวน์ SWAP_CD
+const SWAP_CD = 15000;
+const swapLeft = () => Math.max(0, SWAP_CD - (serverNow() - (state.lastSwap || 0)));
+async function swapWeapon(slot) {
+  if (equippedWeapon() && swapLeft() > 0) return toast(`สลับอาวุธได้อีกใน ${Math.ceil(swapLeft() / 1000)} วินาที`);
+  state.lastSwap = serverNow();
+  await equip(slot, false);
+}
+function renderSwapBar(el) {
+  if (!el) return;
+  const cur = state.profile?.equipped, left = equippedWeapon() ? Math.ceil(swapLeft() / 1000) : 0;
+  const ws = Object.entries(state.inv || {}).map(([slot, it]) => [slot, it, defOf(it)]).filter(([, it, d]) => d && d.type === "weapon" && it.dur > 0);
+  const sig = ws.map(([s, it]) => `${s}:${it.dur}`).join(",") + "|" + cur;
+  if (el.dataset.sig !== sig) {
+    el.dataset.sig = sig; el.textContent = "";
+    if (ws.length > 1 || (ws.length === 1 && ws[0][0] !== cur)) ws.forEach(([slot, it, d]) => {
+      const b = btn(`${d.icon || "🗡️"} ${d.name} (${it.dur})`, () => swapWeapon(slot), "btn ghost mini" + (slot === cur ? " on" : ""));
+      b.dataset.slot = slot; if (slot === cur) b.disabled = true; el.append(b);
+    });
+  }
+  el.classList.toggle("hidden", !el.childElementCount);
+  el.querySelectorAll("button").forEach((b) => { if (b.dataset.slot !== cur) { b.disabled = left > 0; b.title = left > 0 ? `สลับได้อีก ${left} วิ` : "สลับอาวุธ"; } });
+}
+if (!document.getElementById("swap-style")) { const st = document.createElement("style"); st.id = "swap-style"; st.textContent = ".swap-bar{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.swap-bar .on{outline:1px solid var(--accent,#7fb069)}"; document.head.append(st); }
 const hasFx = (d) => FX_KEYS.some((t) => d["e_" + t]) || FX_CURE_KEYS.some((t) => d["c_" + t]);
 const fxText = (d) => {
   const on = FX_KEYS.filter((t) => d["e_" + t]).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(d.e_dice) : t === "stun" ? "" : " " + d["e_" + t] + "/รอบ"}`);
@@ -536,6 +580,7 @@ function openGuide() {
     "สกิล PvP: เลือก 🎯โจมตีเฉียบ / 🔨ฟาดหนัก / 🗡️ทะลวงเกราะ ที่แถบเหนือรายชื่อผู้เล่น แล้วกดโจมตี ใช้ได้ครั้งละ 1 สกิล ส่วน 🧱ท่าตั้งรับกดใช้ทันที ลดดาเมจที่โดนปะทะครึ่งหนึ่งนาน 60 วินาที",
     "สกิลพิเศษ: GM/Owner อาจมอบสกิลเฉพาะตัวให้ — เป็นรางวัลเควสต์ รางวัลบอสโลก หรือ 📜ม้วนสกิลที่วางไว้ในโซน (กด \"เรียนรู้\" ในรายการของบนพื้น คนแรกที่เรียนได้ไป) จะขึ้นต่อท้ายในแถบสกิล บางอันมีจำนวนครั้งจำกัด (แสดงเป็น ×จำนวน)",
     "ระหว่างสู้ย้ายโซนและค้นหาไม่ได้ และปิดเกมหนีไม่ได้ กลับมาเปิดใหม่จะต้องสู้ต่อ ถ้า HP หมดจะโดนโทษตายตามปกติ",
+    "ซอมบี้/บอสที่ตีโดนมีโอกาสทำให้ติดสถานะ (🩸เลือดไหล ☠️พิษ 😵มึนงง 🎯อ่อนแรง) — รักษาด้วยผ้าพันแผล/ยาถอนพิษ • อาวุธคมมีโอกาสทำให้บอสประจำโซนเลือดไหล • สลับอาวุธกลางสู้ได้จากแถบใต้ชื่ออาวุธ (คูลดาวน์ 15 วิ แต่ถ้าอาวุธพังสลับได้ทันที)",
     `ชนะได้ของหายากประจำโซน 1 ชิ้น + ของแถมบางครั้ง เจอบอสได้ทุก ๆ ${fmtDur(BOSS_COOLDOWN)} อย่างน้อย`
   ]);
   sec("ฝ่ายซอมบี้", [
@@ -1696,7 +1741,7 @@ $("btn-scavenge").addEventListener("click", async () => {
 async function zombieEncounter(u, hpNow) {
   const w = equippedWeapon();
   const bonus = w ? weaponBonus(w.def) : 0;
-  const r = d6(), total = r + bonus;
+  const r = pveD6(), total = r + bonus;
   const base = 10 + Math.floor(Math.random() * 15);
   const rollTxt = `🎲 ทอย ${r}${bonus ? ` + ${bonus} (${w.def.name})` : ""} = ${total}`;
   let dmg = 0, verdict, loot = null, won = false;
@@ -1718,6 +1763,7 @@ async function zombieEncounter(u, hpNow) {
   if (dmg > 0) {
     newHp = Math.max(0, hpNow - dmg);
     u[`users/${state.uid}/hp`] = newHp;
+    verdict += monFx(u, "zombie", dmg, newHp);
   }
 
   await update(ref(db), u);
@@ -1762,12 +1808,14 @@ function renderBoss() {
   $("bar-boss-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-boss-me").textContent = `HP ${p.hp}/${maxHp()}`;
   $("boss-weapon").textContent = w ? `ถืออยู่: ${w.def.icon} ${w.def.name} (ทน ${w.it.dur})` : "ถืออยู่: มือเปล่า (ดาเมจต่ำมาก — แนะนำให้หนี)";
   const bd = state.inv.bandage?.qty || 0, kit = state.inv.medkit?.qty || 0;
-  $("boss-attack").classList.toggle("hidden", won); $("boss-attack").disabled = busy;
+  const bStun = effActive("stun");
+  $("boss-attack").classList.toggle("hidden", won); $("boss-attack").disabled = busy || bStun; $("boss-attack").textContent = bStun ? "😵 มึนงง" : "⚔️ โจมตี";
+  renderSwapBar($("boss-swap"));
   $("boss-bandage").classList.toggle("hidden", won); $("boss-bandage").disabled = busy || !bd; $("boss-bandage").textContent = `🩹 ผ้าพันแผล ×${bd}`;
   $("boss-medkit").classList.toggle("hidden", won); $("boss-medkit").disabled = busy || !kit; $("boss-medkit").textContent = `🧰 ชุดปฐมพยาบาล ×${kit}`;
   $("boss-flee").classList.toggle("hidden", won); $("boss-flee").disabled = busy;
   $("boss-claim").classList.toggle("hidden", !won); $("boss-claim").disabled = busy;
-  $("boss-skills").classList.toggle("hidden", won); renderSkillBar($("boss-skills"), (id) => bossRound("skill:" + id), busy || won, p);
+  $("boss-skills").classList.toggle("hidden", won); renderSkillBar($("boss-skills"), (id) => bossRound("skill:" + id), busy || won || bStun, p);
 }
 
 // การโจมตีของบอส 1 รอบ (ทอยโดน/พลาดแต่ละครั้ง)
@@ -1922,9 +1970,11 @@ async function bossRound(action) {
   let killed = false;
   try {
     const u = {}, uid = state.uid; let hp = p.hp, strike = true, line = "", skillUsed = null;
+    const w0 = equippedWeapon(), stunMsg = "😵 คุณมึนงง โจมตีไม่ได้ (หนี/ใช้ยาได้)";
     if (action.startsWith("skill:")) {
       const id = action.slice(6), sk = skillDef(id);
       if (!sk || sk.kind !== "pve" || !skillReady(id)) return;
+      if (sk.type === "power" && effActive("stun")) return toast(stunMsg);
       skillUsed = sk; skillUseWrites(u, id);
       if (sk.type === "power") {
         const w = equippedWeapon(), dmg = Math.floor(myDmg(w) * sk.power), left = Math.max(0, bs.hp - dmg);
@@ -1940,7 +1990,8 @@ async function bossRound(action) {
         line = `${sk.icon} ${sk.name} +${hp - p.hp} HP`;
       }
     } else if (action === "attack") {
-      const w = equippedWeapon(), r = d6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
+      if (effActive("stun")) return toast(stunMsg);
+      const w = equippedWeapon(), r = pveD6(), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
       const dmg = Math.round(myDmg(w) * mult), left = Math.max(0, bs.hp - dmg);
       line = `🎲 ทอย ${r} — ` + (dmg ? `โจมตีโดน −${dmg}${r === 6 ? " (คริติคอล!)" : ""}` : "พลาด!");
       if (w && r !== 1) wearUpdates(u, w);
@@ -1956,7 +2007,16 @@ async function bossRound(action) {
       if (Math.random() < b.flee) { u[`bossFights/${uid}`] = null; strike = false; line = "🏃 คุณวิ่งหนีออกมาได้!"; }
       else line = "🏃 หนีไม่พ้น! มันขวางทางไว้";
     }
+    // อาวุธคม: สุ่มทำให้บอสเลือดไหล / บอสที่เลือดไหลเสียเลือดทุกรอบ
+    const bHp = () => (typeof u[`bossFights/${uid}/hp`] === "number" ? u[`bossFights/${uid}/hp`] : bs.hp), hitNow = bHp() < bs.hp;
+    if (!killed && u[`bossFights/${uid}`] !== null) {
+      const bl = state.bossBleed && state.bossBleed.id === bs.ts ? state.bossBleed : null;
+      if (bl && bl.n > 0) { const nh = Math.max(0, bHp() - BOSS_BLEED); u[`bossFights/${uid}/hp`] = nh; bl.n--; line += ` • 🩸 ${b.name}เสียเลือด −${BOSS_BLEED}`; if (nh === 0) { strike = false; killed = true; } }
+      const pc = w0 && hitNow ? (WPN_PROC[w0.it.id] || 0) * (skillUsed?.type === "power" ? 2 : 1) : 0;
+      if (!killed && pc && Math.random() * 100 < pc && !(state.bossBleed && state.bossBleed.id === bs.ts && state.bossBleed.n > 0)) { state.bossBleed = { id: bs.ts, n: BOSS_BLEED_N }; line += ` • 🩸 ${w0.def.name}ทำให้${b.name}เลือดไหล!`; }
+    }
     if (strike) { const s = strikeWith(b, skillUsed), cut = gearCut(s.total); hp = Math.max(0, hp - cut); line += ` • ${s.text}${cut < s.total ? ` (🛡️ ชุดลดเหลือ −${cut})` : ""}`; }
+    if (strike) line += monFx(u, bs.boss, p.hp - hp, hp);
     if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
@@ -2001,6 +2061,7 @@ const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow(
 const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
 const wbMine = (b) => { const h = state.wbHits?.[state.uid]; return h && h.bid === b.startedAt ? h : null; };
 const wbRewardText = (b) => { if (b.rid === "skill" && b.rsk) return `📖 สกิล ${b.rsk.icon || "✨"} ${b.rsk.name}`; if (b.rid === "custom_gear" && b.rcg) return `${b.rcg.icon || "🛡️"} ${b.rcg.name}`; const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
+const wbBonusText = (b) => (b.rpool ? " + 🎲 เกราะสุ่ม" : "") + (b.rtop ? " + 🥇 ชิ้นพิเศษอันดับ 1" : "");
 
 function renderWB() {
   const box = $("wb-box"); if (!box) return;
@@ -2014,7 +2075,7 @@ function renderWB() {
   if (dead && mine && !claimed && !state.wbBusy && state.wbAutoClaimed !== b.startedAt) { state.wbAutoClaimed = b.startedAt; setTimeout(wbClaim, 300); }
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
-  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}`;
+  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}`;
   $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
   $("txt-wb").textContent = `HP ${Math.max(0, b.hp)}/${b.max}`;
   const top = Object.values(state.wbHits || {}).filter((h) => h.bid === b.startedAt).sort((a, c) => c.total - a.total).slice(0, 3);
@@ -2023,6 +2084,7 @@ function renderWB() {
   const atk = $("wb-attack"); atk.classList.toggle("hidden", dead);
   atk.disabled = !!state.wbBusy || p.hp <= 0 || cd > 0 || stunned;
   atk.textContent = state.wbBusy ? "กำลังต่อสู้…" : stunned ? "😵 มึนงง" : cd > 0 ? `พักแรง ${cd}` : "⚔️ โจมตีบอสโลก";
+  renderSwapBar($("wb-swap")); $("wb-swap").classList.toggle("hidden", dead || !$("wb-swap").childElementCount);
   const sb = $("wb-skills"); sb.classList.toggle("hidden", dead);
   renderSkillBar(sb, (id) => wbAttack(true, id), !!state.wbBusy || p.hp <= 0 || cd > 0 || stunned, p);
   const cl = $("wb-claim"); cl.classList.toggle("hidden", !dead || !mine || claimed); cl.disabled = !!state.wbBusy;
@@ -2055,7 +2117,7 @@ async function wbAttack(retry = true, skill = null) {
     const fresh = (await get(ref(db, `worldBosses/${z}`))).val();   // อ่าน HP ล่าสุดก่อนตี (หลายคนตีพร้อมกันได้)
     b = fresh && typeof fresh.hp === "number" ? { ...b, ...fresh } : b;
     if (!wbAlive(b)) { toast("บอสโลกล้มไปแล้วหรือหายไปแล้ว"); return; }
-    const uid = state.uid, u = {}, w = equippedWeapon(), r = d6(), sk = skd, atk = !sk || sk.type === "power";
+    const uid = state.uid, u = {}, w = equippedWeapon(), r = pveD6(), sk = skd, atk = !sk || sk.type === "power";
     const mult = sk?.type === "power" ? sk.power : r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
     const dmg = atk ? Math.min(b.hp, Math.floor(myDmg(w) * mult)) : 0;   // floor: ต้องไม่เกินเพดาน (×1.5 หรือ power ของสกิล custom) ที่ rules ตรวจ
     u[`users/${uid}/lastAttack`] = serverTimestamp();
@@ -2069,6 +2131,8 @@ async function wbAttack(retry = true, skill = null) {
       u[`worldBossHits/${z}/${uid}`] = { bid: b.startedAt, last: dmg, total: (mine?.total || 0) + dmg, ts: serverTimestamp(), name: p.username, ...(w ? { wpn: w.it.id } : {}), ...(sk && !sk.basic && sk.type === "power" ? { sk: skill } : {}) };
       u[`worldBosses/${z}/hp`] = b.hp - dmg;
       killed = b.hp - dmg <= 0;
+      const nt = (mine?.total || 0) + dmg;
+      if (nt > (b.top?.total || 0)) u[`worldBosses/${z}/top`] = { uid, total: nt, name: String(p.username).slice(0, 16) };   // อันดับ 1 ณ ตอนนี้ (rules ตรวจว่าตรงกับดาเมจสะสมจริง)
     }
     let hp = p.hp;
     if (sk?.type === "heal") { hp = Math.min(maxHp(), hp + skillHealOf(sk)); line += ` +${hp - p.hp} HP`; }
@@ -2076,6 +2140,7 @@ async function wbAttack(retry = true, skill = null) {
       const s = strikeWith({ hits: b.hits, acc: b.acc, dmg: [b.dmgLo, b.dmgHi], verb: `${b.name}โจมตีกลับ` }, sk);
       hp = Math.max(0, hp - s.total); line += ` • ${s.text}`;
       if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
+      if (hp < p.hp) line += monFx(u, "wboss", p.hp - hp, hp);
     }
     state.wbDbgU = u;
     await update(ref(db), u);
@@ -2092,27 +2157,41 @@ async function wbAttack(retry = true, skill = null) {
   } finally { state.wbBusy = false; renderWB(); }
 }
 
-async function wbClaim() {
-  const z = state.zone, b = wbOf(z);
-  if (!b || b.hp > 0 || state.wbBusy) return;
-  if (!wbMine(b)) return toast("ต้องร่วมโจมตีบอสก่อนถึงจะรับรางวัลได้");
-  if (state.wbClaim?.bid === b.startedAt) return toast("รับรางวัลไปแล้ว");
+async function wbClaim(retry = true) {
+  const z = state.zone, b0 = wbOf(z);
+  if (!b0 || b0.hp > 0 || state.wbBusy) return;
+  if (!wbMine(b0)) return toast("ต้องร่วมโจมตีบอสก่อนถึงจะรับรางวัลได้");
+  if (state.wbClaim?.bid === b0.startedAt) return toast("รับรางวัลไปแล้ว");
   state.wbBusy = true; renderWB();
+  let b = b0;
   try {
-    const u = { [`worldBossClaims/${z}/${state.uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
-    if (b.rid === "custom_gear") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(b.rcg) };
-    else
-    if (b.rid === "skill") u[`skills/${state.uid}/wb_${z}_${b.startedAt}`] = skillFields(b.rsk);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
-    else if (def.type === "weapon") u[`inventory/${state.uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
-    else u[`inventory/${state.uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
+    const fresh = (await get(ref(db, `worldBosses/${z}`))).val();   // อ่านตัวนับคลังเกราะล่าสุด (หลายคนรับพร้อมกันได้)
+    if (fresh && fresh.startedAt === b0.startedAt) b = { ...b0, ...fresh };
+    const uid = state.uid, u = { [`worldBossClaims/${z}/${uid}`]: { bid: b.startedAt, ts: serverTimestamp() } }, def = ITEMS[b.rid];
+    if (b.rid === "custom_gear") u[`inventory/${uid}/wb_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(b.rcg) };
+    else if (b.rid === "skill") u[`skills/${uid}/wb_${z}_${b.startedAt}`] = skillFields(b.rsk);   // รางวัลเป็นสกิล: เข้า skills ไม่ใช่ inventory
+    else if (def.type === "weapon") u[`inventory/${uid}/wb_${z}_${b.startedAt}`] = { id: b.rid, qty: 1, dur: b.rdur ?? Math.min(30, def.maxDur) };
+    else u[`inventory/${uid}/${b.rid}`] = { id: b.rid, qty: Math.min(99, (state.inv[b.rid]?.qty || 0) + b.rqty) };
+    // ชิ้นที่ 2: เกราะจากคลังที่สุ่มไว้ล่วงหน้า (ได้ตามลำดับคนรับ — rules บังคับให้เลือกเองไม่ได้)
+    const n = b.rn || 0, pg = b.rpool?.["p" + n];
+    if (pg) { u[`inventory/${uid}/wbp_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(pg) }; u[`worldBosses/${z}/rn`] = n + 1; }
+    // ชิ้นพิเศษของผู้ทำดาเมจสูงสุด
+    const topGear = b.rtop && b.top?.uid === uid ? b.rtop : null;
+    if (topGear) u[`inventory/${uid}/wbt_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(topGear) };
     state.wbDbgU = u;
     await update(ref(db), u);
     logLine(`🏆 รางวัลจาก${b.name}: ${wbRewardText(b)}`, "combat"); toast(`ได้รับ ${wbRewardText(b)}`);
-  } catch (e) { wbDebug("claim", e, state.wbDbgU, b); toast(errMsg(e)); }
+    if (pg) logLine(`🎲 เกราะสุ่มจากคลัง: ${pg.icon || "🛡️"} ${pg.name} (ลดดาเมจ ${pg.red}% • ช่อง${pg.gslot === "acc" ? "อุปกรณ์เสริม" : "เกราะ"})`, "combat");
+    if (topGear) logLine(`🥇 คุณทำดาเมจสูงสุด! ได้ชิ้นพิเศษ: ${topGear.icon || "🛡️"} ${topGear.name} (ลดดาเมจ ${topGear.red}%)`, "system");
+  } catch (e) {
+    wbDebug("claim", e, state.wbDbgU, b);
+    if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) { state.wbBusy = false; await new Promise((r) => setTimeout(r, 900)); return wbClaim(false); }   // มีคนรับพร้อมกัน ตัวนับคลังขยับ → ลองใหม่ 1 ครั้ง
+    toast(errMsg(e));
+  }
   finally { state.wbBusy = false; renderWB(); }
 }
 $("wb-attack").addEventListener("click", () => wbAttack());
-$("wb-claim").addEventListener("click", wbClaim);
+$("wb-claim").addEventListener("click", () => wbClaim());
 $("wb-title").parentElement.addEventListener("click", () => $("wb-box").classList.toggle("open"));   // มือถือ: แตะหัวกล่องเพื่อดูรายละเอียด/อันดับดาเมจ
 
 function renderAdminWB() {
@@ -2169,11 +2248,15 @@ $("adm-wb-spawn").addEventListener("click", async () => {
     ...(isW ? { rdur: num("adm-wb-rdur", 1, 60, Math.min(30, def.maxDur)) } : {}),
     ...(icon ? { icon } : {}), ...(tag ? { tag } : {}), ...(intro ? { intro } : {}), ...(mins ? { endsAt: serverNow() + mins * 60000 } : {})
   };
+  if ($("adm-wb-loot").checked) {   // สุ่มคลังเกราะ + ชิ้นพิเศษอันดับ 1 ตามความแรงบอส (หรือระดับที่เลือก)
+    const tsel = $("adm-wb-tier").value, tier = tsel === "auto" ? lootTierOf(hp) : parseInt(tsel, 10);
+    Object.assign(b, rollLoot(Math.random, tier, num("adm-wb-pool", 1, 12, 8), GEAR_CUSTOM_MAX, GEAR_CUSTOM_MAX));
+  }
   try {
     const annId = push(ref(db, "announcements")).key;
     await update(ref(db), {
       [`worldBosses/${z}`]: b, [`worldBossHits/${z}`]: null, [`worldBossClaims/${z}`]: null,
-      [`announcements/${annId}`]: { text: `${icon || "👹"} บอสโลก「${name}」ปรากฏตัวที่${ZONES[z].name}! ไปช่วยกันล้มมัน${intro ? " — " + intro : ""}`.slice(0, 200), zone: "all", by: state.profile.username, ts: serverTimestamp() }
+      [`announcements/${annId}`]: { text: `${icon || "👹"} บอสโลก「${name}」ปรากฏตัวที่${ZONES[z].name}! ไปช่วยกันล้มมัน${intro ? " — " + intro : ""}${b.rpool ? " • รางวัลมีเกราะสุ่ม!" : ""}`.slice(0, 200), zone: "all", by: state.profile.username, ts: serverTimestamp() }
     });
     toast(`เรียกบอสโลกที่ ${ZONES[z].name} แล้ว`);
     trimList("announcements", ANN_LIMIT).catch(() => {});
@@ -2230,7 +2313,7 @@ function wbaBuild(last) {
   const [rid, rqty] = t.rewards[Math.floor(rnd() * t.rewards.length)], isW = ITEMS[rid].type === "weapon";
   return {
     zone, mins: t.mins,
-    boss: { name, icon, tag: t.tag, intro, hp: t.hp, max: t.hp, zone, dmgLo: t.dlo, dmgHi: t.dhi, hits: t.hits, acc: t.acc, rid, rqty: isW ? 1 : rqty, ...(isW ? { rdur: Math.min(20, ITEMS[rid].maxDur) } : {}) }
+    boss: { name, icon, tag: t.tag, intro, hp: t.hp, max: t.hp, zone, dmgLo: t.dlo, dmgHi: t.dhi, hits: t.hits, acc: t.acc, rid, rqty: isW ? 1 : rqty, ...(isW ? { rdur: Math.min(20, ITEMS[rid].maxDur) } : {}), ...rollLoot(rnd, lootTierOf(t.hp), 6, 12, 18) }
   };
 }
 
@@ -2259,7 +2342,7 @@ function wbaNotice(z, b, was) {
   if (was && was.startedAt === b.startedAt) return;
   state.wbaSeen = state.wbaSeen || {}; const key = z + b.startedAt; if (state.wbaSeen[key]) return; state.wbaSeen[key] = 1;
   const left = b.endsAt ? Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000)) : 0;
-  logLine(`${b.icon || "👹"} บอสโลก「${b.name}」ปรากฏที่${ZONES[z]?.name || z}! ไปช่วยกันล้มมัน${left ? ` (หายไปใน ~${left} นาที)` : ""} • รางวัล ${wbRewardText(b)}`, "system");
+  logLine(`${b.icon || "👹"} บอสโลก「${b.name}」ปรากฏที่${ZONES[z]?.name || z}! ไปช่วยกันล้มมัน${left ? ` (หายไปใน ~${left} นาที)` : ""} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}`, "system");
   toast(`${b.icon || "👹"} บอสโลกปรากฏที่${ZONES[z]?.name || z}!`);
 }
 
@@ -4343,4 +4426,27 @@ async function qpSeedZone() {
   if (!confirm("เติมเควสโซนรายวัน?\nจะเพิ่ม/อัปเดตเควส zd0h1…zd6z3 (42 ข้อ) ใน config/questDefs/daily โดยไม่แตะเควสอื่น")) return;
   try { await update(ref(db, "config/questDefs/daily"), zoneQuestSeed()); toast("เติมเควสโซนรายวันแล้ว"); }
   catch (e) { console.error("qpSeedZone", e?.code || e); toast(errMsg(e)); }
+}
+
+/* =========================================================
+   21) เกราะสุ่มรางวัลบอสโลก (คลังต่อผู้ร่วมโจมตี + ชิ้นพิเศษอันดับ 1)
+   สุ่ม "ตอนบอสเกิด" แล้วเก็บไว้กับบอส (worldBosses/{zone}/rpool, rtop) — rules บังคับให้ผู้เล่นรับตรงตามนั้นเท่านั้น
+   ========================================================= */
+const LOOT_RED = { 1: [3, 6], 2: [6, 10], 3: [9, 13], 4: [13, 19], 5: [19, 26], 6: [26, 35] };
+const LOOT_PRE = ["เหล็กกล้า", "หนังดิบ", "ผ้าใบเสริมแผ่น", "ยุทธวิธี", "โลหะผสม", "คาร์บอน", "ฝ่าพายุ", "ผู้พิทักษ์", "เถ้าถ่าน", "เขี้ยวมังกร"];
+const LOOT_TOP = ["ตำนาน", "ราชัน", "จอมโหด", "เหนือชั้น"];
+const LOOT_ARM = [["เสื้อเกราะ", "🛡️"], ["เกราะอก", "🦺"], ["เสื้อกั๊ก", "🦺"], ["เกราะหลัง", "🛡️"]];
+const LOOT_ACC = [["สร้อยนิรภัย", "🧿"], ["สายรัดข้อมือ", "⌚"], ["กระเป๋าสะพาย", "🎒"], ["หมวกนิรภัย", "⛑️"], ["รองเท้าบูท", "🥾"]];
+const lootTierOf = (hp) => (hp < 1500 ? 1 : hp < 3000 ? 2 : hp < 5000 ? 3 : hp < 10000 ? 4 : hp < 30000 ? 5 : 6);
+const lootPick = (rnd, a) => a[Math.floor(rnd() * a.length)];
+function rollGear(rnd, tier, cap, prestige) {
+  const [lo, hi] = LOOT_RED[Math.max(1, Math.min(6, tier))];
+  const red = Math.max(1, Math.min(cap, lo + Math.floor(rnd() * (hi - lo + 1))));
+  const acc = rnd() < 0.3, [noun, icon] = lootPick(rnd, acc ? LOOT_ACC : LOOT_ARM);
+  return { name: `${noun}${lootPick(rnd, prestige ? LOOT_TOP : LOOT_PRE)}`.slice(0, 40), gslot: acc ? "acc" : "arm", red, icon };
+}
+// n ชิ้นในคลัง (ระดับ tier) + ชิ้นพิเศษอันดับ 1 (ระดับ tier+1); capPool/capTop = เพดานค่าลดดาเมจ (บอสสุ่มอัตโนมัติ rules จำกัด 12/18)
+function rollLoot(rnd, tier, n, capPool, capTop) {
+  const rpool = {}; for (let i = 0; i < Math.max(1, Math.min(12, n)); i++) rpool["p" + i] = rollGear(rnd, tier, capPool, false);
+  return { rpool, rtop: rollGear(rnd, tier + 1, capTop, true) };
 }
