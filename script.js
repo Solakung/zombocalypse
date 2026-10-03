@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-03.1854";
+const APP_VERSION = "2026-10-03.1859";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -284,9 +284,13 @@ function effectiveDrops(z) {
 }
 
 // เนื้อเน่า: น้ำหนักดรอปเพิ่มเฉพาะฝั่งซอมบี้ (นอก Safe Zone)
-const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10 };
+const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10, safe: 6 };
 function humanDrops(z) { const d = effectiveDrops(z), w = BOSS_W[z]; return w ? [...d, { id: "boss", w }] : d; }   // ตารางค้นหาของมนุษย์ = ตารางโซน + โอกาสเจอบอส
-function zombieDrops(z) { const d = effectiveDrops(z), w = ZOMBIE_EXTRA[z]; return w ? [...d, { id: "rotten_meat", w }] : d; }
+// ซอมบี้: "เจอซอมบี้" = ตามรอยฝูงไปเจอซากที่ทิ้งไว้ (เนื้อเน่า) แทนที่จะเมินไปเฉยๆ → ฝูงบุก/กำแพงพังจึงเป็นข่าวดีของฝั่งซอมบี้
+function zombieDrops(z) {
+  const d = effectiveDrops(z).map((x) => x.id === "zombie" ? { id: "rotten_meat", w: x.w * 0.4 } : x), w = ZOMBIE_EXTRA[z];
+  return w ? [...d, { id: "rotten_meat", w }] : d;
+}
 
 function dangerInfo(id) {
   const drops = effectiveDrops(id), total = drops.reduce((t, d) => t + d.w, 0) || 1;
@@ -311,7 +315,7 @@ function renderZoneDanger(z) {
   }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
-    if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}`;
+    if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}${state.profile?.faction === "zombie" && d.ev.type === "horde" ? " • 🥩 ซากเพียบ" : ""}`;
   }
 }
 
@@ -508,7 +512,9 @@ function openGuide() {
   ]);
   sec("ฝ่ายซอมบี้", [
     "กินอาหารคนทั่วไปไม่ได้ ต้องหาอาหารจากการกัดผู้เล่นหรือเก็บ 🥩 เนื้อเน่า (+20) ที่ค้นเจอนอก Safe Zone",
-    "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง"
+    "เนื้อเน่ามีแต่ซอมบี้เท่านั้นที่กินลง",
+    `ใน Safe Zone ซอมบี้ทุบกำแพงได้ (−${SMASH_DMG} HP กำแพงต่อครั้ง เสียพลังงาน ${SMASH_STAM} คูลดาวน์ ${SMASH_CD / 1000} วิ) ถ้ากำแพงพัง จะล่าเหยื่อในค่ายได้`,
+    "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
   sec("ของบนพื้น", [
     "กดวางไอเทมลงพื้นเพื่อแบ่งให้คนในโซนเดียวกัน ใครอยู่ในโซนก็เก็บได้",
@@ -1572,7 +1578,7 @@ async function scavengeOnce() {
   {
     const isZombie = p.faction === "zombie";
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
-    if (state.deep && !starving) table = deepTable(table);   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
+    if (state.deep && !starving) table = deepTable(table, isZombie);   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
     let found = rollDrop(table);
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
@@ -3942,6 +3948,7 @@ function qpRender() {
    - สภาพโซนรายวัน: สุ่มจากวัน (เวลาไทย) + โซน ทุกคนเห็นตรงกัน ไม่ต้องเก็บข้อมูล
    - ค้นลึก: พลังงาน ×2 ของหายากออกง่ายขึ้น แต่ซอมบี้มากขึ้น (ฝั่ง client ล้วน rules ไม่เปลี่ยน)
    ========================================================= */
+const SMASH_DMG = 10, SMASH_STAM = 15, SMASH_CD = 30000;   // ซอมบี้ทุบกำแพง: ต้องตรงกับ wall/safe + users.lastSmash ใน rules (คลาดเคลื่อน ≤2)
 const WALL_MAX = 1000, WALL_DIV = 259200, WALL_PER = 10, WALL_SPEND = 20, WALL_BREACH_Z = 25;
 
 function wallHp() {
@@ -3970,8 +3977,11 @@ function wallListen() {
   if (state.wallOn || !state.uid) return; state.wallOn = true;
   state.wall = null; state.wallLog = {}; state.wallBusy = false; state.wallWasBroken = null; state.wallWarned = false;
   wallStyle();
+  state.wallHit = {};
+  onValue(ref(db, "wallHit"), (s) => { state.wallHit = s.val() || {}; wallRender(); }, (e) => console.error("wallHit", e));
   onValue(ref(db, "wall/safe"), (s) => {
-    state.wall = s.val();
+    const before = wallHp(); state.wall = s.val(); const after = wallHp();
+    if (before !== null && after !== null && after < before - 5 && state.profile?.faction === "human" && state.zone === "safe") logLine(`🧟 เสียงทุบกำแพงค่ายดังสนั่น! กำแพงเหลือ ${Math.floor(after)}/${WALL_MAX} — ใครมี scrap รีบซ่อม`, "system");
     if (!state.wall && !state.wallMaking) {   // ยังไม่มีกำแพง → ใครก็ได้สร้างให้เต็ม 1000 (rules อนุญาตเฉพาะตอนยังไม่มี)
       state.wallMaking = true;
       set(ref(db, "wall/safe"), { hp: WALL_MAX, ts: serverTimestamp() }).catch(() => {}).finally(() => { state.wallMaking = false; });
@@ -4016,9 +4026,37 @@ function wallRender() {
     if (all > 5) row.append(btn(`ซ่อม ×${all}`, () => wallRepair(all), "btn primary mini"));
     row.append(mk("span", "muted", `scrap ในกระเป๋า ${have}`));
     box.append(row);
-  } else if (p) box.append(mk("div", "muted wall-note", "🧟 ซอมบี้ซ่อมกำแพงไม่ได้ — ปล่อยให้มันผุพังเองก็พอ"));
+  } else if (p) {
+    const cdLeft = Math.max(0, SMASH_CD - (serverNow() - (p.lastSmash || 0))), row = mk("div", "wall-btns");
+    const b = btn(`💢 ทุบกำแพง (−${SMASH_DMG} HP กำแพง • −${SMASH_STAM} พลังงาน)`, wallSmash, "btn danger mini");
+    b.disabled = state.wallBusy || broken || cdLeft > 0 || (p.hp || 0) <= 0; row.append(b);
+    row.append(mk("span", "muted", broken ? "กำแพงพังแล้ว — เข้าไปล่าเหยื่อได้เลย" : cdLeft > 0 ? `รออีก ${Math.ceil(cdLeft / 1000)} วิ` : "คูลดาวน์ 30 วิ"));
+    box.append(row);
+  }
+  const hits = Object.values(state.wallHit || {}).filter((x) => x && x.n).sort((a, b) => b.n - a.n).slice(0, 3);
+  if (hits.length) box.append(mk("div", "muted wall-note", "💢 ผู้ทุบสูงสุด: " + hits.map((x) => `${x.name} (${x.n})`).join(" • ")));
   const top = Object.values(state.wallLog || {}).filter((x) => x && x.n).sort((a, b) => b.n - a.n).slice(0, 3);
   if (top.length) box.append(mk("div", "muted wall-note", "🏅 ผู้ซ่อมสูงสุด: " + top.map((x) => `${x.name} (${x.n})`).join(" • ")));
+}
+async function wallSmash() {
+  const p = state.profile; if (!p || p.hp <= 0 || p.faction !== "zombie" || state.zone !== "safe" || state.wallBusy) return;
+  const h = wallHp(); if (h === null) return;
+  if (h <= 0) return toast("กำแพงพังอยู่แล้ว");
+  const cd = SMASH_CD - (serverNow() - (p.lastSmash || 0)); if (cd > 0) return toast(`ยังทุบไม่ไหว รออีก ${Math.ceil(cd / 1000)} วิ`);
+  const cur = curStamina(); if (cur < SMASH_STAM) return toast("พลังงานไม่พอ");
+  state.wallBusy = true; wallRender();
+  try {
+    const hp = Math.max(0, Math.floor(h) - SMASH_DMG), uid = state.uid;
+    await update(ref(db), {
+      "wall/safe": { hp, ts: serverTimestamp() },
+      [`users/${uid}/lastSmash`]: serverTimestamp(),
+      [`users/${uid}/stamina`]: cur - SMASH_STAM, [`users/${uid}/staminaTs`]: serverTimestamp(),
+      [`wallHit/${uid}`]: { n: (state.wallHit?.[uid]?.n || 0) + 1, ts: serverTimestamp(), name: p.username }
+    });
+    logLine(hp <= 0 ? "💥 คุณทุบกำแพงจนพังทลาย! ค่ายไม่ปลอดภัยอีกต่อไป" : `💢 คุณทุบกำแพงค่าย กำแพงเหลือ ${hp}/${WALL_MAX}`, "combat");
+    setTimeout(wallRender, SMASH_CD + 300);
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.wallBusy = false; wallRender(); }
 }
 async function wallRepair(n) {
   const p = state.profile; if (!p || p.hp <= 0 || p.faction !== "human" || state.zone !== "safe" || state.wallBusy) return;
@@ -4061,10 +4099,11 @@ function dailyNews() {
 }
 
 // ---- ค้นลึก ----
-function deepTable(t) {
+function deepTable(t, isZ) {
   return t.map((d) => d.id === null ? { ...d, w: d.w * 0.5 }
     : d.id === "zombie" ? { ...d, w: d.w * 1.5 }
-    : (d.id === "boss" || d.id === "rotten_meat") ? d
+    : d.id === "rotten_meat" ? (isZ ? { ...d, w: d.w * 2 } : d)   // ซอมบี้ค้นลึก: เนื้อเน่าออกง่ายขึ้น ×2
+    : d.id === "boss" ? d
     : d.w <= 5 ? { ...d, w: d.w * 2 } : d);
 }
 function scavLabel() { $("btn-scavenge").textContent = `ค้นหาไอเทม${state.deep ? " (ลึก)" : ""} (−${searchCost()} พลังงาน)`; }
@@ -4075,7 +4114,7 @@ function deepSync() {
 function deepInit() {
   if (state.deepOn) return; state.deepOn = true; state.deep = false;
   const b = btn("🔦 โหมดค้น: ปกติ", () => { state.deep = !state.deep; deepSync(); }, "btn ghost mini"); b.id = "btn-deep";
-  b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50%";
+  b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50% (ซอมบี้: เนื้อเน่าออกง่ายขึ้น ×2)";
   $("btn-scavenge").after(b); deepSync(); dailyNews();
 }
 
