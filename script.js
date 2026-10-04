@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0736";
+const APP_VERSION = "2026-10-04.0747";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -108,7 +108,9 @@ const BOSSES = {
     intro: "พื้นสะเทือนเป็นจังหวะ… สิ่งที่ไม่ควรมีอยู่ลากร่างออกมาจากความมืดของอุโมงค์!",
     loot: [{ id: "samurai_sword", w: 3 }, { id: "shotgun", w: 2 }, { id: "serum", w: 3 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "medkit", w: 3 }, { id: "antidote", w: 2 }, { id: "trauma_kit", w: 2 }] }
 };
-const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA = 10, TRAVEL_STAMINA_SAFE = 5;   // ค่าเดินทางข้ามโซน (กลับ Safe Zone ถูกกว่า) — ต้องตรงกับ rules
+const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA_SAFE = 5;
+// ค่าเดินทางคิดตามปลายทาง ยิ่งไกล Safe Zone ยิ่งแพง (ใกล้ 6 / กลาง 10 / ไกล 14, กลับ Safe 5) — ต้องตรงกับ rules
+const TRAVEL_NEAR = ["forest", "ruins"], TRAVEL_FAR = ["base", "police", "tunnel"], TRAVEL_STAMINA = 10;
 
 // ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
 const STAT_POINTS = 7, DODGE_PER_POINT = 0.03;
@@ -597,7 +599,7 @@ function openGuide() {
     `ใน Safe Zone ยังค้นหาได้เพื่อไม่ให้ติดตาย แต่เสีย HP ${STARVE_HP} ต่อครั้ง`
   ]);
   sec("การเดินทาง", [
-    `ย้ายโซนเสียพลังงาน ${TRAVEL_STAMINA} (กลับ Safe Zone เสีย ${TRAVEL_STAMINA_SAFE})`,
+    `ย้ายโซนเสียพลังงานตามความไกลจาก Safe Zone: ใกล้ 6 / กลาง ${TRAVEL_STAMINA} / ไกล 14 (กลับ Safe Zone เสีย ${TRAVEL_STAMINA_SAFE})`,
     `หลังเดินทางต้องรอ ${fmtDur(TRAVEL_COOLDOWN)} ก่อนย้ายโซนอีกครั้ง`
   ]);
   sec("เมื่อ HP หมด", [
@@ -997,7 +999,7 @@ $("btn-copy-id").addEventListener("click", async () => {
 // buildZoneList → ดูหัวข้อ 23 ท้ายไฟล์ (แผนที่โซน)
 function teardownZone() { state.unsubs.forEach((f) => f()); state.unsubs = []; }
 
-const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_STAMINA);
+const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.includes(z) ? 6 : TRAVEL_FAR.includes(z) ? 14 : TRAVEL_STAMINA);
 function travelCooldownLeft() { const t = state.profile?.lastTravel; return typeof t === "number" ? Math.max(0, TRAVEL_COOLDOWN - (serverNow() - t)) : 0; }
 
 // moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
@@ -4733,8 +4735,9 @@ if (HAS_DOM && typeof window !== "undefined") {
    ฝั่งเกมล้วน — ไม่แตะ rules (แผนที่ใช้ปุ่มโซนเดิม ฟังก์ชันเดินทางเดิมทุกอย่าง)
    ========================================================= */
 /* ---- แผนที่โซน: ตำแหน่งโหนด (เปอร์เซ็นต์) และถนนเชื่อม — แค่ภาพ ไม่มีผลกับค่าเดินทาง ---- */
-const ZMAP = { forest: [20, 12], base: [80, 12], hospital: [14, 34], tunnel: [50, 34], police: [86, 34], ruins: [20, 56], safe: [50, 56], mall: [80, 56], factory: [22, 78], port: [78, 78] };
-const ZROADS = [["safe", "ruins"], ["safe", "mall"], ["safe", "tunnel"], ["ruins", "hospital"], ["mall", "police"], ["hospital", "forest"], ["police", "base"], ["tunnel", "forest"], ["tunnel", "base"], ["ruins", "factory"], ["mall", "port"], ["factory", "port"]];
+// ผังแผนที่: แถวล่างสุด = Safe Zone ยิ่งขึ้นไปยิ่งไกล/อันตราย (ใกล้: ป่าลึก เขตเมืองร้าง / กลาง: ท่าเรือ โรงงาน ห้าง โรงพยาบาล / ไกล: ค่ายทหาร สถานีตำรวจ อุโมงค์)
+const ZMAP = { base: [20, 12], police: [50, 12], tunnel: [80, 12], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
+const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"]];
 const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
 function zmapRoads() {
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
