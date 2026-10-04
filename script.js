@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1909";
+const APP_VERSION = "2026-10-04.1928";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -5172,11 +5172,14 @@ const QP_STREAK_SEED = {
   "weekly/wgoal": { title: "🌍 ร่วมทำเป้าหมายประจำสัปดาห์ให้สำเร็จ", desc: "ช่วยให้เป้าหมายร่วมสำเร็จอย่างน้อย 1 ข้อ (ดู 📊 → 🌍)", ev: "goalok", need: 1, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "medkit", qty: 1 } } },
   "weekly/wgoal2": { title: "ทำเป้าหมายประจำสัปดาห์ครบทั้ง 2 ข้อ", desc: "เป้าหมายทั้งเซิร์ฟเวอร์ + เป้าหมายของฝั่งคุณ", ev: "goalok", need: 2, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
   "daily/dmis": { title: "📻 ร่วมภารกิจกลุ่มจากวิทยุให้สำเร็จ", desc: "ภารกิจกลุ่มประกาศทางวิทยุ ดูความคืบหน้าที่ 📊 → 🌍", ev: "gmok", need: 1, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "rotten_meat", qty: 5 } } },
+  "daily/dbty": { title: "🎯 เก็บค่าหัวสำเร็จ 1 ครั้ง", desc: "ล้มผู้เล่นที่มีค่าหัว (ปุ่ม 💰 ที่รายชื่อผู้เล่น / ดู 📊 → 🌍)", ev: "btyok", need: 1, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
+  "weekly/wbty3": { title: "🎯 นักล่าค่าหัว: เก็บค่าหัว 3 ครั้งในสัปดาห์นี้", ev: "btyok", need: 3, r: { human: { id: "riot_vest", qty: 1 }, zombie: { id: "mut_hide1", qty: 1 } } },
+  "weekly/wbty6": { title: "🎯 ตำนานนักล่า: เก็บค่าหัว 6 ครั้งในสัปดาห์นี้", ev: "btyok", need: 6, r: { human: { id: "army_vest", qty: 1 }, zombie: { id: "mut_hide2", qty: 1 } } },
   "weekly/wmis": { title: "ภารกิจกลุ่มสำเร็จ 4 ครั้งในสัปดาห์", ev: "gmok", need: 4, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } }
 };
 async function qpSeedStreak() {
   if (state.profile?.role !== "owner") return;
-  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม + เป้าหมายร่วม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege, dmis และ weekly: wa3, wa5, wa7, wsiege, wgoal, wgoal2, wmis โดยไม่แตะเควสอื่น")) return;
+  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม + เป้าหมายร่วม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege, dmis, dbty และ weekly: wa3, wa5, wa7, wsiege, wgoal, wgoal2, wmis, wbty3, wbty6 โดยไม่แตะเควสอื่น")) return;
   try { await update(ref(db, "config/questDefs"), QP_STREAK_SEED); toast("เติมเควสเช็กอิน/ปิดล้อม/เป้าหมายร่วมแล้ว"); }
   catch (e) { console.error("qpSeedStreak", e?.code || e); toast(errMsg(e)); }
 }
@@ -6314,7 +6317,7 @@ function bountyListen() {
       if (b.kb && !was.kb && now - b.ts < BTY_LIFE + 600000) {
         if (!(first && now - b.ts > 1800000)) fresh.push({ ts: Math.max(b.ts, now - 1), live, t: `🎯 ${b.kb} เก็บค่าหัวของ ${b.tn} ได้สำเร็จ (ผู้ตั้ง: ${b.bn})` });
         const flag = lsKey("btykb_" + uid + "_" + b.ts);
-        if (!first && b.kb === state.profile?.username && !LS.get(flag, 0)) { LS.set(flag, 1); achBump("bty", 1); toast(`💰 เก็บค่าหัว ${b.tn} สำเร็จ!`); }
+        if (!first && b.kb === state.profile?.username && !LS.get(flag, 0)) { LS.set(flag, 1); achBump("bty", 1); questBump("btyok"); toast(`💰 เก็บค่าหัว ${b.tn} สำเร็จ!`); }
       }
       seen[uid] = { ts: key, kb: !!b.kb };
     });
