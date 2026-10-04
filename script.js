@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1835";
+const APP_VERSION = "2026-10-04.1903";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4047,11 +4047,59 @@ async function gachaClaim(ticket) {
     state.gaTicket = null;
     if (prize) {
       state.gaLast = { id: prize.id, qty: prize.qty };
-      toast(`🎰 ได้ ${mktLabel(prize.id)} ×${prize.qty}`); questBump("gacha");
-      logLine(`🎰 หมุนตู้กาชา ได้ ${mktLabel(prize.id)} ×${prize.qty}`, "system");
+      questBump("gacha");
+      gachaSpinAnim(prize);   // แอนิเมชันหมุนแบบเปิดกล่อง (ของเข้ากระเป๋าไปแล้ว ตัวนี้เป็นแค่ภาพ) — จบแล้วค่อยขึ้นข้อความ
     } else toast("ช่องนี้ว่างแล้ว (แอดมินล้างตู้) — ตั๋วถูกยกเลิก");
   } catch (e) { console.error("gachaClaim", e?.code || e); toast("รับของไม่สำเร็จ — กด “รับของที่ค้างอยู่” อีกครั้ง"); }
   finally { state.gaBusy = false; gachaRefresh(); }
+}
+
+/* ---------- แอนิเมชันกาชา: เลื่อนแถบไอเทมแล้วหยุดที่ของที่ได้ (เหมือนเปิดกล่อง) ---------- */
+const GA_TIERS = [["common", "ธรรมดา", "#8a93a0"], ["uncommon", "ดี", "#4aa3ff"], ["rare", "หายาก", "#a55cff"], ["legend", "ตำนาน", "#ffc247"]];
+function gachaTier(id, qty) {
+  const d = ITEMS[id]; if (!d) return 0;
+  if (d.type && d.type !== "consumable" && d.type !== "material") return 2;
+  const v = ((d.heal || 0) + (d.food || 0) + (d.water || 0) + (d.stamina || 0) || 25) * Math.max(1, qty || 1);
+  return v >= 200 ? 3 : v >= 120 ? 2 : v >= 60 ? 1 : 0;
+}
+function gachaSpinAnim(prize) {
+  const t = gachaTier(prize.id, prize.qty), T = GA_TIERS[t];
+  const finish = (quiet) => {
+    if (!quiet) toast(`🎰 ได้ ${mktLabel(prize.id)} ×${prize.qty}`);   // มีหน้าต่างผลลัพธ์อยู่แล้วไม่ต้องเด้งซ้ำ
+    logLine(`🎰 หมุนตู้กาชา ได้ ${mktLabel(prize.id)} ×${prize.qty}${t >= 2 ? ` (${T[1]})` : ""}`, "system");
+    if (t === 3 && /^[a-z0-9_]{1,12}$/.test(prize.id)) { try { feedPost(5, prize.id); } catch { /* ข้าม */ } }
+  };
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (!HAS_DOM || reduce) return finish();
+  const ids = Object.keys(ITEMS).filter((k) => ITEMS[k].icon), N = 44, WIN = 36, CW = 84;
+  const wrap = mk("div", "modal ga-spin"); wrap.setAttribute("role", "dialog");
+  const box = mk("div", "modal-box ga-box");
+  box.append(mk("h3", "", "🎰 ตู้กาชา"));
+  const view = mk("div", "ga-view"), track = mk("div", "ga-track");
+  for (let i = 0; i < N; i++) {
+    const id = i === WIN ? prize.id : ids[Math.floor(Math.random() * ids.length)], tt = i === WIN ? t : gachaTier(id, 1 + Math.floor(Math.random() * 3));
+    const c = mk("div", "ga-cell"); c.style.setProperty("--tc", GA_TIERS[tt][2]); c.append(mk("span", "ga-ic", ITEMS[id].icon || "📦"));
+    track.append(c);
+  }
+  view.append(track, mk("div", "ga-mark")); box.append(view);
+  const res = mk("div", "ga-res"); res.style.setProperty("--tc", T[2]); box.append(res);
+  const ok = btn("ข้าม", () => end(), "btn ghost mini"); box.append(ok);
+  wrap.append(box); document.body.append(wrap);
+  let done = false, timer = 0, tick = 0;
+  const end = () => {
+    if (done) { wrap.remove(); return; }
+    done = true; clearTimeout(timer); clearInterval(tick);
+    track.style.transition = "none"; track.style.transform = `translateX(${-(WIN * CW) + (view.clientWidth / 2 - CW / 2)}px)`;
+    res.textContent = ""; res.append(mk("div", "ga-tier", `✨ ${T[1]}`), mk("div", "ga-nm", `${mktLabel(prize.id)} ×${prize.qty}`));
+    box.classList.add("ga-done", "ga-t" + t); ok.textContent = "รับของ"; sfx(t >= 2 ? "boss" : "low"); finish(true);
+  };
+  const off = Math.floor((Math.random() - 0.5) * (CW * 0.6));
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    track.style.transition = "transform 4.8s cubic-bezier(.08,.62,.13,1)";
+    track.style.transform = `translateX(${-(WIN * CW) + (view.clientWidth / 2 - CW / 2) + off}px)`;
+  }));
+  tick = setInterval(() => { try { if (SFX.on && SFX.ac) tone(900, 0, 0.03, "square", 0.02); } catch { /* ข้าม */ } }, 140);
+  timer = setTimeout(() => { clearInterval(tick); setTimeout(end, 350); }, 4900);
 }
 
 /* ---------- แอดมิน ---------- */
@@ -6172,6 +6220,7 @@ function feedText(e) {
   if (e.k === 1) { const a = ACH_BY_ID[x]; if (!a) return ""; const T = ACH_TIER[a.tier]; return `🏅 ${n} ปลดล็อกความสำเร็จ ${T[1]} ${a.ic} ${a.name}${a.tier === 3 ? " — ระดับตำนาน!" : ""}`; }
   if (e.k === 2) { const L = EVO_LINES[x]; return L ? `🧬 ${n} วิวัฒนาการถึงขั้นสุดท้าย กลายเป็น ${L.icon}${L.title} — ฝูงซอมบี้ส่งเสียงคำราม` : ""; }
   if (e.k === 3) { const z = ZONES[x]; return z ? `💀 ผู้รอดชีวิตชื่อ ${n} ล้มลงที่${z.name} — ระวังตัวกันด้วย` : ""; }
+  if (e.k === 5) { const d = ITEMS[x]; return d ? `🎰 ${n} หมุนตู้กาชาโชคดีสุดๆ ได้ ${d.icon || "📦"} ${d.name} ระดับตำนาน!` : ""; }
   if (e.k === 4) { const d = Number(x); return d >= 7 && d <= 100 ? `🔥 ${n} อยู่รอดมาต่อเนื่อง ${d} วันแล้ว` : ""; }
   return "";
 }

@@ -751,3 +751,18 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .ach-bar > span { position: relative; display: block; text-align: center; font-size: 11px; line-height: 16px; text-shadow: 0 1px 2px #000; }
 .world-row { display: grid; gap: 2px; margin: 6px 0 10px; }
 .hub-tabs { flex-wrap: wrap; }
+
+/* ---- กาชา: แอนิเมชันเปิดกล่อง ---- */
+.ga-box{max-width:420px;text-align:center}
+.ga-view{position:relative;overflow:hidden;height:104px;margin:10px 0;border:1px solid var(--line,#3a3a3a);border-radius:10px;background:#0d0f13}
+.ga-view::before,.ga-view::after{content:"";position:absolute;top:0;bottom:0;width:60px;z-index:2;pointer-events:none}
+.ga-view::before{left:0;background:linear-gradient(90deg,#0d0f13,transparent)}.ga-view::after{right:0;background:linear-gradient(270deg,#0d0f13,transparent)}
+.ga-track{display:flex;height:100%;will-change:transform}
+.ga-cell{flex:0 0 84px;width:84px;display:grid;place-items:center;border-bottom:4px solid var(--tc,#8a93a0);background:linear-gradient(180deg,transparent 40%,color-mix(in srgb,var(--tc,#8a93a0) 28%,transparent))}
+.ga-ic{font-size:40px;filter:drop-shadow(0 2px 4px #000)}
+.ga-mark{position:absolute;left:50%;top:0;bottom:0;width:3px;margin-left:-1.5px;background:#ffc247;box-shadow:0 0 10px #ffc247;z-index:3}
+.ga-res{min-height:58px;display:grid;align-content:center;gap:2px}
+.ga-tier{color:var(--tc);font-weight:700;letter-spacing:.04em}.ga-nm{font-size:20px;font-weight:700}
+.ga-done .ga-res{animation:gaPop .5s ease-out}.ga-done.ga-t3{box-shadow:0 0 28px #ffc24788}.ga-done.ga-t2{box-shadow:0 0 22px #a55cff77}
+@keyframes gaPop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+@media (prefers-reduced-motion: reduce){.ga-done .ga-res{animation:none}}
