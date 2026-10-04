@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0724";
+const APP_VERSION = "2026-10-04.0736";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -171,22 +171,32 @@ async function swapWeapon(slot) {
   state.lastSwap = serverNow();
   await equip(slot, false);
 }
+// รวมอาวุธชนิดเดียวกันเป็นปุ่มเดียว (แสดง ×จำนวน) — ชนิดที่ถืออยู่ใช้ช่องที่ถือ ชนิดอื่นเลือกเล่มที่ทนทานสุด
+function swapGroups() {
+  const cur = state.profile?.equipped, g = {};
+  Object.entries(state.inv || {}).forEach(([slot, it]) => {
+    const d = defOf(it); if (!d || d.type !== "weapon" || !(it.dur > 0)) return;
+    const k = it.id || d.name, x = g[k] || (g[k] = { slot, it, d, n: 0 });
+    x.n++; if (slot === cur || (x.slot !== cur && it.dur > x.it.dur)) { x.slot = slot; x.it = it; }
+  });
+  return Object.values(g).sort((p, q) => p.d.name.localeCompare(q.d.name, "th"));
+}
 function renderSwapBar(el) {
   if (!el) return;
   const cur = state.profile?.equipped, left = equippedWeapon() ? Math.ceil(swapLeft() / 1000) : 0;
-  const ws = Object.entries(state.inv || {}).map(([slot, it]) => [slot, it, defOf(it)]).filter(([, it, d]) => d && d.type === "weapon" && it.dur > 0);
-  const sig = ws.map(([s, it]) => `${s}:${it.dur}`).join(",") + "|" + cur;
+  const gs = swapGroups();
+  const sig = gs.map((x) => `${x.slot}:${x.it.dur}:${x.n}`).join(",") + "|" + cur;
   if (el.dataset.sig !== sig) {
     el.dataset.sig = sig; el.textContent = "";
-    if (ws.length > 1 || (ws.length === 1 && ws[0][0] !== cur)) ws.forEach(([slot, it, d]) => {
-      const b = btn(`${d.icon || "🗡️"} ${d.name} (${it.dur})`, () => swapWeapon(slot), "btn ghost mini" + (slot === cur ? " on" : ""));
+    if (gs.length > 1 || (gs.length === 1 && gs[0].slot !== cur)) gs.forEach(({ slot, it, d, n }) => {
+      const b = btn(`${d.icon || "🗡️"} ${d.name} (${it.dur})${n > 1 ? " ×" + n : ""}`, () => swapWeapon(slot), "btn ghost mini" + (slot === cur ? " on" : ""));
       b.dataset.slot = slot; b.style.borderBottom = `3px solid ${durColor(durFrac(it, d))}`; b.title = "ปุ่มลัด: Q"; if (slot === cur) b.disabled = true; el.append(b);
     });
   }
   el.classList.toggle("hidden", !el.childElementCount);
   el.querySelectorAll("button").forEach((b) => { if (b.dataset.slot !== cur) { b.disabled = left > 0; b.title = left > 0 ? `สลับได้อีก ${left} วิ` : "สลับอาวุธ"; } });
 }
-if (!document.getElementById("swap-style")) { const st = document.createElement("style"); st.id = "swap-style"; st.textContent = ".swap-bar{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}.swap-bar .on{outline:1px solid var(--accent,#7fb069)}"; document.head.append(st); }
+if (!document.getElementById("swap-style")) { const st = document.createElement("style"); st.id = "swap-style"; st.textContent = ".swap-bar{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:4px;margin:4px 0;padding-bottom:3px;scrollbar-width:thin}.swap-bar .btn{flex:0 0 auto;white-space:nowrap}.swap-bar .on{outline:1px solid var(--accent,#7fb069)}"; document.head.append(st); }
 const hasFx = (d) => FX_KEYS.some((t) => d["e_" + t]) || FX_CURE_KEYS.some((t) => d["c_" + t]);
 const fxText = (d) => {
   const on = FX_KEYS.filter((t) => d["e_" + t]).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(d.e_dice) : t === "stun" ? "" : " " + d["e_" + t] + "/รอบ"}`);
@@ -4608,7 +4618,7 @@ function fxChanceText(src) {
 if (HAS_DOM) document.addEventListener("keydown", (e) => {
   if (e.key !== "q" && e.key !== "Q") return;
   const tg = e.target; if (e.ctrlKey || e.metaKey || e.altKey || (tg && /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || "")) || !state.profile) return;
-  const ws = Object.entries(state.inv || {}).filter(([, it]) => { const d = defOf(it); return d && d.type === "weapon" && it.dur > 0; }).map(([s]) => s);
+  const ws = swapGroups().map((x) => x.slot);
   if (ws.length < 2 && !(ws.length === 1 && state.profile.equipped !== ws[0])) return;
   const i = ws.indexOf(state.profile.equipped); swapWeapon(ws[(i + 1) % ws.length]);
 });
