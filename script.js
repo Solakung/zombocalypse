@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0836";
+const APP_VERSION = "2026-10-04.1005";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -144,21 +144,25 @@ const FX_TYPES = {
 };
 const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
 const FX_TICK = 15000, FX_MAX_TICKS = 40, POISON_STAMINA = 2, FX_MAX_MIN = 720;
+// พิษ 2 ระดับ: อ่อน (v=1) ทุกไอเทมรักษาได้ / แรง (v≥2) เฉพาะยาแก้พิษกับชุดช่วยชีวิตขั้นสูง (ข้อจำกัดนี้อยู่ฝั่งเกม rules ไม่ได้บังคับ) • ยาแก้พิษให้ภูมิต้านพิษ 10 นาที (เก็บในเครื่อง)
+const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit"], ANTI_IMM_MS = 600000;
+const poisonImmLeft = () => Math.max(0, (LS.get(lsKey("pimm"), 0) || 0) - serverNow());
+const fxName = (t) => (t === "poison" && effV("poison") >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name);
 const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
 // สถานะจากมอนสเตอร์: โดนตีจริง (HP ลด) → สุ่มติดอย่างมาก 1 อย่าง [โอกาส %, ค่า v, นาที] — เพดานตรงกับ rules: bleed/poison v≤3, stun 1 นาที, dice −1..−2, ทุกอย่าง ≤5 นาที
 const MON_FX = {
   zombie: { bleed: [18, 2, 3], poison: [10, 1, 4] },
   ruins: { bleed: [30, 2, 3] }, mall: { dice: [30, -2, 3] }, hospital: { poison: [30, 2, 4], bleed: [15, 2, 3] }, police: { stun: [20, 1, 1], dice: [20, -1, 3] },
-  forest: { poison: [30, 1, 5] }, factory: { bleed: [30, 3, 3] }, port: { stun: [25, 1, 1] }, base: { bleed: [20, 2, 3], stun: [15, 1, 1] },
-  tunnel: { poison: [25, 2, 5], dice: [25, -2, 5], stun: [10, 1, 1] },
+  forest: { poison: [30, 1, 5] }, factory: { bleed: [30, 3, 3], poison: [18, 2, 4] }, port: { stun: [25, 1, 1], poison: [18, 2, 4] }, base: { bleed: [20, 2, 3], stun: [15, 1, 1] },
+  tunnel: { poison: [25, 3, 5], dice: [25, -2, 5], stun: [10, 1, 1] },
   wboss: { bleed: [15, 2, 4], poison: [12, 2, 5], stun: [8, 1, 1], dice: [15, -2, 4] }
 };
 function monFx(u, src, loss, hpAfter) {
   if (!(loss > 0) || !(hpAfter > 0)) return "";
   for (const [t, [pc, v, mins]] of Object.entries(MON_FX[src] || {})) {
-    if (Math.random() * 100 >= pc || effActive(t)) continue;
+    if (Math.random() * 100 >= pc || effActive(t) || (t === "poison" && poisonImmLeft() > 0)) continue;
     u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() }; stat("fx");
-    return ` ⚠️ ติด${FX_TYPES[t].icon}${FX_TYPES[t].name}`;
+    return ` ⚠️ ติด${FX_TYPES[t].icon}${t === "poison" && v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name}`;
   }
   return "";
 }
@@ -565,7 +569,9 @@ function guideExtra(sec) {
   const nm = (src) => (src === "zombie" ? "ซอมบี้ทั่วไป" : src === "wboss" ? "บอสโลก" : BOSSES[src]?.name || src);
   sec("สถานะผิดปกติ", [
     "โดนซอมบี้/บอสตีจนเสีย HP มีโอกาสติดสถานะ: 🩸 เลือดไหล (เสีย HP ทุกรอบ) • ☠️ พิษ (เสีย HP+พลังงาน) • 😵 มึนงง (โจมตีไม่ได้ ค้นหาไม่ได้) • 🎯 อ่อนแรง (ทอยสู้มอนสเตอร์แย่ลง)",
-    "รักษา: 🩹 ผ้าพันแผล (เลือดไหล) • ยาถอนพิษ/มอส (พิษ) • 🧰 ชุดปฐมพยาบาล (ทั้งสอง) — สถานะหายเองเมื่อหมดเวลา (ไม่เกิน 5 นาที)",
+    "รักษา: 🩹 ผ้าพันแผล (เลือดไหล) • 🧰 ชุดปฐมพยาบาล/🌿 มอส (พิษอ่อน) • สถานะหายเองเมื่อหมดเวลา (ไม่เกิน 5 นาที)",
+    "☠️ พิษมี 2 ระดับ: พิษอ่อนรักษาได้ด้วยมอส/ชุดปฐมพยาบาล ส่วน “พิษแรง” (จากอุโมงค์ โรงพยาบาล โรงงาน ท่าเรือ และบอส) รักษาได้เฉพาะ 💉 ยาแก้พิษ หรือ 🩺 ชุดช่วยชีวิตขั้นสูง",
+    "💉 ยาแก้พิษให้ภูมิต้านพิษ 10 นาที ใช้ล่วงหน้าก่อนไปโซนอันตรายได้ — ทำเองได้ (สารเคมี 2 + เศษเหล็ก 1)",
     ...Object.entries(MON_FX).map(([src, t]) => `${nm(src)}: ${Object.entries(t).map(([k, [pc]]) => `${FX_TYPES[k].icon}${FX_TYPES[k].name} ${pc}%`).join(" • ")}`)
   ]);
   sec("อาวุธและการสลับอาวุธ", [
@@ -751,7 +757,7 @@ function renderBars() {
   $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < searchCost()) || effActive("stun");
   const fxEl = $("me-effects");
   if (fxEl) {
-    fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${FX_TYPES[t].name}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).join("  ");
+    fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${fxName(t)}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).concat(poisonImmLeft() > 0 ? [`🛡️ต้านพิษ ${Math.ceil(poisonImmLeft() / 60000)}น.`] : []).join("  ");
     fxEl.classList.toggle("hidden", !fxEl.textContent);
   }
   updateAttackButtons();
@@ -1624,7 +1630,13 @@ async function useItem(slot) {
     });
     FX_CURE_KEYS.filter((t) => def["c_" + t] && !def["e_" + t] && effActive(t)).forEach(cure);
   }
-  (FX_CURES[it.id] || []).filter(effActive).forEach(cure);
+  let strongBlocked = false;
+  (FX_CURES[it.id] || []).filter(effActive).forEach((t) => { if (t === "poison" && effV("poison") >= POISON_STRONG && !STRONG_CURE.includes(it.id)) { strongBlocked = true; return; } cure(t); });
+  if (it.id === "antidote") {   // ยาแก้พิษ: ภูมิต้านพิษ 10 นาที (ใช้ล่วงหน้าก่อนไปโซนอันตรายได้)
+    if (poisonImmLeft() > 120000 && !msgs.length) return toast(`ภูมิต้านพิษยังเหลืออีก ${Math.ceil(poisonImmLeft() / 60000)} นาที`);
+    LS.set(lsKey("pimm"), serverNow() + ANTI_IMM_MS); msgs.push("🛡️ ภูมิต้านพิษ 10 นาที"); usedEat = true;
+  }
+  if (strongBlocked) { if (!msgs.length) return toast("☠️ พิษแรงเกินกว่าไอเทมนี้จะรักษาได้ ต้องใช้ยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง"); msgs.push("แต่พิษแรงยังไม่หาย (ต้องยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง)"); }
 
   if (p.infected && p.faction === "human" && ["medkit", "moss", "serum", "trauma_kit"].includes(it.id)) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
 
@@ -4602,7 +4614,7 @@ function dangerChips() {
   const p = state.profile, out = []; if (!p || p.hp <= 0) return out;
   const mx = maxHp(), zom = p.faction === "zombie", w = equippedWeapon();
   if (p.hp <= mx * 0.25) out.push(["bad", `💔 HP ต่ำมาก ${p.hp}/${mx}`]); else if (p.hp <= mx * 0.45) out.push(["warn", `💔 HP ต่ำ ${p.hp}/${mx}`]);
-  FX_KEYS.filter(effActive).forEach((t) => { if (t === "hot" || (t === "dice" && effV(t) > 0)) return; out.push([t === "stun" ? "bad" : "warn", `${FX_TYPES[t].icon} ${FX_TYPES[t].name}${t === "bleed" || t === "poison" ? ` −${effV(t)}/รอบ` : ""}`]); });
+  FX_KEYS.filter(effActive).forEach((t) => { if (t === "hot" || (t === "dice" && effV(t) > 0)) return; out.push([t === "stun" ? "bad" : "warn", `${FX_TYPES[t].icon} ${fxName(t)}${t === "bleed" || t === "poison" ? ` −${effV(t)}/รอบ` : ""}`]); });
   if (p.infected && !zom) out.push(["bad", "🦠 ติดเชื้อ HP จะค่อย ๆ ลด"]);
   if (!zom && state.zone !== "safe") {
     if (!w) out.push(["warn", "🗡️ ไม่ได้ถืออาวุธ"]);
