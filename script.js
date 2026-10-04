@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1005";
+const APP_VERSION = "2026-10-04.1026";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2312,12 +2312,23 @@ $("adm-wb-spawn").addEventListener("click", async () => {
   } catch (e) { toast(errMsg(e)); }
 });
 
+// ประกาศผลตอนบอสโลกล้ม: MVP (ดาเมจสะสมสูงสุด) + ชิ้นพิเศษที่เขาจะได้ — อ่านจาก worldBosses/{z}/top เดิม ไม่เขียนอะไรใหม่
+function wbMvpNotice(z, b) {
+  const k = "mvp" + z + b.startedAt; state.wbaSeen = state.wbaSeen || {}; if (state.wbaSeen[k]) return; state.wbaSeen[k] = 1;
+  const zn = ZONES[z]?.name || z, t = b.top;
+  if (!t?.name) { logLine(`🏆 บอสโลก「${b.name}」ที่${zn}ล้มลงแล้ว!`, "system"); return; }
+  const me = t.uid === state.uid;
+  logLine(`🏆 บอสโลก「${b.name}」ที่${zn}ล้มลงแล้ว! 🥇 MVP: ${t.name} (ดาเมจรวม ${t.total})${b.rtop ? ` — รับชิ้นพิเศษ ${b.rtop.icon || "🛡️"} ${b.rtop.name}` : ""}${me ? " • คือคุณเอง! 🎉" : ""}`, "system");
+  if (me) { toast("🥇 คุณคือ MVP ของบอสโลก!"); try { sfx("boss"); } catch (_) {} }
+}
+
 function listenWorldBoss() {
   onValue(ref(db, "worldBosses"), (snap) => {
     const nu = snap.val() || {};
     Object.entries(nu).forEach(([z, b]) => {
       const was = state.wb?.[z];
       if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0 && z === state.zone) logLine(`🏆 ${b.name}ล้มลงแล้ว! ผู้ที่ร่วมโจมตีกดรับรางวัลได้`, "system");
+      if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0) wbMvpNotice(z, b);   // ประกาศ MVP ให้ทุกคนที่ออนไลน์ (ฝั่ง client ล้วน)
       wbaNotice(z, b, was);
       if (state.wbSeenOnce && !was && b.hp > 0) { sfx("boss"); notifyOS("👹 บอสโลกเกิดแล้ว!", `${b.name} ที่${ZONES[z]?.name || z}`, "wb" + b.startedAt); }   // บอสโลกเกิดใหม่ (ไม่ร้องตอนโหลดหน้าครั้งแรก)
     });
