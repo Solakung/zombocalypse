@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0711";
+const APP_VERSION = "2026-10-04.0724";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -564,7 +564,8 @@ function guideExtra(sec) {
   sec("สรุป อันดับ บันทึก เสียง", [
     "ปุ่ม 📊 ด้านบน: สรุปวันนี้/สัปดาห์ (นับในเครื่องนี้), อันดับ (ทุบกำแพงรายสัปดาห์ ดาเมจบอสโลก), และสมุดบันทึกเหตุการณ์ของคุณ",
     "แถบสีเหลือง/แดงเหนือปุ่มค้นหาคือคำเตือน เช่น HP ต่ำ ติดสถานะ อาวุธใกล้พัง หิว พลังงานใกล้หมด",
-    "ปุ่ม 🔔 เปิด/ปิดเสียงและสั่นเตือน (ตอนบอสโลกเกิด โดนตีแรง และ HP ต่ำ)"
+    "ปุ่ม ⚙️ ตั้งค่า: เสียง/สั่นเตือน, แจ้งเตือนบนอุปกรณ์ (พลังงานเต็ม บอสโลกเกิด โดนตี), ซ่อนข้อความบรรยากาศ, สลับแผนที่/รายการ และติดตั้งเป็นแอป",
+    "ปุ่ม ☆ ข้างไอเทมกินได้/ยา = ปักไว้ที่แถบลัดใต้หลอดพลัง (สูงสุด 4 ช่อง) กดใช้ได้ทันทีจากทุกแท็บ"
   ]);
 }
 function openGuide() {
@@ -699,6 +700,7 @@ function renderTravelState() {
     t.textContent = here ? "" : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
     t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
   });
+  try { zmapBadges(); } catch { /* ยังไม่พร้อม */ }
 }
 
 function renderBars() {
@@ -982,20 +984,7 @@ $("btn-copy-id").addEventListener("click", async () => {
 /* =========================================================
    7) โซน + แชท (อัปเดตระบบ Bubble)
    ========================================================= */
-function buildZoneList() {
-  const ul = $("zone-list"); ul.innerHTML = "";
-  Object.entries(ZONES).forEach(([id, z]) => {
-    const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
-    const b = mk("button", "zone-btn");
-    const dg = dangerInfo(id);
-    b.append(mk("span", "", `${z.icon} ${z.name}`), mk("span", "danger-tag d" + dg.tier, `⚠ ${z.danger}/10`));
-    b.title = `อันตราย ${z.danger}/10 • เจอซอมบี้ ${dg.chance}%`;
-    b.dataset.zone = id;
-    b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
-    li.append(b); ul.append(li);
-  });
-}
-
+// buildZoneList → ดูหัวข้อ 23 ท้ายไฟล์ (แผนที่โซน)
 function teardownZone() { state.unsubs.forEach((f) => f()); state.unsubs = []; }
 
 const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_STAMINA);
@@ -1281,7 +1270,7 @@ function listenAnnouncements() {
 /* =========================================================
    9) กระเป๋า การกินอาหาร และ การทิ้งของ
    ========================================================= */
-function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; state.invLoaded = true; renderInv(); if (state.profile?.hp === 0) processDeath(); }); }
+function listenInventory() { onValue(ref(db, "inventory/" + state.uid), (s) => { state.inv = s.val() || {}; state.invLoaded = true; renderInv(); try { renderHotbar(); } catch { /* */ } if (state.profile?.hp === 0) processDeath(); }); }
 
 function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
@@ -1322,7 +1311,7 @@ function renderInv() {
       li.append(lbl);
       
       const btnGrp = mk("div", "row-btns");
-      if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)));
+      if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)), hotPinBtn(slot));
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
@@ -2299,7 +2288,7 @@ function listenWorldBoss() {
       const was = state.wb?.[z];
       if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0 && z === state.zone) logLine(`🏆 ${b.name}ล้มลงแล้ว! ผู้ที่ร่วมโจมตีกดรับรางวัลได้`, "system");
       wbaNotice(z, b, was);
-      if (state.wbSeenOnce && !was && b.hp > 0) sfx("boss");   // บอสโลกเกิดใหม่ (ไม่ร้องตอนโหลดหน้าครั้งแรก)
+      if (state.wbSeenOnce && !was && b.hp > 0) { sfx("boss"); notifyOS("👹 บอสโลกเกิดแล้ว!", `${b.name} ที่${ZONES[z]?.name || z}`, "wb" + b.startedAt); }   // บอสโลกเกิดใหม่ (ไม่ร้องตอนโหลดหน้าครั้งแรก)
     });
     state.wbSeenOnce = true;
     state.wb = nu; renderWB(); renderAdminWB();
@@ -4550,7 +4539,7 @@ const AMB_ZOMBIE = ["กลิ่นคนอุ่น ๆ ลอยมาตา
 // ช่วงเวลาตามวัฏจักรกลางวัน/กลางคืนของเกม (DAY_CYCLE: กลางวัน 60 นาที → กลางคืน 40 นาที): 10 นาทีแรกของกลางวัน = รุ่งสาง, 10 นาทีสุดท้าย = เย็น
 const timeSlot = () => { if (isNight()) return "night"; const t = serverNow() % DAY_CYCLE; return t < 600000 ? "dawn" : t >= NIGHT_START - 600000 ? "dusk" : "day"; };
 function ambient() {
-  const p = state.profile; if (!p || Math.random() > AMB_CHANCE) return;
+  const p = state.profile; if (!p || Math.random() > AMB_CHANCE || LS.get("zc_noamb", false)) return;
   const z = p.faction === "zombie", low = !z && p.hp < maxHp() * 0.3, pool = [];
   const add = (arr, w) => { for (let i = 0; i < w; i++) pool.push(...arr); };
   add(AMB_ZONE[state.zone] || [], z ? 1 : 3); add(AMB_TIME[timeSlot()], z ? 1 : 2);
@@ -4581,7 +4570,7 @@ function sfxHpWatch(p) {
   const prev = state.hpPrev; state.hpPrev = p.hp;
   if (typeof prev !== "number" || typeof p.hp !== "number") return;
   const mx = maxHp();
-  if (p.hp < prev && prev - p.hp >= 8) sfx(p.hp <= 0 ? "down" : "hit");
+  if (p.hp < prev && prev - p.hp >= 8) { sfx(p.hp <= 0 ? "down" : "hit"); notifyOS(p.hp <= 0 ? "💀 คุณล้มลงแล้ว" : "💔 คุณโดนโจมตี", `HP เหลือ ${p.hp}/${mx}`, "hit"); }
   if (prev > mx * 0.25 && p.hp <= mx * 0.25 && p.hp > 0) setTimeout(() => sfx("low"), 350);
 }
 if (HAS_DOM) document.addEventListener("pointerdown", () => { try { if (SFX.on && SFX.ac) SFX.ac.resume?.(); } catch { /* */ } }, { passive: true });
@@ -4699,7 +4688,7 @@ function initHubUi() {
   if ($("btn-hub")) return;
   const g = $("btn-guide"); if (!g) return;
   const h = btn("📊", () => openHub(), "btn ghost mini"); h.id = "btn-hub"; h.title = "สรุปวัน/สัปดาห์ • อันดับ • สมุดบันทึก";
-  const s = btn(SFX.on ? "🔔" : "🔕", () => { SFX.on = !SFX.on; LS.set("zc_sfx", SFX.on); s.textContent = SFX.on ? "🔔" : "🔕"; toast(SFX.on ? "เปิดเสียง/สั่นเตือนแล้ว" : "ปิดเสียง/สั่นเตือนแล้ว"); if (SFX.on) sfx("low"); }, "btn ghost mini"); s.id = "btn-sfx"; s.title = "เปิด/ปิดเสียงและสั่นเตือน";
+  const s = btn("⚙️", () => openSettings(), "btn ghost mini"); s.id = "btn-sfx"; s.title = "ตั้งค่า: เสียง • แจ้งเตือน • แผนที่ • ติดตั้งแอป";
   g.before(h, s);
   const sc = $("btn-scavenge"); if (sc && !$("danger-bar")) { const d = mk("div", "danger-bar hidden"); d.id = "danger-bar"; sc.before(d); }
   const bw = $("boss-weapon"); if (bw && !$("boss-warn")) { const d = mk("div", "danger-bar hidden"); d.id = "boss-warn"; bw.after(d); }
@@ -4728,3 +4717,146 @@ if (HAS_DOM && typeof window !== "undefined") {
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { fitViewport(); setTimeout(fitViewport, 400); } });
   document.addEventListener("focusout", () => setTimeout(fitViewport, 350));   // คีย์บอร์ดเพิ่งปิด
 }
+
+/* =========================================================
+   23) แผนที่โซน • ติดตั้งเป็นแอป (PWA) • แจ้งเตือนเมื่อพร้อม • ตั้งค่า • ไอเทมโปรด (hotbar)
+   ฝั่งเกมล้วน — ไม่แตะ rules (แผนที่ใช้ปุ่มโซนเดิม ฟังก์ชันเดินทางเดิมทุกอย่าง)
+   ========================================================= */
+/* ---- แผนที่โซน: ตำแหน่งโหนด (เปอร์เซ็นต์) และถนนเชื่อม — แค่ภาพ ไม่มีผลกับค่าเดินทาง ---- */
+const ZMAP = { forest: [20, 12], base: [80, 12], hospital: [14, 34], tunnel: [50, 34], police: [86, 34], ruins: [20, 56], safe: [50, 56], mall: [80, 56], factory: [22, 78], port: [78, 78] };
+const ZROADS = [["safe", "ruins"], ["safe", "mall"], ["safe", "tunnel"], ["ruins", "hospital"], ["mall", "police"], ["hospital", "forest"], ["police", "base"], ["tunnel", "forest"], ["tunnel", "base"], ["ruins", "factory"], ["mall", "port"], ["factory", "port"]];
+const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
+function zmapRoads() {
+  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 100 100"); svg.setAttribute("preserveAspectRatio", "none");
+  ZROADS.forEach(([a, b]) => { if (!ZMAP[a] || !ZMAP[b]) return; const l = document.createElementNS(ns, "line"); l.setAttribute("x1", ZMAP[a][0]); l.setAttribute("y1", ZMAP[a][1]); l.setAttribute("x2", ZMAP[b][0]); l.setAttribute("y2", ZMAP[b][1]); l.setAttribute("vector-effect", "non-scaling-stroke"); svg.append(l); });
+  const li = mk("li", "zroads"); li.setAttribute("aria-hidden", "true"); li.append(svg); return li;
+}
+function buildZoneList() {
+  const ul = $("zone-list"); ul.innerHTML = "";
+  ul.append(zmapRoads());
+  Object.entries(ZONES).forEach(([id, z]) => {
+    const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
+    if (ZMAP[id]) { li.style.setProperty("--x", ZMAP[id][0] + "%"); li.style.setProperty("--y", ZMAP[id][1] + "%"); }
+    const b = mk("button", "zone-btn");
+    const dg = dangerInfo(id), nm = mk("span", "zname"); nm.append(mk("b", "zi", z.icon), mk("span", "zt", z.name));
+    b.append(nm, mk("span", "danger-tag d" + dg.tier, `⚠ ${z.danger}/10`));
+    b.title = `${z.name} • อันตราย ${z.danger}/10 • เจอซอมบี้ ${dg.chance}%`;
+    b.dataset.zone = id;
+    b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
+    li.append(b); ul.append(li);
+  });
+  ul.append((() => { const lg = mk("li", "zlegend", "⚠ อันตราย • ⚡ ค่าเดินทาง • 👥 คนในโซน • 👹 บอสโลก"); return lg; })());
+  zmapApply(); zmapListen(); zmapBadges();
+}
+function zmapApply() {
+  const ul = $("zone-list"); if (!ul) return; const on = zmapOn(); ul.classList.toggle("zmap", on);
+  let tg = $("zmap-toggle");
+  if (!tg) {
+    tg = mk("div", "zmap-toggle"); tg.id = "zmap-toggle";
+    [["map", "🗺️ แผนที่"], ["list", "☰ รายการ"]].forEach(([m, l]) => { const b = btn(l, () => { LS.set("zc_zmap", m); zmapApply(); }, "btn ghost mini"); b.dataset.m = m; tg.append(b); });
+    ul.before(tg);
+  }
+  tg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", (b.dataset.m === "map") === on));
+}
+// จำนวนผู้เล่นในแต่ละโซน (ฟัง zonePlayers ทุกโซน — ข้อมูลเล็ก) + เครื่องหมายบอสโลก
+function zmapListen() {
+  if (state.zmapOn) return; state.zmapOn = true; state.zcount = state.zcount || {};
+  Object.keys(ZONES).forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { state.zcount[z] = s.numChildren(); zmapBadges(); }, () => {}));
+}
+function zmapBadges() {
+  document.querySelectorAll(".zone-btn").forEach((b) => {
+    const z = b.dataset.zone; if (!z) return;
+    let c = b.querySelector(".zc"); if (!c) { c = mk("span", "zc"); b.append(c); }
+    const n = state.zcount?.[z] || 0, wb = state.wb?.[z], boss = wb && wbAlive(wb);
+    const txt = (n ? `👥${n}` : "") + (boss ? " 👹" : ""); if (c.textContent !== txt) c.textContent = txt;
+    c.classList.toggle("hidden", !txt); b.classList.toggle("hasboss", !!boss);
+  });
+}
+
+/* ---- ตั้งค่า (⚙️): เสียง • แจ้งเตือน • ข้อความบรรยากาศ • แผนที่ • ติดตั้งแอป ---- */
+const NT = { on: LS.get("zc_notif", false) === true };
+let deferredInstall = null;
+if (HAS_DOM && typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); deferredInstall = e; });
+  window.addEventListener("appinstalled", () => { deferredInstall = null; toast("ติดตั้งแอปแล้ว"); });
+  if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch((e) => console.warn("sw", e)));
+}
+const isStandalone = () => { try { return matchMedia("(display-mode: standalone)").matches || navigator.standalone === true; } catch { return false; } };
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+async function toggleNotif(on) {
+  if (!on) { NT.on = false; LS.set("zc_notif", false); return true; }
+  if (!("Notification" in window)) { toast("เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน"); return false; }
+  let perm = Notification.permission; if (perm === "default") perm = await Notification.requestPermission();
+  if (perm !== "granted") { toast("ยังไม่ได้อนุญาตการแจ้งเตือน (ไปตั้งค่าเบราว์เซอร์ → การแจ้งเตือน)"); return false; }
+  NT.on = true; LS.set("zc_notif", true); return true;
+}
+function openSettings() {
+  let m = $("set-modal");
+  if (!m) {
+    m = mk("div", "modal hidden"); m.id = "set-modal"; m.setAttribute("role", "dialog");
+    const bx = mk("div", "modal-box"); bx.style.maxWidth = "420px";
+    const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "⚙️ ตั้งค่า"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div", "set-body"); body.id = "set-body"; bx.append(hd, body); m.append(bx); document.body.append(m);
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+  }
+  m.classList.remove("hidden"); renderSettings();
+}
+function renderSettings() {
+  const body = $("set-body"); if (!body) return; body.textContent = "";
+  const row = (label, hint, on, fn) => {
+    const r = mk("label", "set-row"), t = mk("span", "set-t"); t.append(mk("b", "", label)); if (hint) t.append(mk("small", "muted", hint));
+    const cb = mk("input"); cb.type = "checkbox"; cb.checked = !!on; cb.addEventListener("change", async () => { const ok = await fn(cb.checked); if (ok === false) cb.checked = !cb.checked; });
+    r.append(t, cb); body.append(r);
+  };
+  row("🔊 เสียงและสั่นเตือน", "ตอนบอสโลกเกิด โดนตีแรง และ HP ต่ำ", SFX.on, (v) => { SFX.on = v; LS.set("zc_sfx", v); const s = $("btn-sfx"); if (s) s.title = v ? "ตั้งค่า (เสียงเปิดอยู่)" : "ตั้งค่า (เสียงปิดอยู่)"; if (v) sfx("low"); });
+  row("🔔 แจ้งเตือนบนอุปกรณ์", "เด้งเมื่อพลังงานเต็ม เดินทาง/บอสโซนพร้อม บอสโลกเกิด หรือโดนตี — เฉพาะตอนเกมถูกพับอยู่เบื้องหลัง (ต้องไม่ปิดแท็บ/แอป)", NT.on, toggleNotif);
+  row("💬 ซ่อนข้อความบรรยากาศ", "ปิดข้อความสั้น ๆ ที่โผล่ตอนค้นหา", LS.get("zc_noamb", false), (v) => { LS.set("zc_noamb", v); });
+  row("🗺️ แสดงโซนเป็นแผนที่", "ปิด = แสดงเป็นรายการแบบเดิม", zmapOn(), (v) => { LS.set("zc_zmap", v ? "map" : "list"); zmapApply(); });
+  const ins = mk("div", "set-install"); ins.append(mk("b", "", "📲 ติดตั้งเป็นแอป"));
+  if (isStandalone()) ins.append(mk("small", "muted", "คุณกำลังใช้งานแบบแอปอยู่แล้ว"));
+  else if (deferredInstall) ins.append(mk("small", "muted", "เปิดเต็มจอ ไม่มีแถบเบราว์เซอร์ และมีไอคอนบนหน้าจอหลัก"), btn("ติดตั้งเลย", async () => { try { deferredInstall.prompt(); await deferredInstall.userChoice; } catch { /* ยกเลิก */ } deferredInstall = null; renderSettings(); }, "btn primary mini"));
+  else if (isIOS()) ins.append(mk("small", "muted", "iPhone/iPad: กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) ใน Safari แล้วเลือก \"เพิ่มลงหน้าจอโฮม\""));
+  else ins.append(mk("small", "muted", "เปิดเมนู ⋮ ของเบราว์เซอร์ → \"ติดตั้งแอป\" หรือ \"เพิ่มลงหน้าจอหลัก\""));
+  body.append(ins);
+}
+function notifyOS(title, bodyText, tag) {
+  try {
+    if (!NT.on || !("Notification" in window) || Notification.permission !== "granted" || !document.hidden) return;   // กำลังดูเกมอยู่ → ไม่ต้องเด้ง
+    const opts = { body: bodyText, tag, icon: "icon-192.png", badge: "icon-192.png" };
+    const fallback = () => { try { new Notification(title, opts); } catch { /* Android ต้องผ่าน service worker */ } };
+    if (navigator.serviceWorker?.getRegistration) navigator.serviceWorker.getRegistration().then((r) => (r ? r.showNotification(title, opts) : fallback())).catch(fallback); else fallback();
+  } catch { /* แจ้งเตือนไม่ได้ก็ข้าม */ }
+}
+// ตรวจทุก 15 วิ: พลังงานเต็ม / เดินทางได้ / บอสโซนเจอได้อีก
+function notifyTick() {
+  const p = state.profile; if (!p || p.hp <= 0 || !state.uid) return;
+  const full = curStamina() >= maxStamina(), trav = travelCooldownLeft() > 0, bos = bossCooldownLeft() > 0, nf = state.nf || (state.nf = { full: true, trav: false, bos: false });
+  if (full && !nf.full) notifyOS("⚡ พลังงานเต็มแล้ว", "กลับไปค้นหา/เดินทางได้เลย", "stam");
+  if (!trav && nf.trav) notifyOS("🧭 เดินทางได้แล้ว", "พักจากการเดินทางครบแล้ว", "trav");
+  if (!bos && nf.bos) notifyOS("👹 บอสประจำโซนกลับมาเจอได้แล้ว", "ค้นหาต่อได้เลย", "bos");
+  nf.full = full; nf.trav = trav; nf.bos = bos;
+}
+if (HAS_DOM) setInterval(() => { try { notifyTick(); } catch { /* */ } }, 15000);
+
+/* ---- ไอเทมโปรด (hotbar): ปักของใช้ได้สูงสุด 4 ช่อง กดใช้จากแถบใต้หลอดพลัง ---- */
+const HOT_MAX = 4;
+const hotPins = () => LS.get(lsKey("hot"), []).filter((s) => typeof s === "string").slice(0, HOT_MAX);
+function hotToggle(slot) {
+  const h = hotPins(), i = h.indexOf(slot);
+  if (i >= 0) h.splice(i, 1); else { if (h.length >= HOT_MAX) return toast(`ปักได้สูงสุด ${HOT_MAX} ช่อง — เลิกปักชิ้นอื่นก่อน`); h.push(slot); }
+  LS.set(lsKey("hot"), h); renderHotbar(); renderInv();
+}
+const hotPinBtn = (slot) => { const on = hotPins().includes(slot), b = btn(on ? "★" : "☆", () => hotToggle(slot), "btn ghost mini" + (on ? " on" : "")); b.title = on ? "เลิกปักไว้ที่แถบลัด" : "ปักไว้ที่แถบลัด"; return b; };
+function renderHotbar() {
+  const el = $("hotbar"); if (!el) return;
+  const items = hotPins().map((slot) => [slot, state.inv?.[slot]]).filter(([, it]) => it && it.qty > 0).map(([slot, it]) => [slot, it, defOf(it)]).filter(([, , d]) => d && d.type === "consumable");
+  const sig = items.map(([s, it]) => `${s}:${it.qty}`).join(",");
+  if (el.dataset.sig === sig) return; el.dataset.sig = sig; el.textContent = "";
+  items.forEach(([slot, it, d]) => { const b = btn(`${d.icon || "🧪"} ×${it.qty}`, () => { if (state.boss) return toast("กำลังสู้บอสอยู่ — ใช้ปุ่มในหน้าบอส"); useItem(slot); }, "btn ghost mini hot"); b.title = `ใช้ ${d.name}`; el.append(b); });
+  el.classList.toggle("hidden", !items.length);
+}
+function initMapUi() {
+  const bars = document.querySelector(".bars"); if (bars && !$("hotbar")) { const h = mk("div", "hotbar hidden"); h.id = "hotbar"; bars.after(h); }
+}
+if (HAS_DOM) { initMapUi(); }
