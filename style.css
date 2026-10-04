@@ -468,3 +468,53 @@ textarea#chat-input {
   padding: 8px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.5); font-size: 14px;
 }
 .update-banner span { margin-right: 4px; }
+
+/* =====================================================================
+   ปรับหน้าตามือถือ (2026-10-04) — วางต่อท้ายไฟล์ได้เลย (ไม่แก้ของเดิม)
+   - แถบปุ่มบนสุดเป็นแถวเดียวเลื่อนซ้าย-ขวาได้ (เดิมบีบเป็นแท่งสูงตัวหนังสือแตกบรรทัด)
+   - ปุ่มค้นหาลอยติดบนสุดของแท็บกระเป๋า / หัวโซนกระชับ / แท็บมีไอคอน / ความสูงหน้าจอใช้ค่าจริงจาก JS (--app-h)
+   ===================================================================== */
+.tabbar button .ti { display: block; font-size: 18px; line-height: 1; margin-bottom: 2px; }
+.list li, .zone-btn { border-radius: 8px; }
+.equipped { background: #2c2a22 !important; box-shadow: inset 0 0 0 1px rgba(224,160,48,.3); }
+.panel h2 { display: flex; align-items: center; gap: 8px; }
+.panel h2::before { content: ""; width: 3px; height: 14px; border-radius: 2px; background: var(--hazard); flex: none; }
+.panel h2.no-bar::before, .modal-head h2::before { display: none; }
+
+@media (max-width: 900px) {
+  #screen-game.active { height: var(--app-h, 100dvh); }
+
+  /* แถบบน: ชื่อ → ปุ่ม (แถวเดียว เลื่อนได้) → หลอดพลัง */
+  .topbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 10px; }
+  .who { order: 1; }
+  .top-actions {
+    order: 2; display: flex; flex-wrap: nowrap; gap: 6px; min-width: 0; overflow-x: auto; padding-right: 26px;
+    scrollbar-width: none; -webkit-overflow-scrolling: touch;
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
+  }
+  .top-actions::-webkit-scrollbar { display: none; }
+  .top-actions .btn { flex: 0 0 auto; white-space: nowrap; min-height: 34px; padding: 4px 12px; font-size: 13.5px; }
+  #btn-hub, #btn-sfx { min-width: 40px; padding: 4px 8px; }
+  /* ลำดับ: ที่ใช้บ่อยมาก่อน — ภารกิจ ตลาด โปรไฟล์ สรุป เสียง วิธีเล่น … ออก Admin */
+  #btn-quests { order: 1; } #btn-market { order: 2; } #btn-profile { order: 3; } #btn-hub { order: 4; } #btn-sfx { order: 5; }
+  #btn-guide { order: 6; } #btn-copy-id { order: 7; } #btn-setpw { order: 8; } #btn-logout { order: 9; } #btn-admin { order: 10; }
+  .bars { order: 3; gap: 4px !important; }
+  .bar { height: 19px; }
+  .bar span { font-size: 11.5px; line-height: 17px; }
+
+  .layout { padding: 6px; }
+  .layout .panel { padding: 10px; }
+  .panel h2 { font-size: 14.5px; margin: 12px 0 6px; }
+
+  /* หัวโซน: บรรทัดสั้นอยู่คู่กัน ประหยัดที่ให้แชท */
+  .chat-head { display: flex; flex-wrap: wrap; gap: 0 14px; align-items: baseline; }
+  .chat-head p { margin: 2px 0 0; }
+  .chat-head h2 { flex-basis: 100%; margin: 0; font-size: 16px; }
+  #zone-desc, .event-line, .wb-box { flex-basis: 100%; }
+  .chat-log { padding: 8px; }
+
+  /* ปุ่มค้นหาลอยติดบนสุดของแท็บกระเป๋า */
+  #btn-scavenge { position: sticky; top: 0; z-index: 3; box-shadow: 0 8px 10px -6px rgba(0,0,0,.7); }
+
+  .tabbar button { min-height: 52px; font-size: 12.5px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+}

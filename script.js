@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0659";
+const APP_VERSION = "2026-10-04.0711";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4716,3 +4716,15 @@ if (HAS_DOM && !document.getElementById("hub-style")) {
   document.head.append(st);
 }
 if (HAS_DOM) initHubUi();
+
+/* ---- มือถือ: ความสูงหน้าจอจริง (กัน Chrome มือถือคำนวณ 100dvh ค้าง/เพี้ยนหลังคีย์บอร์ดปิดหรือสลับแท็บ → เห็นพื้นที่ว่างใต้แถบเมนู) ---- */
+function fitViewport() {
+  try { const h = Math.round(window.visualViewport?.height || window.innerHeight); if (h > 200) document.documentElement.style.setProperty("--app-h", h + "px"); } catch { /* ใช้ 100dvh ตามเดิม */ }
+}
+if (HAS_DOM && typeof window !== "undefined") {
+  fitViewport();
+  ["resize", "orientationchange", "pageshow"].forEach((ev) => window.addEventListener(ev, fitViewport));
+  window.visualViewport?.addEventListener("resize", fitViewport);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { fitViewport(); setTimeout(fitViewport, 400); } });
+  document.addEventListener("focusout", () => setTimeout(fitViewport, 350));   // คีย์บอร์ดเพิ่งปิด
+}
