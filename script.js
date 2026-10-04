@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1037";
+const APP_VERSION = "2026-10-04.1044";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2923,7 +2923,7 @@ $("adm-se-save").addEventListener("click", async () => {
 // ให้บัฟ/ดีบัฟชั่วคราว + สถานะพิเศษกับผู้เล่นโดยตรง (rules เดิมให้ GM/Owner เขียน buffs/effects ได้อยู่แล้ว — ช่วงค่าอิงตาม .validate เดิม)
 const BF_MIN = { str: -5, hp: -2, st: -3, regen: -1, agi: -5, tough: -5 };
 function buildGiveUi() {
-  const box = $("adm-bf-box"), sel = $("adm-fx-type"); if (!box || !sel) return;
+  const box = $("adm-bf-box"), sel = $("adm-gfx-type"); if (!box || !sel) return;
   box.innerHTML = ""; sel.innerHTML = "";
   STAT_KEYS.forEach((k) => {
     const row = mk("label", "", STAT_LABEL[k]); row.style.cssText = "display:grid;gap:4px;font-weight:400";
@@ -2955,10 +2955,10 @@ $("adm-bf-give")?.addEventListener("click", async () => {
     toast(`ให้บัฟ/ดีบัฟแก่ ${tg.name} นาน ${mins} นาทีแล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
-$("adm-fx-give")?.addEventListener("click", async () => {
+$("adm-gfx-give")?.addEventListener("click", async () => {
   try {
     const tg = await giveTarget(); if (!tg) return;
-    const type = $("adm-fx-type").value, v = Number($("adm-fx-v").value), mins = Number($("adm-fx-min").value);
+    const type = $("adm-gfx-type").value, v = Number($("adm-gfx-v").value), mins = Number($("adm-gfx-min").value);
     if (!Number.isInteger(mins) || mins < 1 || mins > FX_MAX_MIN) return toast(`นาทีต้องเป็นจำนวนเต็ม 1–${FX_MAX_MIN}`);
     const ok = type === "dice" ? Number.isInteger(v) && v >= -5 && v <= 5 && v !== 0 : type === "stun" ? v === 1 : Number.isInteger(v) && v >= 1 && v <= 20;
     if (!ok) return toast(type === "dice" ? "ทอยเต๋า: v ต้องเป็น −5..5 (ไม่ใช่ 0)" : type === "stun" ? "มึนงง: v ต้องเป็น 1" : "v ต้องเป็นจำนวนเต็ม 1–20");
