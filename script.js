@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0634";
+const APP_VERSION = "2026-10-04.0659";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -155,7 +155,7 @@ function monFx(u, src, loss, hpAfter) {
   if (!(loss > 0) || !(hpAfter > 0)) return "";
   for (const [t, [pc, v, mins]] of Object.entries(MON_FX[src] || {})) {
     if (Math.random() * 100 >= pc || effActive(t)) continue;
-    u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() };
+    u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() }; stat("fx");
     return ` ⚠️ ติด${FX_TYPES[t].icon}${FX_TYPES[t].name}`;
   }
   return "";
@@ -180,7 +180,7 @@ function renderSwapBar(el) {
     el.dataset.sig = sig; el.textContent = "";
     if (ws.length > 1 || (ws.length === 1 && ws[0][0] !== cur)) ws.forEach(([slot, it, d]) => {
       const b = btn(`${d.icon || "🗡️"} ${d.name} (${it.dur})`, () => swapWeapon(slot), "btn ghost mini" + (slot === cur ? " on" : ""));
-      b.dataset.slot = slot; if (slot === cur) b.disabled = true; el.append(b);
+      b.dataset.slot = slot; b.style.borderBottom = `3px solid ${durColor(durFrac(it, d))}`; b.title = "ปุ่มลัด: Q"; if (slot === cur) b.disabled = true; el.append(b);
     });
   }
   el.classList.toggle("hidden", !el.childElementCount);
@@ -484,6 +484,7 @@ function wearUpdates(u, w) {
   if (w.it.dur > 999) return;   // อาวุธค่าสูงเกินเพดาน rules (dur ≤ 999) → ไม่หักความทน ไม่งั้นอัปเดตโดนปฏิเสธ
   const left = w.it.dur - 1;
   if (left <= 0) {
+    stat("broke");
     u[`inventory/${state.uid}/${w.slot}`] = null; u[`users/${state.uid}/equipped`] = null;
     // ซากอาวุธ: มนุษย์ได้ scrap 1 (อาวุธมาตรฐาน) — ต้องเขียน salvage/{uid} ในคำสั่งเดียวกันให้ rules ตรวจ; ซอมบี้/อาวุธ custom ไม่ได้
     const have = state.inv.scrap?.qty || 0;
@@ -546,6 +547,26 @@ $("prof-close").addEventListener("click", () => $("profile-modal").classList.add
 
 // ---- คู่มือวิธีเล่น: ตัวเลขดึงจากค่าคงที่ด้านบน เลยไม่ต้องแก้ข้อความซ้ำเมื่อปรับบาลานซ์ ----
 const fmtDur = (ms) => { const s = Math.round(ms / 1000), m = Math.floor(s / 60), r = s % 60; return m ? (r ? `${m} นาที ${r} วินาที` : `${m} นาที`) : `${s} วินาที`; };
+
+// ข้อความเพิ่มในหน้า "วิธีเล่น" — ตัวเลขอ่านจากตารางปรับสมดุลโดยตรง (แก้ตารางแล้วหน้านี้อัปเดตตามเอง)
+function guideExtra(sec) {
+  const nm = (src) => (src === "zombie" ? "ซอมบี้ทั่วไป" : src === "wboss" ? "บอสโลก" : BOSSES[src]?.name || src);
+  sec("สถานะผิดปกติ", [
+    "โดนซอมบี้/บอสตีจนเสีย HP มีโอกาสติดสถานะ: 🩸 เลือดไหล (เสีย HP ทุกรอบ) • ☠️ พิษ (เสีย HP+พลังงาน) • 😵 มึนงง (โจมตีไม่ได้ ค้นหาไม่ได้) • 🎯 อ่อนแรง (ทอยสู้มอนสเตอร์แย่ลง)",
+    "รักษา: 🩹 ผ้าพันแผล (เลือดไหล) • ยาถอนพิษ/มอส (พิษ) • 🧰 ชุดปฐมพยาบาล (ทั้งสอง) — สถานะหายเองเมื่อหมดเวลา (ไม่เกิน 5 นาที)",
+    ...Object.entries(MON_FX).map(([src, t]) => `${nm(src)}: ${Object.entries(t).map(([k, [pc]]) => `${FX_TYPES[k].icon}${FX_TYPES[k].name} ${pc}%`).join(" • ")}`)
+  ]);
+  sec("อาวุธและการสลับอาวุธ", [
+    "อาวุธคม (" + Object.keys(WPN_PROC).map((id) => ITEMS[id]?.name || id).join(", ") + ") ตีบอสประจำโซนโดนมีโอกาสทำให้บอสเลือดไหล (สกิลโจมตีโดนแน่เพิ่มโอกาสเป็น 2 เท่า)",
+    "สีของความทนอาวุธ: เขียว = ปกติ • เหลือง = เหลือครึ่งหนึ่ง • แดง = ใกล้พัง",
+    "สลับอาวุธกลางสู้ได้จากแถบใต้ชื่ออาวุธ (หรือกด Q บนคอมพิวเตอร์) — คูลดาวน์ " + SWAP_CD / 1000 + " วิ แต่ถ้าอาวุธพังจนมือเปล่า สลับได้ทันที"
+  ]);
+  sec("สรุป อันดับ บันทึก เสียง", [
+    "ปุ่ม 📊 ด้านบน: สรุปวันนี้/สัปดาห์ (นับในเครื่องนี้), อันดับ (ทุบกำแพงรายสัปดาห์ ดาเมจบอสโลก), และสมุดบันทึกเหตุการณ์ของคุณ",
+    "แถบสีเหลือง/แดงเหนือปุ่มค้นหาคือคำเตือน เช่น HP ต่ำ ติดสถานะ อาวุธใกล้พัง หิว พลังงานใกล้หมด",
+    "ปุ่ม 🔔 เปิด/ปิดเสียงและสั่นเตือน (ตอนบอสโลกเกิด โดนตีแรง และ HP ต่ำ)"
+  ]);
+}
 function openGuide() {
   const body = $("guide-body"); body.textContent = "";
   const sec = (title, lines) => {
@@ -601,6 +622,7 @@ function openGuide() {
     "กดวางไอเทมลงพื้นเพื่อแบ่งให้คนในโซนเดียวกัน ใครอยู่ในโซนก็เก็บได้",
     "วางของชิ้นเดียวจาก slot เดิมซ้ำไม่ได้จนกว่าชิ้นก่อนหน้าจะถูกเก็บ"
   ]);
+  guideExtra(sec);
   $("guide-modal").classList.remove("hidden");
 }
 $("btn-guide").addEventListener("click", openGuide);
@@ -704,6 +726,7 @@ function renderBars() {
   }
 
   const starving = (fd === 0 || wt === 0);
+  renderDanger($("danger-bar"));
   $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < searchCost()) || effActive("stun");
   const fxEl = $("me-effects");
   if (fxEl) {
@@ -917,7 +940,7 @@ function startGame() {
 
   onValue(ref(db, "users/" + state.uid), (snap) => {
     const p = snap.val(); if (!p) return;
-    state.profile = p;
+    state.profile = p; try { sfxHpWatch(p); } catch { /* เสียงไม่ใช่เรื่องสำคัญ */ }
     if ((typeof p.foodTs !== "number" || typeof p.waterTs !== "number") && !state.hungerInit && !p.banned) {   // ผู้เล่นเก่า: เริ่มนับหิวจากตอนนี้
       state.hungerInit = true;
       const mu = {};
@@ -1022,6 +1045,7 @@ async function enterZone(z, initial = false, moved = false) {
 }
 
 function logLine(text, cls = "info") {
+  try { jrnlAdd(text, cls); } catch { /* บันทึกไม่ได้ก็ข้าม */ }
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const el = mk("div", "msg " + cls);
   el.append(mk("div", "bubble", text));
@@ -1269,7 +1293,7 @@ function renderInv() {
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
       if (eq) li.classList.add("equipped");
-      li.append(mk("span", "", `🗡️ ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})`));
+      { const sp = mk("span", "", `🗡️ ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})`); sp.style.color = durColor(durFrac(it, def)); li.append(sp); }
       
       const btnGrp = mk("div", "row-btns");
       btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
@@ -1629,7 +1653,7 @@ async function processDeath(attempt = 0) {
     }
     return;
   }
-  state.dying = true;
+  state.dying = true; stat("death");
   try {
     const u = {}, lost = [], uid = state.uid;
     DEATH_STACK.forEach((id) => {
@@ -1695,6 +1719,7 @@ async function scavengeOnce() {
     }
 
     state.lastPayload = u;
+    ambient();
     if (found === "zombie") {
       if (isZombie) {
         await update(ref(db), u);
@@ -1707,14 +1732,14 @@ async function scavengeOnce() {
     } else if (found) {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
-      logLine(`คุณค้นหา… เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
+      stat("found"); logLine(`คุณค้นหา… เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     } else {
       await update(ref(db), u);
       logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : "คุณค้นหา… ไม่เจออะไรเลย", "info");
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
-    questBump("search");
+    questBump("search"); stat("search");
   }
 }
 
@@ -1767,6 +1792,7 @@ async function zombieEncounter(u, hpNow) {
   }
 
   await update(ref(db), u);
+  stat("zombie"); if (won) stat("zwin"); if (dmg > 0) stat("dmg", dmg);
   logLine(`🧟 ${rollTxt} — ${verdict}`, "combat");
   if (newHp === 0) logLine("คุณบาดเจ็บสาหัสจนล้มลง…", "system");
 }
@@ -1803,14 +1829,15 @@ function renderBoss() {
   if (!open) return;
   const won = bs.hp <= 0, busy = !!state.bossBusy, w = equippedWeapon();
   $("boss-title").textContent = `${b.icon} ${b.name}`;
-  $("boss-tag").textContent = b.tag;
+  $("boss-tag").textContent = b.tag + fxChanceText(bs.boss);
   $("bar-boss").style.width = Math.max(0, (bs.hp / bs.max) * 100) + "%"; $("txt-boss").textContent = `บอส ${Math.max(0, bs.hp)}/${bs.max}`;
   $("bar-boss-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-boss-me").textContent = `HP ${p.hp}/${maxHp()}`;
-  $("boss-weapon").textContent = w ? `ถืออยู่: ${w.def.icon} ${w.def.name} (ทน ${w.it.dur})` : "ถืออยู่: มือเปล่า (ดาเมจต่ำมาก — แนะนำให้หนี)";
+  $("boss-weapon").textContent = w ? `ถืออยู่: ${w.def.icon} ${w.def.name} (ทน ${w.it.dur}) ` : "ถืออยู่: มือเปล่า (ดาเมจต่ำมาก — แนะนำให้หนี)";
+  if (w) { const f = durFrac(w.it, w.def), bar = mk("span"); bar.style.cssText = `display:inline-block;vertical-align:middle;width:70px;height:7px;border-radius:4px;background:#333;overflow:hidden`; const fl = mk("span"); fl.style.cssText = `display:block;height:100%;width:${Math.round(f * 100)}%;background:${durColor(f)}`; bar.append(fl); $("boss-weapon").append(bar); }
   const bd = state.inv.bandage?.qty || 0, kit = state.inv.medkit?.qty || 0;
   const bStun = effActive("stun");
   $("boss-attack").classList.toggle("hidden", won); $("boss-attack").disabled = busy || bStun; $("boss-attack").textContent = bStun ? "😵 มึนงง" : "⚔️ โจมตี";
-  renderSwapBar($("boss-swap"));
+  renderSwapBar($("boss-swap")); renderDanger($("boss-warn"));
   $("boss-bandage").classList.toggle("hidden", won); $("boss-bandage").disabled = busy || !bd; $("boss-bandage").textContent = `🩹 ผ้าพันแผล ×${bd}`;
   $("boss-medkit").classList.toggle("hidden", won); $("boss-medkit").disabled = busy || !kit; $("boss-medkit").textContent = `🧰 ชุดปฐมพยาบาล ×${kit}`;
   $("boss-flee").classList.toggle("hidden", won); $("boss-flee").disabled = busy;
@@ -2021,8 +2048,9 @@ async function bossRound(action) {
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
     if (action === "attack" || skillUsed?.type === "power") questBump("hit");
+    if (hp < p.hp) stat("dmg", p.hp - hp);
     bossLog(line);
-    if (killed) { logLine(`${b.icon} คุณล้ม${b.name}ได้สำเร็จ!`, "combat"); bossLog(`🏆 ${b.name}ล้มลงแล้ว!`); }
+    if (killed) { stat("boss"); logLine(`${b.icon} คุณล้ม${b.name}ได้สำเร็จ!`, "combat"); bossLog(`🏆 ${b.name}ล้มลงแล้ว!`); }
     else if (hp === 0) logLine(`${b.icon} ${b.name}สู้คุณจนล้มลง…`, "system");
     else if (action === "flee" && !state.boss?.hp) logLine(`คุณหนี${b.name}มาได้`, "info");
   } catch (e) { toast(errMsg(e)); }
@@ -2075,7 +2103,7 @@ function renderWB() {
   if (dead && mine && !claimed && !state.wbBusy && state.wbAutoClaimed !== b.startedAt) { state.wbAutoClaimed = b.startedAt; setTimeout(wbClaim, 300); }
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
-  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}`;
+  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}${fxChanceText("wboss")}`;
   $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
   $("txt-wb").textContent = `HP ${Math.max(0, b.hp)}/${b.max}`;
   const top = Object.values(state.wbHits || {}).filter((h) => h.bid === b.startedAt).sort((a, c) => c.total - a.total).slice(0, 3);
@@ -2144,7 +2172,8 @@ async function wbAttack(retry = true, skill = null) {
     }
     state.wbDbgU = u;
     await update(ref(db), u);
-    if (dmg > 0) { questBump("wboss"); questBump("hit"); }
+    if (dmg > 0) { questBump("wboss"); questBump("hit"); stat("wbdmg", dmg); }
+    if (hp < p.hp) stat("dmg", p.hp - hp);
     logLine(`${b.icon || "👹"} ${line}`, "combat");
     if (killed) logLine(`🏆 ${b.name}ล้มลงแล้ว! กดรับรางวัลได้เลย`, "system");
     else if (hp === 0) logLine(`${b.icon || "👹"} ${b.name}สู้คุณจนล้มลง…`, "system");
@@ -2270,7 +2299,9 @@ function listenWorldBoss() {
       const was = state.wb?.[z];
       if (was && was.startedAt === b.startedAt && was.hp > 0 && b.hp <= 0 && z === state.zone) logLine(`🏆 ${b.name}ล้มลงแล้ว! ผู้ที่ร่วมโจมตีกดรับรางวัลได้`, "system");
       wbaNotice(z, b, was);
+      if (state.wbSeenOnce && !was && b.hp > 0) sfx("boss");   // บอสโลกเกิดใหม่ (ไม่ร้องตอนโหลดหน้าครั้งแรก)
     });
+    state.wbSeenOnce = true;
     state.wb = nu; renderWB(); renderAdminWB();
   });
   onValue(ref(db, "wbAuto"), (s) => { state.wbAuto = s.val(); state.wbAutoOk = true; wbaTick(); }, (e) => console.error("wbAuto", e));
@@ -4450,3 +4481,238 @@ function rollLoot(rnd, tier, n, capPool, capTop) {
   const rpool = {}; for (let i = 0; i < Math.max(1, Math.min(12, n)); i++) rpool["p" + i] = rollGear(rnd, tier, capPool, false);
   return { rpool, rtop: rollGear(rnd, tier + 1, capTop, true) };
 }
+
+/* =========================================================
+   22) บรรยากาศ • สมุดบันทึก • สรุปวัน/สัปดาห์ • อันดับ • คำเตือน • เสียง
+   ฝั่งเกมล้วน — ไม่แตะ rules / ไม่เขียนข้อมูลใหม่ขึ้นเซิร์ฟเวอร์
+   บันทึกและสถิติส่วนตัวเก็บใน localStorage ของเครื่องนี้ (แยกตามบัญชี) / อันดับอ่านจากข้อมูลสาธารณะเดิม (wallWeek, wallTop, worldBossHits)
+
+   ตัวเลขปรับสมดุลอยู่ที่ตารางเดียว (แก้ได้โดยไม่ต้อง publish rules แต่ต้องไม่เกินเพดานที่ rules คุมไว้):
+     MON_FX   = โอกาสติดสถานะจากมอนสเตอร์ [โอกาส%, ค่า v, นาที] (เพดาน: bleed/poison v≤3, stun 1 นาที, dice −1..−2, ≤5 นาที)
+     WPN_PROC = โอกาสที่อาวุธคมทำให้บอสประจำโซนเลือดไหล / BOSS_BLEED, BOSS_BLEED_N = เลือดที่เสีย/รอบ และจำนวนรอบ
+     SWAP_CD  = คูลดาวน์สลับอาวุธ / AMB_CHANCE = โอกาสที่ข้อความบรรยากาศจะโผล่ตอนค้นหา
+   ========================================================= */
+const HAS_DOM = typeof document !== "undefined" && typeof document.addEventListener === "function" && typeof document.createElement === "function";   // (เครื่องมือทดสอบไม่มี DOM จริง)
+const AMB_CHANCE = 0.55;
+const LS = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* เต็ม/ถูกบล็อก: ข้ามไป */ } }
+};
+const lsKey = (n) => `zc_${state.uid || "x"}_${n}`;
+const dayKey = (t = serverNow()) => new Date(t + 25200000).toISOString().slice(0, 10);
+const weekStartKey = (t = serverNow()) => dayKey(t - ((new Date(t + 25200000).getUTCDay() + 6) % 7) * 86400000);   // วันจันทร์ของสัปดาห์นั้น (เวลาไทย)
+
+/* ---- สถิติรายวัน (ในเครื่อง) ---- */
+function stat(k, n = 1) {
+  if (!state.uid || !(n > 0)) return;
+  const all = LS.get(lsKey("st"), {}), d = dayKey(), cut = dayKey(serverNow() - 60 * 86400000);
+  Object.keys(all).forEach((x) => { if (x < cut) delete all[x]; });
+  (all[d] = all[d] || {})[k] = (all[d][k] || 0) + n;
+  LS.set(lsKey("st"), all);
+}
+function statSum(from, to) {
+  const all = LS.get(lsKey("st"), {}), s = {};
+  Object.entries(all).forEach(([d, o]) => { if (d >= from && d <= to) Object.entries(o).forEach(([k, v]) => { s[k] = (s[k] || 0) + v; }); });
+  return s;
+}
+
+/* ---- สมุดบันทึกเหตุการณ์ (ในเครื่อง): เก็บทุกบรรทัดที่เกมแจ้งเรา ยกเว้นข้อความบรรยากาศ/ค้นแล้วไม่เจอ ---- */
+const JR_MAX = 300;
+function jrnlAdd(text, cls) {
+  if (!state.uid || cls === "ambient" || /ไม่เจอ|📰/.test(text)) return;
+  const j = LS.get(lsKey("jr"), []);
+  j.push({ t: serverNow(), c: cls, x: String(text).slice(0, 220) });
+  if (j.length > JR_MAX) j.splice(0, j.length - JR_MAX);
+  LS.set(lsKey("jr"), j);
+}
+
+/* ---- ข้อความบรรยากาศตอนค้นหา (ไม่มีผลต่อผลลัพธ์) ---- */
+const AMB_ZONE = {
+  safe: ["เสียงเด็กหัวเราะแว่วมาจากเต็นท์ข้าง ๆ ชั่วครู่ก็เงียบลง", "ลวดหนามบนกำแพงสั่นกริ๊งตามแรงลม ยามบนหอสังเกตการณ์ยกไฟฉายกวาดไปรอบ ๆ", "กลิ่นซุปกระป๋องอุ่นลอยมาจากครัวส่วนกลาง ท้องคุณร้องขึ้นมาเอง", "ใครบางคนเถียงกันเรื่องแบ่งน้ำที่หัวมุมค่าย", "กระดานหน้าค่ายเขียนรายชื่อคนที่ยังไม่กลับ… มีชื่อใหม่เพิ่มมา", "เครื่องปั่นไฟครางต่ำ ๆ เป็นจังหวะสม่ำเสมอ ปลอบใจคนทั้งค่ายได้ดีกว่าคำพูดใด"],
+  ruins: ["กระจกร้าวใต้รองเท้าลั่นกรอบแกรบ คุณชะงักฟังว่ามีอะไรตอบกลับไหม", "รถบัสพลิกคว่ำขวางถนน ผ้าม่านในหน้าต่างยังปลิวไหว ทั้งที่ไม่มีลม", "รอยมือเปื้อนเลือดแห้งกรังบนผนังตึก ลากยาวลงไปถึงพื้น", "นกพิราบฝูงหนึ่งบินขึ้นพร้อมกันจากชั้นสาม… มีอะไรทำให้พวกมันตกใจ", "กลิ่นไหม้เก่า ๆ ปนกลิ่นเน่าลอยมาจากซอกตึก", "ตุ๊กตาหมีเปื้อนฝุ่นนั่งอยู่กลางถนนเหมือนมีคนวางไว้", "เสียงโลหะกระทบกันดังก๊องแก๊งจากที่ไกล ๆ แล้วก็เงียบไป"],
+  mall: ["ลิฟต์เก่ากริ๊งดังขึ้นหนึ่งครั้งจากชั้นบน ทั้งที่ไฟดับมาหลายเดือนแล้ว", "หุ่นโชว์ในตู้กระจกใส่ชุดซีดจาง ตายิ้มค้างเหมือนมองตามคุณอยู่", "เพลงห้างเพี้ยน ๆ แว่วมาจากลำโพงสักตัว ท่อนเดียววนซ้ำไม่รู้จบ", "ป้ายลดราคายังแปะอยู่ทุกชั้น แต่ไม่มีใครมาจ่ายเงินให้นานแล้ว", "ชั้นวางของล้มเรียงเป็นโดมิโน รอยลากเท้ายาวพาดผ่านหน้าร้านขายยา", "หยดน้ำจากเพดานรั่วตกลงบนถังสังกะสีเป็นจังหวะ ติ๊ง… ติ๊ง…"],
+  hospital: ["กลิ่นยาฆ่าเชื้อจาง ๆ ยังตกค้างอยู่ใต้กลิ่นเน่า เตียงเข็นเปล่าหมุนช้า ๆ เหมือนเพิ่งมีคนปล่อย", "ไฟฉุกเฉินสีเขียวกะพริบเป็นช่วง ๆ ฉายเงายาวลงบนทางเดิน", "เสียงเครื่องวัดชีพจรปี๊บ… ปี๊บ… ดังมาจากห้องไหนสักห้อง ทั้งที่ไม่มีไฟ", "ผ้าม่านกั้นเตียงพลิ้วไหว รอยเท้าเปื้อนเลือดเดินวนเข้าไปในห้องผ่าตัด", "แฟ้มประวัติคนไข้เกลื่อนพื้น บรรทัดท้ายสุดเขียนด้วยลายมือหมอว่า \"อย่าเปิดประตูชั้นใต้ดิน\"", "รถเข็นยาล้มคว่ำ ขวดยาเกลื่อน กลิ่นฉุนทำให้คุณแสบจมูก"],
+  police: ["วิทยุตำรวจซ่าส์ ๆ เป็นช่วง มีเสียงคนพูดไม่ชัดปนอยู่… แล้วก็เงียบ", "รถสายตรวจไร้คนขับจอดค้างริมถนน กระจกมีรอยกระสุนใหม่ ๆ", "กระดานข่าวคนหายเต็มผนังสถานี รูปหลายใบถูกวงด้วยปากกาแดง", "กุญแจมือห้อยอยู่ที่ลูกบิดห้องขัง ประตูแง้มอยู่นิดเดียว", "เสียงปืนลูกซองดังก้องจากไกล ๆ หนเดียว แล้วทุกอย่างกลับสู่ความเงียบ", "ถ้วยกาแฟบนโต๊ะเวรยังมีคราบแห้งเป็นวงสีน้ำตาลติดก้น"],
+  forest: ["เสียงกิ่งไม้หักดังเปรี๊ยะจากทางซ้าย คุณหยุดหายใจฟังอยู่ครู่หนึ่ง", "หมอกลอยต่ำระดับเข่า ใบไม้เปียกลื่นใต้รองเท้า", "นกร้องแล้วหยุดกะทันหันทั่วทั้งป่า… ความเงียบแบบนี้ไม่ธรรมดา", "รอยเล็บลึกบนต้นไม้ใหญ่ สูงกว่าหัวคุณ", "กลิ่นดินเปียกปนกลิ่นเนื้อเน่าพัดมาตามลม", "แสงแดดลอดใบไม้เป็นลำสวยงาม แต่ไม่ได้ทำให้คุณรู้สึกปลอดภัยขึ้นเลย"],
+  factory: ["สายพานค้างอยู่กลางไลน์ผลิต สลักสนิมส่งเสียงเอี๊ยดเมื่อลมผ่าน", "ไอน้ำพุ่งออกจากท่อรั่วเป็นช่วง ๆ ฟู่… ฟู่… ทำให้เงาในโรงงานดูขยับได้", "หมวกนิรภัยสีเหลืองเรียงอยู่หน้าห้องล็อกเกอร์ ขาดไปหลายใบ", "เสียงมอเตอร์เก่าติดขัดแล้วดับ… ใครเปิดสวิตช์ไว้เมื่อไหร่กัน", "กลิ่นน้ำมันเครื่องกับสารเคมีฉุนจนตาแสบ", "รอยลากเหล็กยาวบนพื้นคอนกรีตมุ่งหน้าไปทางโกดังด้านหลัง"],
+  port: ["คลื่นกระทบท่าเรือเป็นจังหวะ เสียงโซ่เรือเสียดกับเสาเสียวฟัน", "ตู้คอนเทนเนอร์ซ้อนสูงเป็นเขาวงกต ประตูตู้หนึ่งแง้มอยู่ มีรอยข่วนด้านใน", "นกนางนวลวนอยู่เหนือกองอะไรสักอย่างที่ปลายท่า", "กลิ่นเค็มปนกลิ่นปลาเน่าพัดมาทางลม", "ไฟประภาคารเก่าหมุนช้า ๆ สาดแสงผ่านสายหมอกแล้วหายไป", "เรือประมงจมครึ่งลำนอนเอียงอยู่ในน้ำ ธงฉีกขาดโบกสะบัด"],
+  base: ["ลวดหนามขดเป็นวงรอบค่ายทหาร ป้ายเตือนเขตหวงห้ามผุกร่อนจนอ่านไม่ออก", "ถุงทรายกองสูงหลังจุดยิง ปลอกกระสุนเปล่ากองเป็นเนินเล็ก ๆ", "ธงชาติครึ่งเสาสีซีดจางสะบัดอยู่เหนือหอบังคับการ", "วิทยุสนามดังซ่า… มีเสียงนับถอยหลังวนอยู่ แล้วก็ตัดเงียบไป", "เต็นท์ทหารฉีกขาด รอยกัดที่ขอบเตียงสนามชัดเจน", "รถจิ๊ปคันหนึ่งดับเครื่องกลางลาน กุญแจยังเสียบค้างอยู่"],
+  tunnel: ["เสียงน้ำหยดก้องในความมืด ติ๋ง… ก้องไปไกลกว่าที่ควรจะเป็น", "ลมเย็นพัดจากลึกเข้าไปในอุโมงค์ เหมือนมีอะไรหายใจอยู่ปลายทาง", "ไฟฉายเริ่มสลัว ผนังคอนกรีตเปียกชื้นสะท้อนเงาเป็นสองสามเงา", "รางรถไฟสนิมเขรอะ ไม้หมอนผุยุ่ย รอยเลือดแห้งลากยาวตามราง", "เสียงเท้าย่ำน้ำดังมาจากที่ไกล ๆ… ตามด้วยเสียงคราง", "กลิ่นอับชื้นปนกลิ่นเหม็นเปรี้ยวของสิ่งที่ไม่ควรมีชีวิตแต่ยังเคลื่อนไหวอยู่"]
+};
+const AMB_TIME = {
+  dawn: ["แสงเช้าสีส้มจางลอดผ่านซากตึก นกยังไม่ตื่นดี", "หมอกเช้าบาง ๆ ยังไม่ทันจาง อากาศเย็นจนมือชา", "รุ่งสางเงียบกว่าที่คิด… เงียบจนได้ยินใจตัวเอง", "น้ำค้างเกาะบนซากรถ คราบเลือดเก่ากลายเป็นสีน้ำตาลเข้ม", "พระอาทิตย์ขึ้นมาอีกวัน บางทีวันนี้อาจเป็นวันดี"],
+  day: ["แดดเที่ยงเผาถนนจนอากาศสั่นระริก เหงื่อไหลลงหลัง", "ไม่มีเมฆสักก้อน เงาของคุณสั้นและชัดเจนเกินไป", "แมลงวันฝูงหนึ่งตอมอยู่ไม่ไกล คุณเลือกไม่ดูว่ามันตอมอะไร", "แสงจ้าทำให้ทุกอย่างดูปลอดภัยกว่าที่เป็นจริง", "ลมร้อนพัดกระดาษปลิวผ่านเท้า ตัวหนังสือบนกระดาษอ่านไม่ออกแล้ว"],
+  dusk: ["ท้องฟ้าสีแดงฉานเหมือนบาดแผลบนขอบฟ้า", "เงาทอดยาวขึ้นเรื่อย ๆ… ใกล้ค่ำแล้ว", "ฝูงนกบินกลับรังเร็วกว่าปกติ", "แสงสุดท้ายของวันกำลังหมด ไฟฉายเริ่มมีความหมาย", "เสียงแปลก ๆ เริ่มดังขึ้นเมื่อแสงเริ่มลด"],
+  night: ["ความมืดหนาจนมือตัวเองแทบมองไม่เห็น", "จันทร์ถูกเมฆบังครึ่งหนึ่ง เงาทุกอย่างดูเหมือนคนยืนอยู่", "เสียงหายใจของตัวเองดังเกินไปในความเงียบยามค่ำ", "ดาวเต็มฟ้า สวยจนลืมไปว่าไม่มีไฟเมืองให้ดูแล้ว", "ไกล ๆ มีเสียงครางยาว ๆ ดังขึ้น แล้วอีกเสียงตอบรับ"]
+};
+const AMB_LOW = ["แผลสั่นระริกทุกครั้งที่ก้าวเท้า ตาเริ่มพร่า", "มือสั่น หายใจเป็นช่วงสั้น ๆ… ควรหยุดพักหรือไม่", "เลือดหยดลงพื้นตามรอยเท้า ซอมบี้ตามกลิ่นนี้ได้ไม่ยาก", "ร่างกายเตือนว่าไม่ไหวแล้ว แต่คุณยังเลือกจะเดินต่อ"];
+const AMB_ZOMBIE = ["กลิ่นคนอุ่น ๆ ลอยมาตามลม ท้องหิวร้องคำราม", "ความหิวเป็นเสียงเดียวในหัว… เนื้อสด", "ในความมืดคุณเห็นร่องรอยชีวิตเป็นประกายจาง ๆ", "เสียงหัวใจคนเต้นดังแว่ว… ทางไหน?", "พวกเดียวกันครางตอบมาจากที่ไกล เหมือนทักทาย"];
+// ช่วงเวลาตามวัฏจักรกลางวัน/กลางคืนของเกม (DAY_CYCLE: กลางวัน 60 นาที → กลางคืน 40 นาที): 10 นาทีแรกของกลางวัน = รุ่งสาง, 10 นาทีสุดท้าย = เย็น
+const timeSlot = () => { if (isNight()) return "night"; const t = serverNow() % DAY_CYCLE; return t < 600000 ? "dawn" : t >= NIGHT_START - 600000 ? "dusk" : "day"; };
+function ambient() {
+  const p = state.profile; if (!p || Math.random() > AMB_CHANCE) return;
+  const z = p.faction === "zombie", low = !z && p.hp < maxHp() * 0.3, pool = [];
+  const add = (arr, w) => { for (let i = 0; i < w; i++) pool.push(...arr); };
+  add(AMB_ZONE[state.zone] || [], z ? 1 : 3); add(AMB_TIME[timeSlot()], z ? 1 : 2);
+  if (z) add(AMB_ZOMBIE, 3); if (low) add(AMB_LOW, 4);
+  const fresh = pool.filter((t) => t !== state.ambLast); const t = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
+  if (!t) return; state.ambLast = t; logLine("· " + t, "ambient");
+}
+
+/* ---- เสียง/สั่น (ปิดได้ จำค่าไว้ในเครื่อง) ---- */
+const SFX = { on: LS.get("zc_sfx", true) !== false, ac: null };
+function tone(f, at, dur, type = "square", vol = 0.05) {
+  const a = SFX.ac, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.value = f;
+  g.gain.setValueAtTime(0.0001, a.currentTime + at); g.gain.exponentialRampToValueAtTime(vol, a.currentTime + at + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + at + dur);
+  o.connect(g).connect(a.destination); o.start(a.currentTime + at); o.stop(a.currentTime + at + dur + 0.02);
+}
+function sfx(kind) {
+  if (!SFX.on) return;
+  try { navigator.vibrate?.({ hit: 80, down: [120, 60, 200], low: [60, 40, 60], boss: [100, 60, 100, 60, 200] }[kind] || 50); } catch { /* ไม่รองรับ */ }
+  try {
+    SFX.ac = SFX.ac || new (window.AudioContext || window.webkitAudioContext)(); SFX.ac.resume?.();
+    if (kind === "hit") tone(150, 0, 0.12, "sawtooth", 0.07);
+    else if (kind === "down") { tone(220, 0, 0.18, "sawtooth", 0.07); tone(110, 0.18, 0.35, "sawtooth", 0.07); }
+    else if (kind === "low") { tone(440, 0, 0.1); tone(330, 0.15, 0.1); }
+    else if (kind === "boss") { tone(392, 0, 0.14); tone(523, 0.16, 0.14); tone(659, 0.32, 0.26); }
+  } catch { /* ถูกบล็อกจนกว่าจะแตะหน้าจอ */ }
+}
+function sfxHpWatch(p) {
+  const prev = state.hpPrev; state.hpPrev = p.hp;
+  if (typeof prev !== "number" || typeof p.hp !== "number") return;
+  const mx = maxHp();
+  if (p.hp < prev && prev - p.hp >= 8) sfx(p.hp <= 0 ? "down" : "hit");
+  if (prev > mx * 0.25 && p.hp <= mx * 0.25 && p.hp > 0) setTimeout(() => sfx("low"), 350);
+}
+if (HAS_DOM) document.addEventListener("pointerdown", () => { try { if (SFX.on && SFX.ac) SFX.ac.resume?.(); } catch { /* */ } }, { passive: true });
+
+/* ---- คำเตือนก่อนอันตราย ---- */
+function durFrac(it, def) { const mx = it.maxDur ?? def?.maxDur ?? 0; return mx > 0 ? Math.max(0, Math.min(1, it.dur / mx)) : 1; }
+const durColor = (f) => (f > 0.5 ? "#7fb069" : f > 0.2 ? "#d9a441" : "#e5533d");
+function dangerChips() {
+  const p = state.profile, out = []; if (!p || p.hp <= 0) return out;
+  const mx = maxHp(), zom = p.faction === "zombie", w = equippedWeapon();
+  if (p.hp <= mx * 0.25) out.push(["bad", `💔 HP ต่ำมาก ${p.hp}/${mx}`]); else if (p.hp <= mx * 0.45) out.push(["warn", `💔 HP ต่ำ ${p.hp}/${mx}`]);
+  FX_KEYS.filter(effActive).forEach((t) => { if (t === "hot" || (t === "dice" && effV(t) > 0)) return; out.push([t === "stun" ? "bad" : "warn", `${FX_TYPES[t].icon} ${FX_TYPES[t].name}${t === "bleed" || t === "poison" ? ` −${effV(t)}/รอบ` : ""}`]); });
+  if (p.infected && !zom) out.push(["bad", "🦠 ติดเชื้อ HP จะค่อย ๆ ลด"]);
+  if (!zom && state.zone !== "safe") {
+    if (!w) out.push(["warn", "🗡️ ไม่ได้ถืออาวุธ"]);
+    else if (w.it.dur <= 5) out.push(["bad", `🔧 อาวุธใกล้พัง (เหลือ ${w.it.dur})`]);
+    else if (durFrac(w.it, w.def) <= 0.2) out.push(["warn", `🔧 อาวุธทนต่ำ (เหลือ ${w.it.dur})`]);
+  }
+  if (curFood() <= 20 || curWater() <= 20) out.push(["warn", `${curFood() <= 20 ? "🍞 หิว" : ""}${curFood() <= 20 && curWater() <= 20 ? " " : ""}${curWater() <= 20 ? "💧 กระหาย" : ""} — ค้นหาต่อจะเสียเลือด`]);
+  const left = Math.floor(curStamina() / Math.max(1, searchCost())); if (left <= 1) out.push(["warn", `⚡ พลังงานเหลือค้นได้ ${left} ครั้ง`]);
+  if (state.zone === "safe" && typeof wallBroken === "function" && wallBroken()) out.push(["bad", "🧱 กำแพงพัง — ซอมบี้บุกค่ายได้"]);
+  return out;
+}
+function renderDanger(el) {
+  if (!el) return; const chips = dangerChips(), sig = JSON.stringify(chips);
+  if (el.dataset.sig === sig) return; el.dataset.sig = sig; el.textContent = "";
+  chips.forEach(([lv, t]) => el.append(mk("span", "dchip " + lv, t))); el.classList.toggle("hidden", !chips.length);
+}
+function fxChanceText(src) {
+  const t = MON_FX[src]; if (!t) return "";
+  return " • ⚠️ โอกาสติด: " + Object.entries(t).map(([k, [pc]]) => `${FX_TYPES[k].icon}${pc}%`).join(" ");
+}
+
+/* ---- สลับอาวุธด้วยปุ่มลัด Q ---- */
+if (HAS_DOM) document.addEventListener("keydown", (e) => {
+  if (e.key !== "q" && e.key !== "Q") return;
+  const tg = e.target; if (e.ctrlKey || e.metaKey || e.altKey || (tg && /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || "")) || !state.profile) return;
+  const ws = Object.entries(state.inv || {}).filter(([, it]) => { const d = defOf(it); return d && d.type === "weapon" && it.dur > 0; }).map(([s]) => s);
+  if (ws.length < 2 && !(ws.length === 1 && state.profile.equipped !== ws[0])) return;
+  const i = ws.indexOf(state.profile.equipped); swapWeapon(ws[(i + 1) % ws.length]);
+});
+
+/* ---- หน้า สรุป / อันดับ / บันทึก ---- */
+const HUB_STATS = [["search", "🔎 ค้นหา"], ["found", "🎒 เจอของ"], ["zombie", "🧟 เจอซอมบี้"], ["zwin", "⚔️ ชนะซอมบี้"], ["boss", "👹 ล้มบอสโซน"], ["wbdmg", "🌋 ดาเมจบอสโลก"], ["dmg", "💔 HP ที่เสีย"], ["fx", "☠️ ติดสถานะ"], ["broke", "🔧 อาวุธพัง"], ["death", "💀 ล้มลง"]];
+function hubVerdict(s, label) {
+  if (!Object.keys(s).length) return `${label}ยังไม่มีบันทึก — ออกไปค้นหาสักรอบสิ`;
+  if (s.death >= 3) return `${label}ล้มไป ${s.death} ครั้ง… ระวังตัวและพกยาไว้เยอะ ๆ`;
+  if (s.boss >= 2 || s.wbdmg >= 100) return `${label}สู้หนักมาก! ล้มบอสโซน ${s.boss || 0} ตัว ดาเมจบอสโลก ${s.wbdmg || 0}`;
+  if (s.death) return `${label}ล้มไป ${s.death} ครั้ง แต่ก็ลุกกลับมาได้`;
+  if ((s.search || 0) >= 20) return `${label}ค้นหาไป ${s.search} ครั้ง ขยันมาก เสบียงน่าจะแน่นขึ้น`;
+  return `${label}รอดมาได้อย่างเงียบ ๆ`;
+}
+function hubSummary(box, scope) {
+  const today = dayKey(), s = scope === "week" ? statSum(weekStartKey(), today) : statSum(today, today);
+  box.append(mk("p", "muted", hubVerdict(s, scope === "week" ? "สัปดาห์นี้" : "วันนี้")));
+  const g = mk("div", "hub-grid"); HUB_STATS.forEach(([k, l]) => { const c = mk("div", "hub-card"); c.append(mk("div", "hub-n", String(s[k] || 0)), mk("div", "hub-l", l)); g.append(c); }); box.append(g);
+  const days = []; for (let i = 6; i >= 0; i--) days.push(dayKey(serverNow() - i * 86400000));
+  const all = LS.get(lsKey("st"), {}), vals = days.map((d) => all[d]?.search || 0), mxv = Math.max(1, ...vals);
+  box.append(mk("h3", "", "ค้นหา 7 วันล่าสุด")); const ch = mk("div", "hub-bars");
+  days.forEach((d, i) => { const col = mk("div", "hub-col"), b = mk("div", "hub-bar"); b.style.height = Math.max(2, Math.round((vals[i] / mxv) * 60)) + "px"; b.title = `${d}: ${vals[i]}`; col.append(mk("div", "hub-v", String(vals[i])), b, mk("div", "hub-d", d.slice(8))); ch.append(col); });
+  box.append(ch, mk("p", "muted", "สถิติเก็บในเครื่องนี้เท่านั้น (เปลี่ยนเครื่อง/ล้างข้อมูลเบราว์เซอร์แล้วจะเริ่มใหม่)"));
+}
+async function hubRank(box) {
+  box.append(mk("p", "muted", "กำลังโหลด…"));
+  const me = state.uid, rows = (title, list, fmt) => {
+    box.append(mk("h3", "", title));
+    if (!list.length) return box.append(mk("p", "muted", "ยังไม่มีข้อมูล"));
+    const ol = mk("ol", "hub-rank"); list.forEach((e, i) => { const li = mk("li", e.uid === me ? "me" : "", `${["🥇", "🥈", "🥉"][i] || i + 1 + "."} ${fmt(e)}`); ol.append(li); }); box.append(ol);
+  };
+  try {
+    const wk = wallWk(), [ww, wt] = await Promise.all([get(ref(db, "wallWeek")), get(ref(db, "wallTop"))]);
+    const wl = Object.entries(ww.val() || {}).map(([uid, e]) => ({ uid, ...e })).filter((e) => e.wk === wk && e.n > 0).sort((a, b) => b.n - a.n).slice(0, 10);
+    const tl = Object.values(wt.val() || {}).filter((e) => e && e.n > 0).sort((a, b) => b.wk - a.wk).slice(0, 5);
+    const wbs = [];
+    for (const [z, b] of Object.entries(state.wb || {})) {
+      if (!b || !b.startedAt) continue;
+      try { const h = (await get(ref(db, `worldBossHits/${z}`))).val() || {}; const l = Object.entries(h).map(([uid, e]) => ({ uid, ...e })).filter((e) => e.bid === b.startedAt).sort((a, c) => c.total - a.total).slice(0, 5); if (l.length) wbs.push([b, z, l]); } catch { /* ข้ามโซนที่อ่านไม่ได้ */ }
+    }
+    box.textContent = "";
+    rows("🧱 ทุบกำแพงสัปดาห์นี้ (ซอมบี้)", wl, (e) => `${e.name || "?"} — ${e.n} ครั้ง`);
+    rows("🏆 สถิติสัปดาห์ล่าสุด", tl, (e) => `${e.name || "?"} — ${e.n} ครั้ง (สัปดาห์ที่ ${e.wk})`);
+    if (!wbs.length) { box.append(mk("h3", "", "👹 ดาเมจบอสโลก"), mk("p", "muted", "ตอนนี้ไม่มีบอสโลก")); }
+    wbs.forEach(([b, z, l]) => rows(`${b.icon || "👹"} ${b.name} • ${ZONES[z]?.name || z} ${b.hp > 0 ? "(ยังอยู่)" : "(ล้มแล้ว)"}`, l, (e) => `${e.name || "?"} — ${e.total} ดาเมจ`));
+  } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดอันดับไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("rank", e); }
+}
+function hubJournal(box) {
+  const j = LS.get(lsKey("jr"), []).slice().reverse();
+  const top = mk("div", "row"); top.append(mk("span", "muted", `ล่าสุด ${Math.min(j.length, 120)} จาก ${j.length} รายการ`));
+  const clr = btn("ล้าง", () => { if (confirm("ล้างสมุดบันทึกทั้งหมด?")) { LS.set(lsKey("jr"), []); hubTab("log"); } }, "btn ghost mini"); top.append(" ", clr); box.append(top);
+  if (!j.length) return box.append(mk("p", "muted", "ยังไม่มีบันทึก"));
+  const ul = mk("ul", "hub-log"); let last = "";
+  j.slice(0, 120).forEach((e) => { const d = new Date(e.t + 25200000).toISOString(); const dk = d.slice(0, 10); if (dk !== last) { last = dk; ul.append(mk("li", "hub-day", "📅 " + dk)); } ul.append(mk("li", e.c, `${d.slice(11, 16)} ${e.x}`)); });
+  box.append(ul);
+}
+function hubTab(tab) {
+  const m = $("hub-modal"); if (!m) return; m.dataset.tab = tab;
+  m.querySelectorAll(".hub-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
+  const box = $("hub-body"); box.textContent = "";
+  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else hubJournal(box);
+}
+function openHub(tab = "day") {
+  let m = $("hub-modal");
+  if (!m) {
+    m = mk("div", "modal hidden"); m.id = "hub-modal"; m.setAttribute("role", "dialog");
+    const bx = mk("div", "modal-box"); bx.style.maxWidth = "440px";
+    const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • อันดับ • บันทึก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
+    const body = mk("div", "hub-body"); body.id = "hub-body";
+    bx.append(hd, tabs, body); m.append(bx); document.body.append(m);
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+  }
+  m.classList.remove("hidden"); hubTab(tab);
+}
+function initHubUi() {
+  if ($("btn-hub")) return;
+  const g = $("btn-guide"); if (!g) return;
+  const h = btn("📊", () => openHub(), "btn ghost mini"); h.id = "btn-hub"; h.title = "สรุปวัน/สัปดาห์ • อันดับ • สมุดบันทึก";
+  const s = btn(SFX.on ? "🔔" : "🔕", () => { SFX.on = !SFX.on; LS.set("zc_sfx", SFX.on); s.textContent = SFX.on ? "🔔" : "🔕"; toast(SFX.on ? "เปิดเสียง/สั่นเตือนแล้ว" : "ปิดเสียง/สั่นเตือนแล้ว"); if (SFX.on) sfx("low"); }, "btn ghost mini"); s.id = "btn-sfx"; s.title = "เปิด/ปิดเสียงและสั่นเตือน";
+  g.before(h, s);
+  const sc = $("btn-scavenge"); if (sc && !$("danger-bar")) { const d = mk("div", "danger-bar hidden"); d.id = "danger-bar"; sc.before(d); }
+  const bw = $("boss-weapon"); if (bw && !$("boss-warn")) { const d = mk("div", "danger-bar hidden"); d.id = "boss-warn"; bw.after(d); }
+}
+if (HAS_DOM && !document.getElementById("hub-style")) {
+  const st = document.createElement("style"); st.id = "hub-style";
+  st.textContent = ".msg.ambient{color:var(--muted);font-style:italic;font-size:13px;opacity:.8}"
+    + ".danger-bar{display:flex;flex-wrap:wrap;gap:4px;margin:6px 0}.dchip{font-size:12px;padding:2px 8px;border-radius:10px;border:1px solid #d9a441;color:#d9a441}.dchip.bad{border-color:#e5533d;color:#e5533d;font-weight:600}"
+    + ".hub-tabs{display:flex;gap:4px;margin:10px 0}.hub-tabs .on{outline:1px solid var(--accent,#7fb069)}.hub-body{font-size:14px;line-height:1.5;max-height:60vh;overflow:auto}"
+    + ".hub-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:8px 0}.hub-card{border:1px solid var(--line,#3a3a3a);border-radius:8px;padding:6px 8px}.hub-n{font-size:20px;font-weight:700}.hub-l{font-size:12px;opacity:.8}"
+    + ".hub-bars{display:flex;gap:6px;align-items:flex-end;height:90px}.hub-col{flex:1;text-align:center;font-size:11px}.hub-bar{background:#7fb069;border-radius:3px 3px 0 0;margin:2px auto 0;width:70%}"
+    + ".hub-rank{padding-left:0;list-style:none;margin:4px 0 12px}.hub-rank li{padding:2px 4px}.hub-rank li.me{background:rgba(127,176,105,.18);border-radius:4px}"
+    + ".hub-log{list-style:none;padding:0;margin:6px 0}.hub-log li{padding:2px 0;font-size:13px}.hub-log li.combat{color:var(--hazard,#d9a441)}.hub-log li.system{color:#ff5b47}.hub-day{font-weight:700;margin-top:8px}";
+  document.head.append(st);
+}
+if (HAS_DOM) initHubUi();
