@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1638";
+const APP_VERSION = "2026-10-04.1714";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -558,6 +558,7 @@ async function showBio(uid, name) {
   $("bio-modal").classList.remove("hidden");
   try { const s = await get(ref(db, "bios/" + uid)); $("bio-text").textContent = s.val() || "ยังไม่ได้เขียนประวัติ"; }
   catch { $("bio-text").textContent = "โหลดไม่สำเร็จ"; }
+  achBioLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
@@ -608,6 +609,13 @@ function openGuide() {
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
     "🚨 ทุกวันมี “คืนปิดล้อม” 30 นาทีช่วงหัวค่ำ (เวลาเริ่มไม่เท่ากันทุกวัน ดูได้ที่แผงวิทยุ) ซอมบี้ทุบกำแพง มนุษย์ซ่อมกำแพงที่ Safe Zone นับเป็นเควสพิเศษ"
+  ]);
+  sec("ความสำเร็จ • ฉายา • เป้าหมายร่วม", [
+    "🏅 ความสำเร็จกว่า 140 อัน (ปุ่ม 🏅 มุมบน) ปลดล็อกจากสิ่งที่คุณทำ มีระดับ ทองแดง/เงิน/ทอง/ตำนาน และมีของลับให้ค้นหา",
+    "🏷️ เลือกความสำเร็จที่ปลดแล้วเป็นฉายา — คนอื่นเห็นข้างชื่อคุณในแชทและรายชื่อผู้เล่น (ความสำเร็จให้ฉายา ไม่ให้ของ)",
+    "🌍 ทุกสัปดาห์มีเป้าหมายร่วม 3 ข้อ (ทั้งเซิร์ฟเวอร์ / มนุษย์ / ซอมบี้) ช่วยกันทำคนละไม้คนละมือ ถ้าสำเร็จและคุณมีส่วนร่วมพอ รับรางวัลได้ที่ 📜 ภารกิจ",
+    "📻 ทุก 2 ชั่วโมงวิทยุจะประกาศภารกิจกลุ่มสั้นๆ (ภารกิจของฝั่งคุณกับอีกฝั่งแยกกัน) ช่วยกันทำให้ทันภายใน 90 นาที",
+    "🌟 ทุกเช้าวิทยุประกาศผู้รอดเด่นของเมื่อวาน (นักสำรวจ นักสู้ ผู้ดูแลกำแพง นักล่าบอส) ดูทั้งหมดที่ 📊 → 🌍"
   ]);
   sec("หิวและกระหาย", [
     `อาหารของมนุษย์ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.human)} ซอมบี้หิวเร็วกว่า ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.zombie)}`,
@@ -768,6 +776,7 @@ function renderBars() {
   updateAttackButtons();
   renderBuffRow(); clampToMax();
   try { fxStatus(); } catch { /* */ }
+  try { achProfileWatch(state.profile); } catch { /* */ }
 }
 
 /* =========================================================
@@ -990,7 +999,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); wallListen(); deepInit(); headCompactInit();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); achInit(); wallListen(); deepInit(); headCompactInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -1041,7 +1050,7 @@ async function enterZone(z, initial = false, moved = false) {
       }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
-    teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
+    teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } try { achZone(z); } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender();
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
@@ -1090,6 +1099,7 @@ function addChat(key, m) {
     el = mk("div", isMe ? "msg self" : "msg"); 
     const sender = mk("div", "sender " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`);
     const bubble = mk("div", "bubble", m.text);
+    sender.append(" ", achBadge(m.uid));
     el.append(sender, bubble); 
   }
 
@@ -1265,7 +1275,7 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
     if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
@@ -2239,7 +2249,7 @@ async function wbClaim(retry = true) {
     if (topGear) u[`inventory/${uid}/wbt_${z}_${b.startedAt}`] = { id: "custom_gear", qty: 1, ...gearFields(topGear) };
     state.wbDbgU = u;
     await update(ref(db), u);
-    logLine(`🏆 รางวัลจาก${b.name}: ${wbRewardText(b)}`, "combat"); toast(`ได้รับ ${wbRewardText(b)}`);
+    logLine(`🏆 รางวัลจาก${b.name}: ${wbRewardText(b)}`, "combat"); toast(`ได้รับ ${wbRewardText(b)}`); achBump("wbkill");
     if (pg) logLine(`🎲 เกราะสุ่มจากคลัง: ${pg.icon || "🛡️"} ${pg.name} (ลดดาเมจ ${pg.red}% • ช่อง${pg.gslot === "acc" ? "อุปกรณ์เสริม" : "เกราะ"})`, "combat");
     if (topGear) logLine(`🥇 คุณทำดาเมจสูงสุด! ได้ชิ้นพิเศษ: ${topGear.icon || "🛡️"} ${topGear.name} (ลดดาเมจ ${topGear.red}%)`, "system");
   } catch (e) {
@@ -2329,6 +2339,7 @@ function wbMvpNotice(z, b) {
   if (!t?.name) { logLine(`🏆 บอสโลก「${b.name}」ที่${zn}ล้มลงแล้ว!`, "system"); return; }
   const me = t.uid === state.uid;
   logLine(`🏆 บอสโลก「${b.name}」ที่${zn}ล้มลงแล้ว! 🥇 MVP: ${t.name} (ดาเมจรวม ${t.total})${b.rtop ? ` — รับชิ้นพิเศษ ${b.rtop.icon || "🛡️"} ${b.rtop.name}` : ""}${me ? " • คือคุณเอง! 🎉" : ""}`, "system");
+  if (me && !LS.get(lsKey("mvp_" + k), 0)) { LS.set(lsKey("mvp_" + k), 1); achBump("wbmvp"); }
   if (me) { toast("🥇 คุณคือ MVP ของบอสโลก!"); try { sfx("boss"); } catch (_) {} }
 }
 
@@ -2607,9 +2618,9 @@ async function resolveAttack(key, a) {
     u[`users/${state.uid}/hp`] = newHp;
     if (newHp === 0) text += ` — ${p.username} ล้มลง!`;
   } else if (dodged) {
-    text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`;
+    text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`; achBump("pdodge");
   } else {
-    text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`;
+    text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`; achBump("pdef");
   }
 
   const chatRef = push(ref(db, "chats/" + state.zone));
@@ -3603,7 +3614,7 @@ async function evoBuy(lineId) {
   const u = { [`evo/${state.uid}/${L.key}`]: next, [`evo/${state.uid}/sp`]: (e.sp || 0) + cost, [`evo/${state.uid}/dna`]: e.dna - cost, [`evo/${state.uid}/line`]: main };
   evoClampHp(u, tiers);
   state.evoBusy = true;
-  try { await update(ref(db), u); toast(`🧬 ${L.tiers[cur][0]} สำเร็จ`); } catch (err) { toast(errMsg(err)); } finally { state.evoBusy = false; }
+  try { await update(ref(db), u); toast(`🧬 ${L.tiers[cur][0]} สำเร็จ`); achBump("evo"); } catch (err) { toast(errMsg(err)); } finally { state.evoBusy = false; }
 }
 async function evoReset() {
   const e = state.evo; if (!e || state.evoBusy || !(e.sp > 0)) return;
@@ -4124,7 +4135,7 @@ function gachaAdminPanel(box, row) {
    รอบเวลาใช้เวลาไทย (UTC+7): รายวันรีเซ็ตเที่ยงคืน / รายสัปดาห์รีเซ็ตเที่ยงคืนคืนวันอาทิตย์→จันทร์
    ========================================================= */
 const QP_PERIODS = [["daily", "📅 รายวัน"], ["weekly", "🗓️ รายสัปดาห์"], ["newbie", "🌱 ผู้เล่นใหม่ (ทำครั้งเดียว)"]];
-const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย, smash=ทุบกำแพง(ซอมบี้), bite=กัดเหยื่อ(ซอมบี้), login=เข้าเล่น(นับวันละครั้ง), siege=ทุบ/ซ่อมกำแพงช่วงคืนปิดล้อม, siegen=ร่วมคืนปิดล้อม(วันละครั้ง), dclaim=รับรางวัลเควสรายวัน — เควสรายวันผูกโซนใส่ฟิลด์ z=รหัสโซน และ dw=วันในสัปดาห์ (0=จันทร์…6=อาทิตย์)";
+const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย, smash=ทุบกำแพง(ซอมบี้), bite=กัดเหยื่อ(ซอมบี้), login=เข้าเล่น(นับวันละครั้ง), siege=ทุบ/ซ่อมกำแพงช่วงคืนปิดล้อม, siegen=ร่วมคืนปิดล้อม(วันละครั้ง), dclaim=รับรางวัลเควสรายวัน, goalok=ร่วมเป้าหมายร่วมสำเร็จ(เกมเรียกให้เอง), gmok=ร่วมภารกิจกลุ่มสำเร็จ(เกมเรียกให้เอง) — เควสรายวันผูกโซนใส่ฟิลด์ z=รหัสโซน และ dw=วันในสัปดาห์ (0=จันทร์…6=อาทิตย์)";
 const QP_GAP_MS = 4200;                       // rules: แต่ละเควสนับได้อย่างน้อยห่างกัน 4 วินาที
 const QP_TZ_MS = 7 * 3600000, QP_DAY_MS = 86400000;
 // ค่าเริ่มต้น (ปุ่ม "เติมเควสเริ่มต้น" ของเจ้าของ) — ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น (rules จำกัด) / f = จำกัดฝ่าย (ไม่ใส่ = ทั้งสองฝ่าย)
@@ -4173,7 +4184,7 @@ const qpClaimable = () => QP_PERIODS.reduce((s, [per]) => s + qpList(per).filter
 
 // เรียกจากจุดต่างๆ ของเกมหลังทำสำเร็จ — ไม่รอ ไม่โยน error (ความคืบหน้าพลาดไม่กระทบการกระทำจริง)
 let qpChain = Promise.resolve();
-function questBump(evName) { qpChain = qpChain.then(() => qpBumpRun(evName)).catch((e) => console.warn("quest", e?.code || e)); }
+function questBump(evName) { try { achEv(evName); } catch { /* ข้าม */ } qpChain = qpChain.then(() => qpBumpRun(evName)).catch((e) => console.warn("quest", e?.code || e)); }
 async function qpBumpRun(evName) {
   const uid = state.uid; if (!state.qDefs || !uid || !state.profile || state.profile.banned) return;
   for (const [per] of QP_PERIODS) for (const [qid, d] of qpList(per)) {
@@ -4209,7 +4220,7 @@ async function qpClaim(per, qid) {
     };
     await update(ref(db), u);
     toast(`🎁 รับรางวัล ${mktLabel(rw.id)} ×${rw.qty}`); logLine(`📜 ภารกิจ “${x.d.title}” สำเร็จ — ได้ ${mktLabel(rw.id)} ×${rw.qty}`, "system");
-    if (per === "daily") questBump("dclaim");
+    if (per === "daily") questBump("dclaim"); else if (per === "weekly") achBump("wclaim");
     return true;
   } catch (e) { console.error("qpClaim", e?.code || e); toast(String(e?.code || e).includes("PERMISSION_DENIED") ? "รับรางวัลไม่สำเร็จ — ลองใหม่อีกครั้ง (ข้อมูลอาจเพิ่งเปลี่ยนรอบ)" : "ทำรายการไม่สำเร็จ"); return false; }
   finally { state.qpBusy = false; qpRefresh(); }
@@ -4296,7 +4307,7 @@ function qpRender() {
   if (state.profile?.role === "owner") {
     const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
-    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini"), btn("เติมเควสเช็กอิน+ปิดล้อม", qpSeedStreak, "btn ghost mini")); c.append(r); body.append(c);
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini"), btn("เติมเควสเช็กอิน+ปิดล้อม+เป้าหมายร่วม", qpSeedStreak, "btn ghost mini")); c.append(r); body.append(c);
   }
 }
 
@@ -4471,7 +4482,7 @@ async function wallRepair(n) {
     if (have - n > 0) u[`inventory/${state.uid}/scrap/qty`] = have - n; else u[`inventory/${state.uid}/scrap`] = null;
     await update(ref(db), u);
     logLine(`🧱 ซ่อมกำแพงด้วย scrap ×${n} (+${n * WALL_PER} HP)`, "info");
-    questBump("wall"); siegeHit();
+    questBump("wall"); siegeHit(); achBump("scrap", n); coopEvent("scrap", n);
   } catch (e) { toast(errMsg(e)); }
   finally { state.wallBusy = false; wallRender(); }
 }
@@ -4683,6 +4694,7 @@ function stat(k, n = 1) {
   Object.keys(all).forEach((x) => { if (x < cut) delete all[x]; });
   (all[d] = all[d] || {})[k] = (all[d][k] || 0) + n;
   LS.set(lsKey("st"), all);
+  try { achStat(k, n); } catch { /* ความสำเร็จพลาดไม่กระทบเกม */ }
 }
 function statSum(from, to) {
   const all = LS.get(lsKey("st"), {}), s = {};
@@ -4854,15 +4866,15 @@ function hubTab(tab) {
   const m = $("hub-modal"); if (!m) return; m.dataset.tab = tab;
   m.querySelectorAll(".hub-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   const box = $("hub-body"); box.textContent = "";
-  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else hubJournal(box);
+  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else hubJournal(box);
 }
 function openHub(tab = "day") {
   let m = $("hub-modal");
   if (!m) {
     m = mk("div", "modal hidden"); m.id = "hub-modal"; m.setAttribute("role", "dialog");
     const bx = mk("div", "modal-box"); bx.style.maxWidth = "440px";
-    const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • อันดับ • บันทึก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
+    const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • ความสำเร็จ • โลก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
     const body = mk("div", "hub-body"); body.id = "hub-body";
     bx.append(hd, tabs, body); m.append(bx); document.body.append(m);
     m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
@@ -4874,7 +4886,8 @@ function initHubUi() {
   const g = $("btn-guide"); if (!g) return;
   const h = btn("📊", () => openHub(), "btn ghost mini"); h.id = "btn-hub"; h.title = "สรุปวัน/สัปดาห์ • อันดับ • สมุดบันทึก";
   const s = btn("⚙️", () => openSettings(), "btn ghost mini"); s.id = "btn-sfx"; s.title = "ตั้งค่า: เสียง • แจ้งเตือน • แผนที่ • ติดตั้งแอป";
-  g.before(h, s);
+  const ab = btn("🏅", () => openHub("ach"), "btn ghost mini"); ab.id = "btn-ach"; ab.title = "ความสำเร็จ • ฉายา";
+  g.before(ab, h, s);
   const sc = $("btn-scavenge"); if (sc && !$("danger-bar")) { const d = mk("div", "danger-bar hidden"); d.id = "danger-bar"; sc.before(d); }
   const bw = $("boss-weapon"); if (bw && !$("boss-warn")) { const d = mk("div", "danger-bar hidden"); d.id = "boss-warn"; bw.after(d); }
 }
@@ -5100,12 +5113,16 @@ const QP_STREAK_SEED = {
   "weekly/wa5": { title: "เช็กอิน 5 วันในสัปดาห์นี้", ev: "login", need: 5, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "medkit", qty: 1 } } },
   "weekly/wa7": { title: "เช็กอินครบ 7 วัน 🔥", ev: "login", need: 7, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
   "daily/dsiege": { title: "🚨 ร่วมคืนปิดล้อม (ทุบ/ซ่อมกำแพง 5 ครั้ง)", desc: "นับเฉพาะช่วงคืนปิดล้อม ที่เซฟโซน — ดูเวลาได้ที่แผงวิทยุ", ev: "siege", need: 5, r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "rotten_meat", qty: 5 } } },
-  "weekly/wsiege": { title: "ร่วมคืนปิดล้อมให้ครบ 3 คืน", ev: "siegen", need: 3, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } }
+  "weekly/wsiege": { title: "ร่วมคืนปิดล้อมให้ครบ 3 คืน", ev: "siegen", need: 3, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } },
+  "weekly/wgoal": { title: "🌍 ร่วมทำเป้าหมายประจำสัปดาห์ให้สำเร็จ", desc: "ช่วยให้เป้าหมายร่วมสำเร็จอย่างน้อย 1 ข้อ (ดู 📊 → 🌍)", ev: "goalok", need: 1, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "medkit", qty: 1 } } },
+  "weekly/wgoal2": { title: "ทำเป้าหมายประจำสัปดาห์ครบทั้ง 2 ข้อ", desc: "เป้าหมายทั้งเซิร์ฟเวอร์ + เป้าหมายของฝั่งคุณ", ev: "goalok", need: 2, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
+  "daily/dmis": { title: "📻 ร่วมภารกิจกลุ่มจากวิทยุให้สำเร็จ", desc: "ภารกิจกลุ่มประกาศทางวิทยุ ดูความคืบหน้าที่ 📊 → 🌍", ev: "gmok", need: 1, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "rotten_meat", qty: 5 } } },
+  "weekly/wmis": { title: "ภารกิจกลุ่มสำเร็จ 4 ครั้งในสัปดาห์", ev: "gmok", need: 4, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } }
 };
 async function qpSeedStreak() {
   if (state.profile?.role !== "owner") return;
-  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege และ weekly: wa3, wa5, wa7, wsiege โดยไม่แตะเควสอื่น")) return;
-  try { await update(ref(db, "config/questDefs"), QP_STREAK_SEED); toast("เติมเควสเช็กอิน + ปิดล้อมแล้ว"); }
+  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม + เป้าหมายร่วม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege, dmis และ weekly: wa3, wa5, wa7, wsiege, wgoal, wgoal2, wmis โดยไม่แตะเควสอื่น")) return;
+  try { await update(ref(db, "config/questDefs"), QP_STREAK_SEED); toast("เติมเควสเช็กอิน/ปิดล้อม/เป้าหมายร่วมแล้ว"); }
   catch (e) { console.error("qpSeedStreak", e?.code || e); toast(errMsg(e)); }
 }
 async function qpSeedNpc() {
@@ -5192,6 +5209,7 @@ function npcClose(force) {
 function npcHeader(id) {
   const rec = npcRec(id), h = npcHeartsOf(rec.p), meta = NPC_META[id], info = $("npc-info"); if (!info) return;
   info.textContent = "";
+  try { achSet(id, h); } catch { /* ข้าม */ }
   const nxt = h < 5 ? NPC_HEART_AT[h] : null, prev = h ? NPC_HEART_AT[h - 1] : 0;
   const bar = mk("div", "npc-pbar"), fill = mk("i"); fill.style.width = (nxt ? Math.max(4, Math.min(100, ((rec.p - prev) / (nxt - prev)) * 100)) : 100) + "%"; bar.append(fill);
   info.append(mk("b", "npc-nm", `${meta.name} `), mk("small", "muted", meta.title), mk("div", "npc-hearts", npcHeartStr(h)), bar);
@@ -5539,7 +5557,7 @@ function radioAsk() {
       bx.querySelectorAll("button").forEach((x) => { x.disabled = true; });
       try {
         await set(ref(db, "radio/" + state.uid), { q: qi, a: ai, f: fac, n: p.username, ts: serverTimestamp() });
-        toast("ออกอากาศแล้ว 📻"); close();
+        toast("ออกอากาศแล้ว 📻"); achBump("radio"); close();
       } catch (e) { toast(errMsg(e)); bx.querySelectorAll("button").forEach((x) => { x.disabled = false; }); }
     }, "btn ghost");
     b.style.cssText = "text-align:left;white-space:normal"; bx.append(b);
@@ -5696,6 +5714,431 @@ function fxStatus() {
     else if (d >= 5) fxNum("+" + d, "heal", "bar-hp");
   }
   state.fxHp = p.hp; state.fxUid = state.uid;
+}
+
+/* =========================================================
+   29) ความสำเร็จ • ฉายา • ยอดร่วมทั้งเซิร์ฟเวอร์ (เป้าหมายประจำสัปดาห์ / ภารกิจกลุ่มจากวิทยุ / ผู้รอดเด่นประจำวัน)
+   ข้อมูล: ach/{uid} = { c:{ตัวนับสะสม}, t:ฉายาที่เลือก, ts }   coop/{key}/{uid} = { n, name, ts }
+   • ปลดล็อกคำนวณฝั่งไคลเอนต์จากตัวนับ (ความสำเร็จให้ฉายา ไม่ให้ของ) • รางวัลของเป้าหมาย/ภารกิจกลุ่มวิ่งผ่านระบบเควสเดิม
+   • key ของ coop: w/wh/wz{สัปดาห์}=เป้าหมาย(รวม/มนุษย์/ซอมบี้)  mh/mz{สล็อต 2 ชม.}=ภารกิจกลุ่ม  ds/dh/dw/db{วัน}=สถิติรายวันของผู้รอดเด่น
+   ========================================================= */
+const ACH_GAP = 6000, ACH_FLUSH_MS = 20000, ACH_STEP = 3000;
+const ACH_TIER = [["b", "🥉", "ทองแดง"], ["s", "🥈", "เงิน"], ["g", "🥇", "ทอง"], ["l", "💎", "ตำนาน"]];
+const ACH_CATS = [["explore", "🔍 สำรวจ"], ["combat", "⚔️ ต่อสู้"], ["camp", "🧱 ค่าย"], ["social", "💬 สังคม"], ["world", "🌍 โลก"], ["secret", "❓ ลับ"]];
+const ZSHORT = { safe: "safe", ruins: "ruins", mall: "mall", hospital: "hosp", police: "police", forest: "forest", factory: "fact", port: "port", base: "base", tunnel: "tunnel" };
+// [ตัวนับ, ไอคอน, หมวด, ฝ่าย(h=มนุษย์ z=ซอมบี้ ว่าง=ทุกคน), คำกริยา, หน่วย, [เกณฑ์], [ชื่อฉายา]]
+const ACH_FAM = [
+  ["srch", "🔍", "explore", "", "ค้นหาของ", "ครั้ง", [10, 50, 150, 400, 1000, 2500], ["มือใหม่ขุดซาก", "นักคุ้ยเศษ", "นักสำรวจซากเมือง", "ขาประจำกองขยะ", "ปรมาจารย์ผู้ค้นหา", "ตำนานนักคุ้ยโลกแตก"]],
+  ["found", "🎒", "explore", "", "เจอของจากการค้นหา", "ชิ้น", [5, 25, 100, 300, 800], ["เจอของชิ้นแรกๆ", "ตาไว", "โชคดีติดตัว", "โชคชะตาเข้าข้าง", "เทพเจ้าแห่งการเจอของ"]],
+  ["nsrch", "🌙", "explore", "", "ค้นหาตอนกลางคืน", "ครั้ง", [10, 50, 200], ["คนกลางคืน", "นักค้นหาไร้แสง", "เจ้าแห่งรัตติกาล"]],
+  ["trav", "🧭", "explore", "", "เดินทางข้ามโซน", "ครั้ง", [5, 30, 100, 300], ["นักเดินทางมือใหม่", "คนรู้ทาง", "นักเดินทางช่ำชอง", "ไม่มีที่ไหนไม่เคยไป"]],
+  ["zvis", "🗺️", "explore", "", "ไปเยือนโซนต่างๆ ให้ครบ", "โซน", [4, 7, 10], ["เปิดแผนที่", "ครึ่งทางของแผนที่", "รู้จักทุกซอกมุมเมือง"]],
+  ["craft", "🔧", "explore", "", "คราฟต์ของ", "ชิ้น", [5, 25, 80, 200], ["ช่างฝึกหัด", "ช่างประดิษฐ์", "ช่างฝีมือดี", "ช่างแห่งโลกใหม่"]],
+  ["use", "🧪", "explore", "", "ใช้ไอเทม", "ครั้ง", [10, 50, 200, 600], ["ลองใช้ดู", "ชินมือ", "ผู้ใช้ของคล่อง", "ไม่เหลือทิ้งสักชิ้น"]],
+  ["mkt", "🏪", "explore", "", "ซื้อ/ขายในตลาด", "ครั้ง", [3, 15, 50, 150], ["ลูกค้าใหม่", "พ่อค้าประจำ", "เจ้าพ่อตลาด", "จักรพรรดิตลาด"]],
+  ["gacha", "🎰", "explore", "", "หมุนกาชา", "ครั้ง", [3, 15, 50, 150], ["ลองเสี่ยงดวง", "คอกาชา", "ผู้ติดกาชา", "เศรษฐีสายสุ่ม"]],
+  ["zomb", "🧟", "combat", "h", "เจอซอมบี้ระหว่างค้นหา", "ครั้ง", [10, 40, 120, 300, 800], ["ครั้งแรกที่เห็นมัน", "ชินกับเสียงคำราม", "นักสู้ข้างถนน", "คนบ้านใกล้ปากเหว", "ความตายคือเพื่อนบ้าน"]],
+  ["zwin", "⚔️", "combat", "h", "ชนะซอมบี้", "ครั้ง", [5, 25, 80, 200, 500, 1000], ["ฟาดครั้งแรก", "มือหนักขึ้น", "นักล่าซอมบี้", "ฆาตกรซอมบี้", "กำแพงเดินได้", "ผู้พิฆาตมหาอสุรกาย"]],
+  ["boss", "👹", "combat", "h", "ล้มมินิบอสประจำโซน", "ตัว", [1, 5, 15, 40], ["ล้มยักษ์ตัวแรก", "นักล่าบอส", "ฝันร้ายของเหล่าบอส", "ผู้พิชิตเมือง"]],
+  ["wbhit", "🌋", "combat", "", "โจมตีบอสโลก", "ครั้ง", [3, 15, 50, 150], ["ลองลูบคมบอสโลก", "ทีมบอสโลก", "ขาประจำสมรภูมิบอส", "นักรบบอสโลก"]],
+  ["wbdmg", "💥", "combat", "", "ทำดาเมจรวมใส่บอสโลก", "แต้ม", [100, 1000, 5000, 20000], ["ขีดข่วนยักษ์", "ตีเจ็บ", "พายุดาเมจ", "ภัยพิบัติเดินได้"]],
+  ["wbkill", "🏆", "combat", "", "ร่วมล้มบอสโลกและรับรางวัล", "ครั้ง", [1, 5, 15], ["ส่วนหนึ่งของชัยชนะ", "ตำนานบอสโลก", "ฆาตกรยักษ์"]],
+  ["wbmvp", "🥇", "combat", "", "เป็น MVP ของบอสโลก", "ครั้ง", [1, 3, 10], ["MVP ครั้งแรก", "ดาวเด่นสนามรบ", "ราชาแห่งดาเมจ"]],
+  ["dmg", "🩸", "combat", "", "รับดาเมจสะสม", "แต้ม", [200, 1000, 5000, 15000], ["ผ่านการบาดเจ็บ", "แผลเป็นเต็มตัว", "ร่างกายที่เคยตาย", "ไม่เจ็บแล้ว (จริงเหรอ?)"]],
+  ["death", "💀", "combat", "", "ล้มลงจนต้องฟื้นที่ Safe Zone", "ครั้ง", [1, 5, 15, 40], ["ตายครั้งแรก", "ตายจนเริ่มชิน", "ตายซ้ำตายซาก", "ผู้ฟื้นคืนชีพ"]],
+  ["hit", "🥊", "combat", "", "โจมตี (ผู้เล่น/บอส ทุกรูปแบบ)", "ครั้ง", [10, 50, 200, 600], ["ลงมือแล้ว", "นักเลงหน้าใหม่", "เก๋าสนามประลอง", "อัศวินดาบแหลกลาญ"]],
+  ["pdef", "🛡️", "combat", "", "ป้องกันการโจมตีจากผู้เล่นอื่นได้", "ครั้ง", [3, 15, 50], ["ตั้งรับได้", "กำแพงมีชีวิต", "ป้อมปราการเดินได้"]],
+  ["pdodge", "💨", "combat", "z", "หลบการโจมตีจากผู้เล่นอื่น", "ครั้ง", [3, 15, 50], ["หลบแล้ว", "เงาตัวเร็ว", "หลบอย่างกับไม่มีตัวตน"]],
+  ["broke", "🔨", "combat", "", "ทำอาวุธพัง", "ชิ้น", [1, 5, 20], ["เพิ่งรู้ว่าอาวุธก็พัง", "ช่างพังประจำ", "ของทุกอย่างพังในมือ"]],
+  ["infect", "🦠", "combat", "h", "ติดเชื้อ", "ครั้ง", [1, 3, 8], ["ถูกเชื้อเยือน", "ภูมิคุ้มกันกำลังสร้าง", "ภูมิคุ้มกันของจริง"]],
+  ["cure", "💉", "combat", "h", "หายจากการติดเชื้อ", "ครั้ง", [1, 3, 8], ["รอดจากเชื้อ", "ผู้รอดจากเชื้อประจำ", "คนที่เชื้อก็ยอมแพ้"]],
+  ["wall", "🧱", "camp", "h", "ซ่อมกำแพงค่าย", "ครั้ง", [3, 15, 50, 150, 400], ["ช่างปะผ้า", "มือปูน", "ช่างกำแพงประจำค่าย", "ผู้พิทักษ์กำแพง", "กำแพงคือชีวิต"]],
+  ["scrap", "🔩", "camp", "h", "ใช้เศษเหล็กซ่อมกำแพงรวม", "ชิ้น", [20, 100, 400, 1500], ["เศษเหล็กชิ้นแรก", "คลังเศษเหล็ก", "วิศวกรเศษเหล็ก", "มหาบุรุษแห่งเศษเหล็ก"]],
+  ["smash", "🔨", "camp", "z", "ทุบกำแพงค่าย", "ครั้ง", [3, 15, 50, 150, 400], ["เคาะประตูทักทาย", "ผู้มาเยือนไม่ได้รับเชิญ", "ค้อนเดินได้", "ผู้ทลายกำแพง", "ผู้ทำลายล้างแห่งค่าย"]],
+  ["bite", "🦷", "camp", "z", "กัดเหยื่อ", "ครั้ง", [3, 15, 50, 150], ["กัดแรก", "เขี้ยวกำลังโต", "นักล่าเขี้ยวคม", "ราชันกัดไม่เลือก"]],
+  ["evo", "🧬", "camp", "z", "วิวัฒนาการ", "ขั้น", [1, 5, 12], ["เริ่มกลายพันธุ์", "ผ่านการกลายพันธุ์", "สายพันธุ์เหนือมนุษย์"]],
+  ["siegen", "🚨", "camp", "", "ร่วมคืนปิดล้อม", "คืน", [1, 3, 7, 15], ["คืนปิดล้อมแรก", "นักรบรัตติกาล", "ทหารผ่านศึกปิดล้อม", "ตำนานคืนปิดล้อม"]],
+  ["siege", "⚡", "camp", "", "ทุบ/ซ่อมกำแพงในช่วงปิดล้อม", "ครั้ง", [5, 25, 100], ["สู้ในคืนอันตราย", "แนวหน้า", "ไม่หลับไม่นอน"]],
+  ["chat", "💬", "social", "", "ส่งข้อความแชท", "ข้อความ", [20, 100, 400, 1500], ["ทักทายแรก", "คนช่างคุย", "แกนนำวงสนทนา", "เสียงแห่งซากเมือง"]],
+  ["radio", "🎙️", "social", "", "ขึ้นวิทยุตอบสัมภาษณ์", "ครั้ง", [1, 5, 15], ["เสียงแรกทางคลื่น", "ดีเจเถื่อน", "ผู้ประกาศประจำคลื่น"]],
+  ["npc", "🗣️", "social", "", "คุยกับ NPC", "ครั้ง", [3, 15, 50, 120], ["ได้ทักทาย", "เพื่อนร่วมค่าย", "คนสนิทคนหนึ่ง", "ผู้รู้ทุกเรื่องราว"]],
+  ["mira", "💊", "social", "", "สนิทกับมิราจนได้หัวใจ", "ดวง", [1, 3, 5], ["หมอเริ่มจำชื่อได้", "หมอเริ่มไว้ใจ", "คนที่มิราห่วงที่สุด"]],
+  ["kane", "🪖", "social", "", "สนิทกับเคนจนได้หัวใจ", "ดวง", [1, 3, 5], ["ยามจำหน้าได้", "ยามพยักหน้าให้", "ศิษย์ใกล้ชิดเคน"]],
+  ["dclaim", "🎁", "social", "", "รับรางวัลภารกิจรายวัน", "ครั้ง", [3, 15, 50, 150], ["เก็บค่าจ้างวันแรก", "พนักงานประจำ", "นักรับเงินรายวัน", "ขาประจำโต๊ะภารกิจ"]],
+  ["wclaim", "📅", "social", "", "รับรางวัลภารกิจรายสัปดาห์", "ครั้ง", [1, 5, 15], ["รายสัปดาห์แรก", "ผู้ทำภารกิจสม่ำเสมอ", "พนักงานดีเด่นประจำเมือง"]],
+  ["login", "📆", "social", "", "เข้าเล่นสะสม", "วัน", [1, 3, 7, 14, 30, 60], ["มาถึงแล้ว", "เริ่มติดค่าย", "แขกประจำ", "เพื่อนบ้านถาวร", "ผู้อยู่มานาน", "ตำนานแห่งค่าย"]],
+  ["mxstrk", "🔥", "social", "", "เข้าเล่นติดต่อกัน", "วัน", [3, 7, 14, 30], ["สามวันติด", "หนึ่งสัปดาห์เต็ม", "สองสัปดาห์ไม่ขาด", "หนึ่งเดือนไม่ขาด"]],
+  ["goalok", "🌍", "world", "", "ร่วมทำเป้าหมายประจำสัปดาห์ให้สำเร็จ", "ข้อ", [1, 3, 8], ["ส่วนหนึ่งของส่วนรวม", "คนของส่วนรวม", "เสาหลักของค่าย"]],
+  ["gmok", "📻", "world", "", "ร่วมภารกิจกลุ่มจากวิทยุให้สำเร็จ", "ครั้ง", [1, 5, 15, 40], ["รับสายวิทยุแล้ว", "หน่วยกู้ภัยวิทยุ", "ทีมเวิร์กตัวจริง", "ฮีโร่ประจำคลื่น"]],
+  ["mvpday", "🌟", "world", "", "ได้เป็นผู้รอดเด่นประจำวัน", "ครั้ง", [1, 3, 10, 25], ["ดาวเด่นของวัน", "ขวัญใจวิทยุ", "คนดังประจำค่าย", "ตำนานผู้รอดเด่น"]]
+];
+const ACH = [];
+ACH_FAM.forEach(([k, ic, cat, f, verb, unit, ths, names]) => ths.forEach((n, i) => ACH.push({
+  id: k + (i + 1), k, ic, cat, f, n, name: names[i], desc: `${verb} ${n.toLocaleString("en-US")} ${unit}`,
+  tier: i === ths.length - 1 && ths.length >= 3 ? 3 : Math.min(3, Math.floor(i * 4 / ths.length))
+})));
+// ความสำเร็จลับ: ซ่อนชื่อ/เงื่อนไขจนกว่าจะปลดล็อก
+const ACH_SEC = [
+  { id: "x1", ic: "😇", name: "ยังไม่เคยตาย", desc: "เข้าเล่นครบ 7 วันโดยไม่ล้มลงเลยสักครั้ง", tier: 2, f: "", t: (c) => (c.login || 0) >= 7 && !c.death },
+  { id: "x2", ic: "🪦", name: "ตายก่อนชนะ", desc: "ล้มลง 10 ครั้ง ทั้งที่ชนะซอมบี้ได้ไม่ถึง 10 ครั้ง", tier: 0, f: "h", t: (c) => (c.death || 0) >= 10 && (c.zwin || 0) < 10 },
+  { id: "x3", ic: "💞", name: "คนรักของทั้งค่าย", desc: "สนิทกับมิราและเคนจนได้หัวใจครบ 5 ดวงทั้งคู่", tier: 3, f: "", t: (c) => (c.mira || 0) >= 5 && (c.kane || 0) >= 5 },
+  { id: "x4", ic: "🎖️", name: "ครบเครื่องสนามรบ", desc: "ล้มมินิบอสโซน ร่วมล้มบอสโลก และเป็น MVP อย่างน้อยอย่างละครั้ง", tier: 2, f: "h", t: (c) => (c.boss || 0) >= 1 && (c.wbkill || 0) >= 1 && (c.wbmvp || 0) >= 1 },
+  { id: "x5", ic: "🦾", name: "อึดเกินมนุษย์", desc: "รับดาเมจสะสม 10,000 แต้ม โดยล้มลงไม่เกิน 3 ครั้ง", tier: 2, f: "", t: (c) => (c.dmg || 0) >= 10000 && (c.death || 0) <= 3 },
+  { id: "x6", ic: "🌃", name: "ลูกรัตติกาล", desc: "ร่วมคืนปิดล้อม 3 คืน และค้นหาตอนกลางคืนอีก 50 ครั้ง", tier: 1, f: "", t: (c) => (c.siegen || 0) >= 3 && (c.nsrch || 0) >= 50 },
+  { id: "x7", ic: "📡", name: "ผู้ศรัทธาคลื่นวิทยุ", desc: "ขึ้นวิทยุ 5 ครั้ง และร่วมภารกิจกลุ่มสำเร็จ 5 ครั้ง", tier: 2, f: "", t: (c) => (c.radio || 0) >= 5 && (c.gmok || 0) >= 5 },
+  { id: "x8", ic: "🧿", name: "ไม่ยอมแพ้", desc: "ล้มลง 40 ครั้ง แต่ยังกลับมาเล่นต่อ", tier: 3, f: "", t: (c) => (c.death || 0) >= 40 }
+];
+const ACH_BY_ID = {}; ACH.concat(ACH_SEC).forEach((a) => { ACH_BY_ID[a.id] = a; });
+const achFacKey = () => (state.profile?.faction === "zombie" ? "z" : "h");
+const achVisible = (a) => !a.f || a.f === achFacKey();
+
+/* ---- ตัวนับ + ปลดล็อก ---- */
+function achBump(k, n = 1) {
+  const A = state.ach; if (!A || !(n > 0)) return;
+  if (!A.loaded) { A.pre.push([k, n, false]); return; }
+  const before = A.c[k] || 0; A.c[k] = before + n; A.dirty[k] = 1; achCheck();
+}
+function achSet(k, v) {
+  const A = state.ach; if (!A || !(v > 0)) return;
+  if (!A.loaded) { A.pre.push([k, v, true]); return; }
+  if (v > (A.c[k] || 0)) { A.c[k] = v; A.dirty[k] = 1; achCheck(); }
+}
+function achCheck(silent) {
+  const A = state.ach; if (!A) return;
+  ACH.forEach((a) => { if (!A.unl[a.id] && (A.c[a.k] || 0) >= a.n) achUnlock(a, silent); });
+  ACH_SEC.forEach((a) => { if (!A.unl[a.id] && a.t(A.c)) achUnlock(a, silent); });
+}
+function achUnlock(a, silent) {
+  const A = state.ach; A.unl[a.id] = 1; if (silent) return;
+  const T = ACH_TIER[a.tier], msg = `🏅 ปลดล็อกความสำเร็จ: ${a.ic} ${a.name} (${T[1]} ${T[2]})`;
+  try { toast(msg); logLine(msg, "system"); sfx("boss"); } catch { /* ข้าม */ }
+  const fr = LS.get(lsKey("achnew"), []); fr.push(a.id); LS.set(lsKey("achnew"), fr.slice(-80));
+  achBtn();
+}
+function achZvis() {
+  const A = state.ach; if (!A?.loaded) return;
+  achSet("zvis", Object.keys(ZSHORT).filter((z) => A.c["zn" + ZSHORT[z]]).length);
+}
+function achZone(z) {
+  const s = ZSHORT[z], A = state.ach; if (!s || !A) return;
+  achSet("zn" + s, 1); achZvis();
+}
+// ตัวนับจากสถิติกลาง stat() และตัวนับเควส questBump()
+function achStat(k, n) {
+  switch (k) {
+    case "search": achBump("srch", n); if (isNight()) achBump("nsrch", n); coopEvent("search", n); break;
+    case "found": achBump("found", n); break;
+    case "zombie": achBump("zomb", n); break;
+    case "zwin": achBump("zwin", n); coopEvent("zwin", n); break;
+    case "dmg": achBump("dmg", n); break;
+    case "death": achBump("death", n); break;
+    case "boss": achBump("boss", n); coopEvent("boss", n); break;
+    case "wbdmg": achBump("wbdmg", n); coopEvent("wbdmg", n); break;
+    case "npc": achBump("npc", n); break;
+    case "broke": achBump("broke", n); break;
+    default: break;
+  }
+}
+const ACH_EVMAP = { hit: "hit", wboss: "wbhit", craft: "craft", use: "use", travel: "trav", market: "mkt", gacha: "gacha", chat: "chat", wall: "wall", smash: "smash", bite: "bite", siege: "siege", siegen: "siegen", dclaim: "dclaim" };
+function achEv(ev) {
+  if (ACH_EVMAP[ev]) achBump(ACH_EVMAP[ev]);
+  if (["craft", "use", "travel", "market", "wall", "smash", "bite"].includes(ev)) coopEvent(ev, 1);
+}
+function achProfileWatch(p) {
+  const A = state.ach; if (!A?.loaded || !p) return;
+  const inf = !!p.infected;
+  if (state.achInf === undefined) { state.achInf = inf; return; }
+  if (inf && !state.achInf) achBump("infect");
+  if (!inf && state.achInf && p.hp > 0 && p.faction === "human" && !state.dying) achBump("cure");
+  state.achInf = inf;
+}
+
+/* ---- โหลด/บันทึก ---- */
+async function achInit() {
+  if (state.achOn || !state.uid) return; state.achOn = true;
+  const A = state.ach = { c: {}, srv: {}, t: null, dirty: {}, loaded: false, pre: [], last: 0, tDirty: false, busy: false, unl: {}, tm: 0 };
+  try {
+    const s = (await get(ref(db, "ach/" + state.uid))).val();
+    if (s) { A.c = s.c || {}; A.t = s.t || null; }
+    else {   // ครั้งแรก: ยกยอดเก่าที่เซิร์ฟเวอร์มีอยู่แล้ว (ซ่อมกำแพง/ทุบกำแพง)
+      const [wl, wh] = await Promise.all([get(ref(db, `wallLog/${state.uid}/n`)), get(ref(db, `wallHit/${state.uid}/n`))]);
+      if (wl.val() > 0) { A.c.scrap = Math.min(wl.val(), 100000); A.dirty.scrap = 1; }
+      if (wh.val() > 0) { A.c.smash = Math.min(wh.val(), 100000); A.dirty.smash = 1; }
+    }
+  } catch (e) { console.warn("ach load", e?.code || e); }
+  Object.entries(A.c).forEach(([k, v]) => { if (!A.dirty[k]) A.srv[k] = v; });
+  A.loaded = true; achCheck(true);   // ของที่ถึงเกณฑ์อยู่แล้ว: ปลดล็อกเงียบๆ ไม่เด้งเตือน
+  A.pre.splice(0).forEach(([k, n, set]) => (set ? achSet(k, n) : achBump(k, n)));
+  achZvis(); achLoginDay(); achBtn();
+  setInterval(achFlush, ACH_FLUSH_MS);
+  document.addEventListener("visibilitychange", () => { if (document.hidden) { achFlush(); coopFlush(); } });
+  coopInit();
+}
+function achLoginDay() {
+  const A = state.ach, day = coopDay(), ld = day - 20000;   // เก็บเป็นเลขเล็ก (กฎจำกัดการเพิ่มต่อครั้ง)
+  if ((A.c.ld || 0) >= ld) return;
+  const st = LS.get(lsKey("achday"), { d: 0, s: 0 }), s = st.d === day - 1 ? st.s + 1 : 1;
+  LS.set(lsKey("achday"), { d: day, s });
+  achSet("ld", ld); achBump("login", 1); achSet("mxstrk", s);
+}
+async function achFlush() {
+  const A = state.ach; if (!A?.loaded || A.busy || !state.profile || state.profile.banned) return;
+  const keys = Object.keys(A.dirty); if (!keys.length && !A.tDirty) return;
+  const wait = ACH_GAP - (serverNow() - A.last);
+  if (wait > 0) { clearTimeout(A.tm); A.tm = setTimeout(achFlush, wait + 250); return; }
+  A.busy = true;
+  const u = { ts: serverTimestamp() }, sent = {};
+  keys.forEach((k) => {
+    const v = Math.min(A.c[k], (A.srv[k] || 0) + ACH_STEP, 100000000);
+    if (v > (A.srv[k] || 0)) { u["c/" + k] = v; sent[k] = v; } else delete A.dirty[k];
+  });
+  if (A.tDirty) u.t = A.t || null;
+  try {
+    if (Object.keys(u).length > 1) await update(ref(db, "ach/" + state.uid), u);
+    Object.entries(sent).forEach(([k, v]) => { A.srv[k] = v; if (A.c[k] === v) delete A.dirty[k]; });
+    A.tDirty = false;
+  } catch (e) {
+    console.warn("ach flush", e?.code || e);   // อาจชนกับอีกเครื่อง: อ่านค่าจริงมารวมแล้วลองใหม่รอบหน้า
+    try { const s = (await get(ref(db, "ach/" + state.uid))).val(); Object.entries(s?.c || {}).forEach(([k, v]) => { A.srv[k] = v; if ((A.c[k] || 0) < v) A.c[k] = v; }); } catch { /* ข้าม */ }
+  } finally { A.last = serverNow(); A.busy = false; }
+}
+
+/* ---- ฉายา ---- */
+state.achT = state.achT || {};
+function achBadgeFill(el) {
+  const uid = el.dataset.uid, id = uid === state.uid ? state.ach?.t : state.achT[uid]?.t, a = id && ACH_BY_ID[id];
+  el.textContent = a ? `${a.ic} ${a.name}` : ""; el.className = "ach-t" + (a ? " tier-" + ACH_TIER[a.tier][0] : "");
+}
+function achTitleLoad(uid) {
+  if (!uid || uid === state.uid) return;
+  const c = state.achT[uid]; if (c && (c.loading || serverNow() - (c.at || 0) < 600000)) return;
+  state.achT[uid] = { t: c?.t || null, at: c?.at || 0, loading: true };
+  get(ref(db, `ach/${uid}/t`)).then((s) => { state.achT[uid] = { t: s.val() || null, at: serverNow() }; })
+    .catch(() => { state.achT[uid] = { t: c?.t || null, at: serverNow() }; })
+    .finally(() => document.querySelectorAll(`.ach-t[data-uid="${uid}"]`).forEach(achBadgeFill));
+}
+function achBadge(uid) { const el = mk("span", "ach-t"); el.dataset.uid = uid; achBadgeFill(el); achTitleLoad(uid); return el; }
+function achSetTitle(id) {
+  const A = state.ach; if (!A?.loaded || (id && !A.unl[id])) return;
+  A.t = id || null; A.tDirty = true; achFlush();
+  document.querySelectorAll(".ach-t").forEach(achBadgeFill);
+  const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "ach") hubTab("ach");
+  toast(id ? `ใช้ฉายา ${ACH_BY_ID[id].ic} ${ACH_BY_ID[id].name}` : "ถอดฉายาแล้ว");
+}
+async function achBioLine(uid) {
+  try {
+    const s = (await get(ref(db, "ach/" + uid))).val(); if (!s?.c) return "";
+    const got = ACH.filter((a) => (s.c[a.k] || 0) >= a.n).length + ACH_SEC.filter((a) => { try { return a.t(s.c); } catch { return false; } }).length;
+    const t = s.t && ACH_BY_ID[s.t];
+    return `🏅 ความสำเร็จ ${got} อัน${t ? ` • ฉายา ${t.ic} ${t.name}` : ""}`;
+  } catch { return ""; }
+}
+
+/* ---- UI: แท็บ 🏅 ความสำเร็จ ---- */
+function achBtn() {
+  const b = $("btn-ach"); if (!b) return;
+  const n = LS.get(lsKey("achnew"), []).length; b.textContent = n ? `🏅 ${n}` : "🏅";
+}
+function achProg(a) { const c = state.ach?.c || {}; return Math.min(a.n, c[a.k] || 0); }
+function achRender(box) {
+  const A = state.ach; if (!A?.loaded) { box.append(mk("div", "muted", "กำลังโหลดความสำเร็จ…")); return; }
+  const list = ACH.concat(ACH_SEC).filter(achVisible), got = list.filter((a) => A.unl[a.id]).length;
+  const head = mk("div", "ach-head"), cur = A.t && ACH_BY_ID[A.t];
+  head.append(mk("b", "", `🏅 ปลดแล้ว ${got}/${list.length}`));
+  head.append(mk("div", "muted", cur ? `ฉายาตอนนี้: ${cur.ic} ${cur.name}` : "ยังไม่ได้เลือกฉายา — แตะ “ใช้เป็นฉายา” ที่ความสำเร็จที่ปลดแล้ว (คนอื่นจะเห็นข้างชื่อคุณ)"));
+  if (cur) head.append(btn("ถอดฉายา", () => achSetTitle(null), "btn ghost mini"));
+  box.append(head);
+  const cats = mk("div", "ach-cats"), sel = state.achCat || "all";
+  [["all", "ทั้งหมด"], ...ACH_CATS].forEach(([k, l]) => { const b = btn(l, () => { state.achCat = k; hubTab("ach"); }, "btn ghost mini"); if (k === sel) b.classList.add("on"); cats.append(b); });
+  box.append(cats);
+  const fresh = new Set(LS.get(lsKey("achnew"), []));
+  const rows = list.filter((a) => sel === "all" || a.cat === sel || (sel === "secret" && !a.cat));
+  const fr = (a) => (A.unl[a.id] ? 1 : (a.k ? achProg(a) / a.n : 0));
+  rows.sort((a, b) => (fresh.has(b.id) - fresh.has(a.id)) || ((A.unl[b.id] ? 1 : 0) - (A.unl[a.id] ? 1 : 0)) || (fr(b) - fr(a)));
+  rows.forEach((a) => {
+    const un = !!A.unl[a.id], T = ACH_TIER[a.tier], secret = !a.k && !un;
+    const card = mk("div", `ach-card tier-${T[0]}${un ? "" : " lock"}`);
+    card.append(mk("span", "ach-ic", secret ? "❓" : a.ic));
+    const bd = mk("div", "ach-bd");
+    bd.append(mk("div", "ach-nm", secret ? "ความสำเร็จลับ" : `${a.name}${fresh.has(a.id) ? " 🆕" : ""}`));
+    bd.append(mk("div", "ach-ds muted", secret ? "ทำบางอย่างให้ถูกวิธีเพื่อเปิดเผย" : a.desc));
+    if (!un && a.k) {
+      const cur2 = achProg(a), bar = mk("div", "ach-bar"), i = mk("i"); i.style.width = Math.round((cur2 / a.n) * 100) + "%"; bar.append(i, mk("span", "", `${cur2.toLocaleString("en-US")}/${a.n.toLocaleString("en-US")}`)); bd.append(bar);
+    }
+    if (un) bd.append(A.t === a.id ? mk("div", "ach-using", `✓ กำลังใช้เป็นฉายา • ${T[1]} ${T[2]}`) : btn(`ใช้เป็นฉายา • ${T[1]} ${T[2]}`, () => achSetTitle(a.id), "btn ghost mini"));
+    card.append(bd); box.append(card);
+  });
+  if (fresh.size) { LS.set(lsKey("achnew"), []); achBtn(); }
+}
+
+/* ---- ยอดร่วม (coop) ---- */
+const COOP_TZ = 25200000, COOP_DAY_MS = 86400000, COOP_SLOT_MS = 7200000, MIS_LIVE_MS = 5400000, COOP_FLUSH_MS = 25000, COOP_MAXD = 280;
+const coopDay = (t = serverNow()) => Math.floor((t + COOP_TZ) / COOP_DAY_MS);
+const coopSlot = (t = serverNow()) => Math.floor(t / COOP_SLOT_MS);
+const GROUP_KEY = { all: "w", human: "wh", zombie: "wz" };
+const GOALS = {
+  all: [
+    { ev: "search", n: 700, min: 10, t: "ออกค้นหาของให้ได้รวมกัน 700 ครั้ง" },
+    { ev: "craft", n: 100, min: 3, t: "คราฟต์ของรวมกัน 100 ชิ้น" },
+    { ev: "travel", n: 200, min: 5, t: "เดินทางข้ามโซนรวมกัน 200 ครั้ง" },
+    { ev: "use", n: 350, min: 8, t: "ใช้ไอเทมรวมกัน 350 ครั้ง" },
+    { ev: "market", n: 60, min: 2, t: "ซื้อ/ขายในตลาดรวมกัน 60 ครั้ง" }
+  ],
+  human: [
+    { ev: "scrap", n: 300, min: 8, t: "ใช้เศษเหล็กซ่อมกำแพงรวมกัน 300 ชิ้น" },
+    { ev: "zwin", n: 200, min: 5, t: "ชนะซอมบี้รวมกัน 200 ครั้ง" }
+  ],
+  zombie: [
+    { ev: "smash", n: 250, min: 8, t: "ทุบกำแพงค่ายรวมกัน 250 ครั้ง" },
+    { ev: "bite", n: 60, min: 2, t: "กัดเหยื่อรวมกัน 60 ครั้ง" }
+  ]
+};
+const goalOf = (grp, wk = qpKey("weekly")) => { const L = GOALS[grp]; return { ...L[rdHash("goal", grp, wk) % L.length], grp, wk, key: GROUP_KEY[grp] + wk }; };
+const MIS = {
+  human: [
+    { ev: "search", z: 1, n: 15, t: (z) => `ค้นหาของที่${z}รวมกัน 15 ครั้ง` },
+    { ev: "zwin", n: 12, t: () => "ชนะซอมบี้รวมกัน 12 ครั้ง" },
+    { ev: "scrap", n: 15, t: () => "ใช้เศษเหล็กซ่อมกำแพงรวมกัน 15 ชิ้น" }
+  ],
+  zombie: [
+    { ev: "smash", n: 12, t: () => "ทุบกำแพงค่ายรวมกัน 12 ครั้ง" },
+    { ev: "search", z: 1, n: 15, t: (z) => `ออกล่าหาของที่${z}รวมกัน 15 ครั้ง` },
+    { ev: "bite", n: 6, t: () => "กัดเหยื่อรวมกัน 6 ครั้ง" }
+  ]
+};
+function misOf(fac, slot = coopSlot()) {
+  const L = MIS[fac], d = L[rdHash("mis", fac, slot) % L.length], zl = Object.keys(ZONES).filter((z) => z !== "safe");
+  const zone = d.z ? zl[rdHash("misz", fac, slot) % zl.length] : null;
+  return { ev: d.ev, n: d.n, zone, slot, fac, key: (fac === "human" ? "mh" : "mz") + slot, text: d.t(zone ? ZONES[zone].name : ""), end: slot * COOP_SLOT_MS + MIS_LIVE_MS };
+}
+const misLive = (t = serverNow()) => t - coopSlot(t) * COOP_SLOT_MS < MIS_LIVE_MS;
+const coopFac = () => (state.profile?.faction === "zombie" ? "zombie" : "human");
+
+function coopEvent(ev, n = 1) {
+  const C = state.coop; if (!C || !(n > 0) || !state.profile) return;
+  const add = (key) => { C.pend[key] = (C.pend[key] || 0) + n; }, now = serverNow(), fac = coopFac(), wk = qpKey("weekly");
+  const dk = { search: "ds", zwin: "dh", boss: "dh", wall: "dw", smash: "dw", wbdmg: "db" }[ev]; if (dk) add(dk + coopDay(now));
+  if (goalOf("all", wk).ev === ev) add(goalOf("all", wk).key);
+  if (goalOf(fac, wk).ev === ev) add(goalOf(fac, wk).key);
+  if (misLive(now)) { const m = misOf(fac); if (m.ev === ev && (!m.zone || m.zone === state.zone)) add(m.key); }
+}
+async function coopFlush() {
+  const C = state.coop; if (!C || C.busy || !state.profile || state.profile.banned) return;
+  const keys = Object.keys(C.pend).filter((k) => C.pend[k] > 0); if (!keys.length) return;
+  const wait = ACH_GAP - (serverNow() - C.last);
+  if (wait > 0) { clearTimeout(C.tm); C.tm = setTimeout(coopFlush, wait + 300); return; }
+  C.busy = true;
+  try {
+    const u = {}, sent = {};
+    for (const key of keys.slice(0, 6)) {
+      if (C.mine[key] === undefined) C.mine[key] = (await get(ref(db, `coop/${key}/${state.uid}/n`))).val() || 0;
+      const d = Math.min(C.pend[key], COOP_MAXD);
+      u[`${key}/${state.uid}`] = { n: C.mine[key] + d, name: state.profile.username, ts: serverTimestamp() }; sent[key] = d;
+    }
+    await update(ref(db, "coop"), u);
+    Object.entries(sent).forEach(([k, d]) => { C.mine[k] += d; C.pend[k] -= d; if (C.pend[k] <= 0) delete C.pend[k]; });
+  } catch (e) { console.warn("coop flush", e?.code || e); C.mine = {}; }
+  finally { C.last = serverNow(); C.busy = false; }
+}
+const coopMine = (k) => Math.max(state.coop?.mine?.[k] ?? 0, state.coop?.sums?.[k]?.[state.uid]?.n || 0) + (state.coop?.pend?.[k] || 0);
+const coopSum = (k) => Object.entries(state.coop?.sums?.[k] || {}).reduce((s, [u, x]) => s + (u === state.uid ? 0 : (x?.n || 0)), 0) + coopMine(k);
+function coopListen() {
+  const C = state.coop, wk = qpKey("weekly"), slot = coopSlot();
+  const want = new Set(["w" + wk, "wh" + wk, "wz" + wk, "mh" + slot, "mz" + slot]);
+  Object.keys(C.subs).forEach((k) => { if (!want.has(k)) { try { C.subs[k](); } catch { /* ข้าม */ } delete C.subs[k]; delete C.sums[k]; } });
+  want.forEach((k) => {
+    if (C.subs[k]) return;
+    C.subs[k] = onValue(ref(db, "coop/" + k), (s) => { C.sums[k] = s.val() || {}; coopCheck(); worldRefresh(); }, (e) => console.warn("coop", k, e?.code || e));
+  });
+}
+function coopReward(fn) { const C = state.coop; C.q = C.q.then(async () => { try { fn(); } catch { /* ข้าม */ } await new Promise((r) => setTimeout(r, 5500)); }); }
+const coopFlag = (k) => !!LS.get(lsKey("cf_" + k), 0);
+const coopSetFlag = (k) => { LS.set(lsKey("cf_" + k), 1); };
+function coopCheck() {
+  const C = state.coop; if (!C || !state.profile || !state.ach?.loaded) return;
+  const fac = coopFac(), wk = qpKey("weekly");
+  ["all", fac].forEach((grp) => {
+    const g = goalOf(grp, wk), s = coopSum(g.key); if (s < g.n) return;
+    if (!coopFlag("ga_" + g.key)) { coopSetFlag("ga_" + g.key); radioPush(`📻 [วิทยุ] 🌍 เป้าหมายประจำสัปดาห์สำเร็จแล้ว! ${g.t} — ใครมีส่วนร่วมรับรางวัลได้ที่ 📜 ภารกิจ`, serverNow(), true); }
+    if (coopMine(g.key) >= g.min && !coopFlag("gr_" + g.key)) { coopSetFlag("gr_" + g.key); coopReward(() => { achBump("goalok"); questBump("goalok"); }); }
+  });
+  const m = misOf(fac), s = coopSum(m.key);
+  if (s >= m.n && !coopFlag("ms_" + m.key)) {
+    coopSetFlag("ms_" + m.key);
+    radioPush(fac === "zombie" ? `📻 [เสียงในฝูง] ภารกิจสำเร็จ! ${m.text} (${s}/${m.n}) — พวกเราทำได้` : `📻 [ศูนย์กู้ภัย] ภารกิจสำเร็จ! ${m.text} (${s}/${m.n}) — ขอบคุณทุกคน`, serverNow(), true);
+    if (coopMine(m.key) >= 2) coopReward(() => { achBump("gmok"); questBump("gmok"); });
+  }
+}
+function coopMissionTick() {
+  const fac = coopFac(), now = serverNow(), m = misOf(fac);
+  if (misLive(now) && !coopFlag("mst_" + m.key)) {
+    coopSetFlag("mst_" + m.key);
+    const mins = Math.max(1, Math.ceil((m.end - now) / 60000));
+    radioPush(fac === "zombie" ? `📻 [เสียงในฝูง] ภารกิจกลุ่ม: ${m.text} ภายใน ${mins} นาที — พวกเราต้องไปด้วยกัน (ดูที่ 📊 → 🌍)` : `📻 [ศูนย์กู้ภัย] ภารกิจกลุ่ม: ${m.text} ภายใน ${mins} นาที — ใครว่างช่วยกันหน่อย! (ดูที่ 📊 → 🌍)`, now, true);
+  }
+  if (!misLive(now) && coopFlag("mst_" + m.key) && !coopFlag("ms_" + m.key) && !coopFlag("mf_" + m.key)) {
+    coopSetFlag("mf_" + m.key); radioPush(`📻 ภารกิจกลุ่มหมดเวลา ยอด ${coopSum(m.key)}/${m.n} — รอบหน้าลองใหม่`, now, true);
+  }
+}
+const MVP_CATS = [["ds", "🔍", "นักสำรวจแห่งวัน", "ค้นหา", 5, "ครั้ง"], ["dh", "⚔️", "นักสู้แห่งวัน", "ชนะ", 3, "ครั้ง"], ["dw", "🧱", "ผู้ดูแลกำแพงแห่งวัน", "ลงมือ", 3, "ครั้ง"], ["db", "🌋", "นักล่าบอสแห่งวัน", "ดาเมจ", 50, "แต้ม"]];
+async function coopMvp(day) {
+  const C = state.coop;
+  try {
+    const snaps = await Promise.all(MVP_CATS.map(([p]) => get(ref(db, `coop/${p}${day}`))));
+    const lines = []; let won = 0;
+    snaps.forEach((s, i) => {
+      const v = s.val(); if (!v) return;
+      const top = Object.entries(v).filter(([, x]) => x && typeof x.n === "number").sort((a, b) => b[1].n - a[1].n)[0];
+      if (!top || top[1].n < MVP_CATS[i][4]) return;
+      const [, ic, ttl, verb, , unit] = MVP_CATS[i];
+      lines.push(`${ic} ${ttl} ${String(top[1].name || "?").slice(0, 16)} (${verb} ${top[1].n} ${unit})`);
+      if (top[0] === state.uid) won++;
+    });
+    C.mvp = { day, lines };
+    if (lines.length) radioPush(`📻 [วิทยุ] ผู้รอดเด่นเมื่อวาน: ${lines.join(" • ")}`, serverNow(), true);
+    if (won) { achBump("mvpday", 1); toast("🌟 เมื่อวานคุณเป็นผู้รอดเด่นประจำวัน!"); }
+    worldRefresh();
+  } catch (e) { console.warn("coop mvp", e?.code || e); }
+}
+function coopMvpTick() {
+  const C = state.coop, day = coopDay(); if (C.mvpBusy) return;
+  const last = LS.get(lsKey("cf_mvpday"), 0); if (last === day) return;
+  C.mvpBusy = true; LS.set(lsKey("cf_mvpday"), day); coopMvp(day - 1).finally(() => { C.mvpBusy = false; });
+}
+function coopTick() { const C = state.coop; if (!C || !state.profile || !state.ach?.loaded) return; coopListen(); coopMissionTick(); coopMvpTick(); }
+function coopInit() {
+  if (state.coop) return;
+  state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
+  coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
+}
+function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
+
+/* ---- UI: แท็บ 🌍 โลก ---- */
+function worldBar(frac, text) { const bar = mk("div", "ach-bar"), i = mk("i"); i.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + "%"; bar.append(i, mk("span", "", text)); return bar; }
+function worldRender(box) {
+  const C = state.coop; if (!C) { box.append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const fac = coopFac(), wk = qpKey("weekly");
+  box.append(mk("div", "hub-day", `🌍 เป้าหมายประจำสัปดาห์ • เหลือ ${qpFmt(qpResetIn("weekly"))}`));
+  [["all", "🌐 ทั้งเซิร์ฟเวอร์"], ["human", "🧑 ฝั่งมนุษย์"], ["zombie", "🧟 ฝั่งซอมบี้"]].forEach(([grp, label]) => {
+    const g = goalOf(grp, wk), s = coopSum(g.key), mine = coopMine(g.key), who = Object.values(C.sums[g.key] || {}).filter((x) => x && x.n > 0).length;
+    const row = mk("div", "world-row"); row.append(mk("div", "", `${label}: ${g.t}`), worldBar(s / g.n, `${Math.min(s, g.n)}/${g.n}${s >= g.n ? " ✅" : ""}`));
+    row.append(mk("div", "muted", grp === "all" || grp === fac ? `คุณทำไป ${mine}${mine >= g.min ? " (รับรางวัลได้)" : ` (ต้องอย่างน้อย ${g.min} ถึงจะรับรางวัล)`} • ผู้ร่วม ${who} คน` : `ผู้ร่วม ${who} คน (เป้าหมายของอีกฝั่ง)`));
+    box.append(row);
+  });
+  const tops = Object.values(C.sums["w" + wk] || {}).filter((x) => x && x.n > 0).sort((a, b) => b.n - a.n).slice(0, 3);
+  if (tops.length) box.append(mk("div", "muted", "🏅 ตัวตึงสัปดาห์นี้: " + tops.map((x, i) => `${i + 1}. ${String(x.name || "?").slice(0, 16)} ${x.n}`).join("  ")));
+  box.append(mk("div", "hub-day", "📻 ภารกิจกลุ่มจากวิทยุ"));
+  const now = serverNow();
+  [fac, fac === "human" ? "zombie" : "human"].forEach((f) => {
+    const m = misOf(f), live = misLive(now), s = coopSum(m.key), row = mk("div", "world-row");
+    const label = f === "human" ? "🧑 ฝั่งมนุษย์" : "🧟 ฝั่งซอมบี้";
+    if (live) { row.append(mk("div", "", `${label}: ${m.text}`), worldBar(s / m.n, `${Math.min(s, m.n)}/${m.n}${s >= m.n ? " ✅" : ""}`), mk("div", "muted", `เหลือ ${Math.max(1, Math.ceil((m.end - now) / 60000))} นาที${f === fac ? ` • คุณทำไป ${coopMine(m.key)}` : " (ภารกิจของอีกฝั่ง)"}`)); }
+    else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
+    box.append(row);
+  });
+  box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
+  if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
+  box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
 }
 
 if (HAS_DOM) initNpcUi();
