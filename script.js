@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1122";
+const APP_VERSION = "2026-10-04.1254";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -603,6 +603,11 @@ function openGuide() {
     "คุยครั้งแรกของวันได้ความสนิท (หัวใจ ❤️) + ของขวัญประจำวันที่ปุ่มภารกิจ หัวใจยิ่งเยอะ ของขวัญยิ่งดี และปลดล็อกเรื่องราวตอนใหม่ รวม 5 ตอน",
     "คำตอบที่เลือกมีผลต่อเนื้อเรื่องและความสนิท ทั้งสองคนจำสิ่งที่คุณเคยเลือกได้ ออกจากฉากกลางคันจะไม่นับความคืบหน้าของฉากนั้น",
     "ซอมบี้ก็คุยได้ แต่เขาจะระวังตัวกว่า"
+  ]);
+  sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
+    "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
+    "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
+    "🚨 ทุกวันมี “คืนปิดล้อม” 30 นาทีช่วงหัวค่ำ (เวลาเริ่มไม่เท่ากันทุกวัน ดูได้ที่แผงวิทยุ) ซอมบี้ทุบกำแพง มนุษย์ซ่อมกำแพงที่ Safe Zone นับเป็นเควสพิเศษ"
   ]);
   sec("หิวและกระหาย", [
     `อาหารของมนุษย์ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.human)} ซอมบี้หิวเร็วกว่า ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.zombie)}`,
@@ -1290,6 +1295,7 @@ function listenAnnouncements() {
     const a = s.val(); if (typeof a.ts === "number" && a.ts < state.sessionStart) return;
     if (a.zone === "all" || a.zone === state.zone) logLine(`[ประกาศระบบ] ${a.text}`, "system");
   });
+  listenRadio();
 }
 
 /* =========================================================
@@ -4114,7 +4120,7 @@ function gachaAdminPanel(box, row) {
    รอบเวลาใช้เวลาไทย (UTC+7): รายวันรีเซ็ตเที่ยงคืน / รายสัปดาห์รีเซ็ตเที่ยงคืนคืนวันอาทิตย์→จันทร์
    ========================================================= */
 const QP_PERIODS = [["daily", "📅 รายวัน"], ["weekly", "🗓️ รายสัปดาห์"], ["newbie", "🌱 ผู้เล่นใหม่ (ทำครั้งเดียว)"]];
-const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย, smash=ทุบกำแพง(ซอมบี้), bite=กัดเหยื่อ(ซอมบี้) — เควสรายวันผูกโซนใส่ฟิลด์ z=รหัสโซน และ dw=วันในสัปดาห์ (0=จันทร์…6=อาทิตย์)";
+const QP_EVENTS = "search=ค้นหา, hit=โจมตี(ทุกแบบ), wboss=ตีบอสโลก, craft=คราฟต์, use=ใช้ไอเทม, travel=เดินทาง, market=ซื้อ/ขายตลาด, gacha=หมุนกาชา, chat=แชท, wall=ซ่อมกำแพงค่าย, smash=ทุบกำแพง(ซอมบี้), bite=กัดเหยื่อ(ซอมบี้), login=เข้าเล่น(นับวันละครั้ง), siege=ทุบ/ซ่อมกำแพงช่วงคืนปิดล้อม, siegen=ร่วมคืนปิดล้อม(วันละครั้ง), dclaim=รับรางวัลเควสรายวัน — เควสรายวันผูกโซนใส่ฟิลด์ z=รหัสโซน และ dw=วันในสัปดาห์ (0=จันทร์…6=อาทิตย์)";
 const QP_GAP_MS = 4200;                       // rules: แต่ละเควสนับได้อย่างน้อยห่างกัน 4 วินาที
 const QP_TZ_MS = 7 * 3600000, QP_DAY_MS = 86400000;
 // ค่าเริ่มต้น (ปุ่ม "เติมเควสเริ่มต้น" ของเจ้าของ) — ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น (rules จำกัด) / f = จำกัดฝ่าย (ไม่ใส่ = ทั้งสองฝ่าย)
@@ -4169,8 +4175,13 @@ async function qpBumpRun(evName) {
   for (const [per] of QP_PERIODS) for (const [qid, d] of qpList(per)) {
     if (d.ev !== evName) continue;
     if (d.z && d.z !== state.zone) continue;   // เควสผูกโซน: นับเฉพาะตอนอยู่โซนนั้น (rules ตรวจโซนปัจจุบันซ้ำ)
-    const x = qpState(per, qid);
+    let x = qpState(per, qid);
     if (x.done || x.claimed) continue;
+    if ((evName === "login" || evName === "siegen") && x.n > 0 && qpDayKey(x.ts) === qpDayKey(serverNow())) continue;   // เช็กอิน: นับวันละครั้งต่อเควส
+    if (evName === "dclaim" && x.n > 0 && serverNow() - x.ts < QP_GAP_MS) {   // รับรางวัลหลายข้อติดกัน: รอให้พ้นช่วงห่างที่ rules ยอมแล้วค่อยนับ (ไม่ทิ้ง)
+      await new Promise((r) => setTimeout(r, QP_GAP_MS - (serverNow() - x.ts) + 300)); x = qpState(per, qid);
+      if (x.done || x.claimed) continue;
+    }
     if (x.n > 0 && serverNow() - x.ts < QP_GAP_MS) continue;   // ถี่เกินกว่าที่ rules ยอม — ครั้งนี้ไม่นับ
     try {
       await set(ref(db, `questProg/${uid}/${per}/${qid}`), { k: qpKey(per), n: x.n + 1, ts: serverTimestamp() });
@@ -4194,6 +4205,7 @@ async function qpClaim(per, qid) {
     };
     await update(ref(db), u);
     toast(`🎁 รับรางวัล ${mktLabel(rw.id)} ×${rw.qty}`); logLine(`📜 ภารกิจ “${x.d.title}” สำเร็จ — ได้ ${mktLabel(rw.id)} ×${rw.qty}`, "system");
+    if (per === "daily") questBump("dclaim");
     return true;
   } catch (e) { console.error("qpClaim", e?.code || e); toast(String(e?.code || e).includes("PERMISSION_DENIED") ? "รับรางวัลไม่สำเร็จ — ลองใหม่อีกครั้ง (ข้อมูลอาจเพิ่งเปลี่ยนรอบ)" : "ทำรายการไม่สำเร็จ"); return false; }
   finally { state.qpBusy = false; qpRefresh(); }
@@ -4208,13 +4220,19 @@ async function qpSeed() {
   catch (e) { console.error("qpSeed", e?.code || e); toast(errMsg(e)); }
 }
 
+// เช็กอิน: เปิดเกม (และข้ามเที่ยงคืนระหว่างเปิดค้าง) นับ 1 ครั้งต่อวัน — ใช้ระบบเควสเดิม ไม่แตะ rules
+function qpLoginCheck() {
+  if (!state.qDefs || !state.qProgReady || !state.profile || state.profile.banned) return;
+  const day = qpDayKey(serverNow()); if (state.qpLoginDay === day) return;
+  state.qpLoginDay = day; questBump("login");
+}
 function qpListen() {
   if (state.qpOn || !state.uid) return; state.qpOn = true;
-  state.qDefs = null; state.qProg = {};
+  state.qDefs = null; state.qProg = {}; state.qProgReady = false;
   const b = btn("📜 ภารกิจ", qpOpen, "btn ghost mini"); b.id = "btn-quests"; $("btn-profile").before(b);
-  onValue(ref(db, "config/questDefs"), (s) => { state.qDefs = s.val() || {}; qpRefresh(); }, (e) => console.error("questDefs", e));
-  onValue(ref(db, "questProg/" + state.uid), (s) => { state.qProg = s.val() || {}; qpRefresh(); }, (e) => console.error("questProg", e));
-  setInterval(qpRefresh, 30000);   // อัปเดตนับถอยหลัง/ข้ามรอบเที่ยงคืน
+  onValue(ref(db, "config/questDefs"), (s) => { state.qDefs = s.val() || {}; qpRefresh(); qpLoginCheck(); }, (e) => console.error("questDefs", e));
+  onValue(ref(db, "questProg/" + state.uid), (s) => { state.qProg = s.val() || {}; state.qProgReady = true; qpRefresh(); qpLoginCheck(); }, (e) => console.error("questProg", e));
+  setInterval(() => { qpRefresh(); qpLoginCheck(); }, 30000);   // อัปเดตนับถอยหลัง/ข้ามรอบเที่ยงคืน
   npcListen();
 }
 function qpRefresh() {
@@ -4231,10 +4249,23 @@ function qpOpen() {
   }
   qpRender(); $("qp-modal").classList.remove("hidden");
 }
+function QP_ATT_Q() {
+  const l = qpList("weekly").filter(([, d]) => d.ev === "login"); if (!l.length) return null;
+  const st = l.map(([qid, d]) => ({ qid, d, x: qpState("weekly", qid), rw: d.r && d.r[state.profile?.faction] })).sort((a, b) => a.d.need - b.d.need);
+  const n = Math.max(...st.map((q) => q.x.n)), max = Math.max(...st.map((q) => q.d.need));
+  return { n, max, next: st.find((q) => q.d.need > n) };
+}
 function qpRender() {
   const body = $("qp-body"); if (!body) return; body.innerHTML = "";
   const row = () => { const r = mk("div"); r.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px"; return r; };
   const card = (title) => { const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px"; c.append(mk("b", "", title)); return c; };
+  const att = QP_ATT_Q();   // เช็กอินรายสัปดาห์ (เควสสะสมวันที่เข้าเล่น)
+  if (att) {
+    const c = card(`🔥 เช็กอินสัปดาห์นี้ ${att.n}/${att.max} วัน`);
+    c.append(mk("div", "", Array.from({ length: att.max }, (_, i) => (i < att.n ? "🔥" : "⚪")).join(" ")));
+    c.append(mk("span", "muted", att.next ? `อีก ${att.next.d.need - att.n} วัน ได้ ${att.next.rw ? mktLabel(att.next.rw.id) + " ×" + att.next.rw.qty : "รางวัล"} (${att.next.d.title}) • เข้าเล่นวันละครั้งก็นับ รีเซ็ตเที่ยงคืนคืนวันอาทิตย์` : "ครบทุกขั้นของสัปดาห์นี้แล้ว — กลับมาใหม่สัปดาห์หน้า"));
+    body.append(c);
+  }
   const n = qpClaimable();
   if (n > 1) { const r = row(); r.append(mk("span", "", `มีรางวัลรอรับ ${n} รายการ`), btn("รับทั้งหมด", qpClaimAll, "btn primary mini")); body.append(r); }
   if (state.qDefs === null) body.append(mk("span", "muted", "กำลังโหลด…"));
@@ -4261,7 +4292,7 @@ function qpRender() {
   if (state.profile?.role === "owner") {
     const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
-    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini")); c.append(r); body.append(c);
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini"), btn("เติมเควสเช็กอิน+ปิดล้อม", qpSeedStreak, "btn ghost mini")); c.append(r); body.append(c);
   }
 }
 
@@ -4399,7 +4430,7 @@ async function wallSmash() {
     if (meat > 0) invAddUpdate(u, "rotten_meat", meat);
     await update(ref(db), u);
     logLine((breaker ? "💥 คุณทุบกำแพงจนพังทลาย! ค่ายไม่ปลอดภัยอีกต่อไป" : `💢 คุณทุบกำแพงค่าย กำแพงเหลือ ${hp}/${WALL_MAX}`) + (meat ? ` • ได้ 🥩 เนื้อเน่า +${meat}${breaker ? " (โบนัสทุบพัง)" : ""}` : ""), "combat");
-    setTimeout(wallRender, SMASH_CD + 300); questBump("smash");
+    setTimeout(wallRender, SMASH_CD + 300); questBump("smash"); siegeHit();
   } catch (e) { toast(errMsg(e)); }
   finally { state.wallBusy = false; wallRender(); }
 }
@@ -4436,7 +4467,7 @@ async function wallRepair(n) {
     if (have - n > 0) u[`inventory/${state.uid}/scrap/qty`] = have - n; else u[`inventory/${state.uid}/scrap`] = null;
     await update(ref(db), u);
     logLine(`🧱 ซ่อมกำแพงด้วย scrap ×${n} (+${n * WALL_PER} HP)`, "info");
-    questBump("wall");
+    questBump("wall"); siegeHit();
   } catch (e) { toast(errMsg(e)); }
   finally { state.wallBusy = false; wallRender(); }
 }
@@ -5057,6 +5088,21 @@ function npcQuestSeed() {
   }));
   return o;
 }
+const QP_STREAK_SEED = {
+  "daily/dlogin": { title: "📻 เช็กอินวันนี้", desc: "แค่เปิดเกมก็นับ กดรับรางวัลได้เลย", ev: "login", need: 1, r: { human: { id: "water", qty: 1 }, zombie: { id: "water", qty: 1 } } },
+  "daily/dall": { title: "รับรางวัลภารกิจรายวันครบ 4 ข้อ", desc: "รวมเช็กอินและของขวัญ NPC", ev: "dclaim", need: 4, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } },
+  "weekly/wa3": { title: "เช็กอิน 3 วันในสัปดาห์นี้", ev: "login", need: 3, r: { human: { id: "canned_food", qty: 3 }, zombie: { id: "rotten_meat", qty: 3 } } },
+  "weekly/wa5": { title: "เช็กอิน 5 วันในสัปดาห์นี้", ev: "login", need: 5, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "medkit", qty: 1 } } },
+  "weekly/wa7": { title: "เช็กอินครบ 7 วัน 🔥", ev: "login", need: 7, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
+  "daily/dsiege": { title: "🚨 ร่วมคืนปิดล้อม (ทุบ/ซ่อมกำแพง 5 ครั้ง)", desc: "นับเฉพาะช่วงคืนปิดล้อม ที่เซฟโซน — ดูเวลาได้ที่แผงวิทยุ", ev: "siege", need: 5, r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "rotten_meat", qty: 5 } } },
+  "weekly/wsiege": { title: "ร่วมคืนปิดล้อมให้ครบ 3 คืน", ev: "siegen", need: 3, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } }
+};
+async function qpSeedStreak() {
+  if (state.profile?.role !== "owner") return;
+  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege และ weekly: wa3, wa5, wa7, wsiege โดยไม่แตะเควสอื่น")) return;
+  try { await update(ref(db, "config/questDefs"), QP_STREAK_SEED); toast("เติมเควสเช็กอิน + ปิดล้อมแล้ว"); }
+  catch (e) { console.error("qpSeedStreak", e?.code || e); toast(errMsg(e)); }
+}
 async function qpSeedNpc() {
   if (state.profile?.role !== "owner") return;
   if (!confirm("เติมเควส NPC?\nจะเพิ่ม/อัปเดตเควส mira_h1…h5, kane_h1…h5 (10 ข้อ) ใน config/questDefs/daily โดยไม่แตะเควสอื่น")) return;
@@ -5311,4 +5357,260 @@ function renderNpcBox() {
 function initNpcUi() {
   if (!$("npc-box")) { const ul = $("zone-list"); if (ul) { const b = mk("div", "npc-box hidden"); b.id = "npc-box"; ul.after(b); } }
 }
+/* =========================================================
+   26) วิทยุฉุกเฉิน
+   • ข่าวด่วนอัตโนมัติ: ทุก 20 นาที (slot ตามเวลาเซิร์ฟเวอร์ → seed เดียวกันทุกเครื่อง) สร้างจากสถานะโลกจริง
+     (บอส/กำแพง/อีเวนต์/จำนวนคน) + ข่าวทั่วไป + คำแนะนำเกม — ฝั่ง client ล้วน ไม่เขียนอะไรขึ้นเซิร์ฟเวอร์
+   • สัมภาษณ์ผู้เล่นสุ่ม: ระบบสุ่ม "เชิญ" ผู้เล่นที่ออนไลน์ ตอบแบบเลือกข้อ (เหมือนคุยกับ NPC) แล้วเขียน radio/{uid} = {q,a,f,n,ts}
+     ทุกคนฟัง radio แล้วแสดงเป็นข่าวสด (rules จำกัดคนละ 1 ครั้ง/30 นาที, ค่า q/a เป็นเลขดัชนี ไม่มีข้อความอิสระ)
+   ========================================================= */
+const RADIO_SLOT = 20 * 60000, RADIO_COOL = 30 * 60000, RADIO_GLOBAL_GAP = 6 * 60000, RADIO_KEEP = 10;
+const rdHash = (...a) => { let h = 2166136261; for (const x of a) { const s = String(x); for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } } return h >>> 0; };
+const rdPick = (rnd, arr) => arr[Math.floor(rnd() * arr.length)];
+const rdFill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => o[k] ?? "");
+const RD_AMBIENT = [
+  "ย้ำอีกครั้ง ผู้รอดชีวิตทุกคนโปรดตรวจสอบเสบียงและน้ำดื่มของตัวเองก่อนออกจากเซฟโซน",
+  "สัญญาณรบกวนรุนแรงช่วงนี้ หากได้ยินเสียงครวญครางใกล้ตัว อย่าหันกลับไปมอง",
+  "รายงานจากจุดสังเกตการณ์: ฝูงอีกาบินวนเหนือตัวเมืองตั้งแต่เช้า ยังไม่ทราบสาเหตุ",
+  "มีผู้พบรอยเท้าขนาดใหญ่ใกล้ริมถนนสายเก่า เจ้าหน้าที่แนะนำให้เลี่ยงเส้นทางดังกล่าว",
+  "ฝนกรดเบา ๆ ตกทางฝั่งตะวันตกของเมือง ผู้ที่อยู่กลางแจ้งควรหาที่กำบัง",
+  "ขอเตือนผู้ที่คิดจะเดินทางไกล: ยิ่งไกลยิ่งกินแรง ประเมินพลังงานก่อนออกเดินทางเสมอ",
+  "เราได้รับสัญญาณขอความช่วยเหลือจากที่ไหนสักแห่งแต่ตอบกลับไปไม่ได้ ถ้าคุณได้ยินเรา โปรดอยู่ที่เดิม",
+  "ทีมสำรวจรายงานกลิ่นไหม้ลอยมาจากทางโรงงาน ไม่ทราบว่ามีใครอยู่ที่นั่นหรือไม่",
+  "คืนนี้อากาศหนาวกว่าปกติ ผู้รอดชีวิตควรรักษาความอบอุ่นและอย่าอยู่ในที่โล่งนาน",
+  "สถานีขอบคุณทุกคนที่ยังเปิดรับฟัง ตราบใดที่ยังมีคนฟัง เราจะออกอากาศต่อไป",
+  "ขอย้ำ: ซอมบี้ไม่ใช่ศัตรูเพียงอย่างเดียว ความหิวและความประมาทฆ่าผู้รอดชีวิตมามากกว่า",
+  "เสียงปืนดังขึ้นเป็นระยะจากทางทิศเหนือ ไม่ทราบฝ่าย อย่าเข้าใกล้"
+];
+const RD_TIPS = [
+  "คำแนะนำจากทีมแพทย์สนาม: พิษแรงรักษาได้ด้วยยาแก้พิษหรือชุดช่วยชีวิตขั้นสูงเท่านั้น ผ้าพันแผลและมอสช่วยไม่ได้",
+  "ผู้ที่ดื่มยาแก้พิษจะมีภูมิคุ้มกันพิษชั่วคราวราว 10 นาที ใช้ช่วงนั้นลุยพื้นที่เสี่ยงได้",
+  "อาวุธใกล้พังอย่าฝืน สลับอาวุธสำรองก่อนเข้าสู้กับบอสโลก",
+  "ผู้ที่ตีบอสโลกได้ดาเมจสูงสุดมักได้รับชิ้นพิเศษ ส่วนคนอื่นก็ได้เกราะสุ่มจากคลัง อย่าลืมกดรับรางวัล",
+  "ชาวค่ายแนะนำ: แวะคุยกับ {npc} ที่เซฟโซนบ้าง ทั้งสองมีเรื่องเล่าและของฝากให้ทุกวัน",
+  "กำแพงเซฟโซนต้องมีคนดูแลอยู่เสมอ ใครมีเศษวัสดุเหลือ ช่วยกันซ่อมก็ได้"
+];
+const RD_BOSS = [
+  "ด่วน! พบ「{boss}」ที่{zone} กำลังเคลื่อนไหวอยู่ ผู้ที่มีกำลังพอโปรดรวมตัวกันเข้าจัดการ",
+  "ทีมสังเกตการณ์ที่{zone}ส่งภาพมาแล้ว「{boss}」ตัวใหญ่กว่าที่คาดไว้มาก ขอให้เตรียมเสบียงและอาวุธสำรอง",
+  "ใครอยู่ใกล้{zone} โปรดระวังตัว「{boss}」ยังไม่ล้ม และมันไม่มีทีท่าจะหยุด"
+];
+const RD_BOSS_T = "รายงานล่าสุด:「{boss}」ยังอาละวาดที่{zone} คาดว่าจะอยู่ต่ออีกราว {min} นาที";
+const RD_WALL = {
+  broken: ["แจ้งเตือนสูงสุด! กำแพงเซฟโซนพังแล้ว ซอมบี้อาจบุกเข้ามาได้ทุกเมื่อ ใครอยู่ในค่ายโปรดช่วยกันซ่อมด่วน", "เซฟโซนไม่ปลอดภัยอีกต่อไป กำแพงแตกเป็นช่อง เร่งซ่อมก่อนมืด"],
+  low: ["กำแพงเซฟโซนเหลือราว {pct}% และทรุดลงเรื่อย ๆ ขอแรงชาวค่ายช่วยซ่อม", "วิศวกรประเมินกำแพงเหลือ {pct}% หากไม่มีใครซ่อมเร็ว ๆ นี้ เราอาจเสียเซฟโซน"],
+  mid: ["กำแพงเซฟโซนอยู่ที่ราว {pct}% ยังไหว แต่อย่าประมาท"],
+  ok: ["กำแพงเซฟโซนยังแข็งแรง ราว {pct}% ขอบคุณทุกคนที่ช่วยกันดูแล"]
+};
+function radioBulletin(slot) {
+  const rnd = bmRng(rdHash("rd", slot)), o = [], now = serverNow();
+  o.push([4, rdPick(rnd, RD_AMBIENT)]);
+  o.push([2, rdFill(rdPick(rnd, RD_TIPS), { npc: NPC_IDS.map((id) => NPC_META[id].name).join(" และ ") })]);
+  try {
+    if (!siegeLive(now)) { const sg = siegeNext(now); if (sg.start > now && sg.start - now < 6 * 3600000) o.push([3, `ตารางเฝ้าระวัง: คาดว่าฝูงซอมบี้จะบุกกำแพงเซฟโซนราว ${siegeClock(sg.start)} น. ผู้รอดชีวิตโปรดเตรียมเศษวัสดุและกลับเข้าค่าย`]); }
+    const bz = Object.entries(state.wb || {}).find(([, b]) => wbAlive(b));
+    if (bz) { const [z, b] = bz, min = b.endsAt ? Math.max(1, Math.ceil((b.endsAt - now) / 60000)) : 0, d = { boss: b.name, zone: ZONES[z]?.name || z, min }; o.push([6, rdFill(min && rnd() < 0.4 ? RD_BOSS_T : rdPick(rnd, RD_BOSS), d)]); }
+    const h = wallHp();
+    if (h !== null) { const pct = Math.round((h / WALL_MAX) * 100), k = h <= 0 ? "broken" : pct < 35 ? "low" : pct < 70 ? "mid" : "ok"; o.push([k === "broken" ? 8 : k === "low" ? 5 : 2, rdFill(rdPick(rnd, RD_WALL[k]), { pct })]); }
+    const zc = Object.entries(state.zcount || {}).sort((a, c) => c[1] - a[1]), tot = zc.reduce((s, [, n]) => s + n, 0);
+    if (tot <= 1) o.push([3, "สถานีตรวจพบสัญญาณชีวิตในเมืองน้อยมาก ถ้าคุณกำลังฟังอยู่ โปรดบอกให้เรารู้ว่าคุณยังอยู่"]);
+    else if (zc[0]?.[1] >= 3) o.push([3, `ผู้รอดชีวิตรวมตัวกันที่${ZONES[zc[0][0]]?.name || zc[0][0]}ถึง ${zc[0][1]} คน ขอให้ระวังเสียงดังที่ดึงดูดฝูงซอมบี้`]);
+    else if (zc[0]?.[1] >= 1) o.push([2, `จากการสำรวจ ขณะนี้มีผู้รอดชีวิตออนไลน์ราว ${tot} คน หนาแน่นที่สุดที่${ZONES[zc[0][0]]?.name || zc[0][0]}`]);
+    const ev = Object.entries(state.events || {}).find(([z]) => activeEvent(z));
+    if (ev) o.push([5, `ประกาศเตือน: เกิดเหตุการณ์ผิดปกติที่${ZONES[ev[0]]?.name || ev[0]} — ${ev[1].title || "ไม่ทราบสาเหตุ"}`]);
+  } catch { /* ข้อมูลโลกยังไม่พร้อม → ใช้ข่าวทั่วไป */ }
+  let r = rnd() * o.reduce((s, x) => s + x[0], 0);
+  for (const [w, t] of o) { if ((r -= w) < 0) return t; }
+  return o[0][1];
+}
+const RD_TOPICS = [
+  { q: "อะไรทำให้คุณยังไม่ยอมแพ้ในวันที่แย่ที่สุด?",
+    h: ["ข้าวกระป๋องที่ซ่อนไว้กับความดื้อของตัวเอง", "เพื่อนร่วมค่ายที่ยังรอฉันอยู่", "ความโกรธ… ฉันยังมีเรื่องค้างกับพวกมัน", "ไม่รู้เหมือนกัน ขาแค่ก้าวต่อไปเอง"],
+    z: ["ความหิว มันไม่เคยหยุดเลย", "เสียงบางอย่างในหัวที่บอกให้เดินต่อ", "ฉันยังจำชื่อตัวเองได้… แค่นั้นก็พอ", "ไม่ต้องมีเหตุผล พวกเราแค่เดิน"] },
+  { q: "ถ้าขอสิ่งของจากฟ้าได้อย่างเดียว คุณจะขออะไร?",
+    h: ["ยาแก้พิษสักลัง", "ปืนที่กระสุนไม่มีวันหมด", "ข้าวเหนียวหมูปิ้งร้อน ๆ", "เตียงนุ่ม ๆ กับคืนหลับยาว ๆ"],
+    z: ["เนื้อสด ๆ… ขอเยอะ ๆ", "ความเงียบ ในหัวมันดังเกินไป", "ตัวตนเดิมของฉันกลับมา", "ไม่ขออะไร แค่อยากมีใครเดินเป็นเพื่อน"] },
+  { q: "ที่ไหนในเมืองนี้ที่คุณกลัวที่สุด?",
+    h: ["อุโมงค์ ไฟดับแล้วไม่รู้ว่าอะไรอยู่ข้างหน้า", "โรงพยาบาล เสียงเครื่องมือแพทย์ยังดังอยู่", "ห้างสรรพสินค้า ทุกมุมมีที่ซ่อน และที่ให้ถูกซุ่ม", "เซฟโซน เพราะที่นั่นฉันมีอะไรให้เสียมากที่สุด"],
+    z: ["ไม่มีที่ไหนน่ากลัวสำหรับเรา มีแต่ที่ที่มีคนเยอะ", "ที่ที่แสงจ้า ๆ มันทำให้ฉันนึกถึงบางอย่าง", "ที่ไหนก็ตามที่มีเสียงปืน", "กำแพงเซฟโซน มันสูงเกินกว่าจะข้าม"] },
+  { q: "เมื่อคืนคุณได้ยินอะไรไหม?",
+    h: ["เสียงใครสักคนเรียกชื่อฉันจากข้างนอก ฉันไม่ได้ออกไป", "เสียงฝีเท้าเยอะมาก แต่ไม่มีใครส่งเสียงเลย", "เสียงเพลงจากวิทยุเก่า ๆ ที่ไหนสักแห่ง", "ไม่ได้ยินอะไรเลย นั่นแหละที่น่ากลัว"],
+    z: ["เสียงหัวใจของคนที่หลับอยู่ มันดังมาก", "เสียงพวกเดียวกันเรียกจากอีกฟากเมือง", "เสียงตัวเองร้องไห้ แปลกดีนะ", "เสียงปืน… แล้วก็เงียบ"] },
+  { q: "ถ้าวันนี้เป็นวันสุดท้าย คุณจะทำอะไร?",
+    h: ["กินของอร่อยที่สุดที่หาได้ในเมือง", "ไปล้มบอสที่ไม่มีใครล้มได้", "นั่งดูพระอาทิตย์ตกกับเพื่อนสักคน", "ซ่อมกำแพงให้ดีที่สุด คนอื่นจะได้อยู่ต่อ"],
+    z: ["ล่าให้เต็มที่ ไม่ต้องเก็บแรงไว้แล้ว", "ไปหาคนที่เคยรู้จัก… แล้วบอกอะไรบางอย่าง", "นอนหลับสักคืน ถ้ายังหลับเป็น", "เดินไปให้ไกลที่สุดจนกว่าขาจะพัง"] },
+  { q: "ตอนนี้คุณไว้ใจใครมากที่สุด?",
+    h: ["ตัวเอง ไว้ใจคนอื่นไม่ได้แล้ว", "คนที่แบ่งผ้าพันแผลให้ฉันโดยไม่ถามอะไร", "คนในค่ายที่ยังยิ้มให้ฉันทุกเช้า", "ยังไม่มี แต่ฉันกำลังพยายามจะมี"],
+    z: ["ฝูงของเรา", "ไม่มี เราไม่ไว้ใจใครอีกแล้ว", "มนุษย์คนหนึ่งที่เคยปล่อยฉันไปทั้งที่ฉันหิว", "เสียงในหัวของฉันเอง… ซึ่งนั่นน่ากลัวมาก"] },
+  { q: "เล่าเรื่องที่เกือบเอาชีวิตไม่รอดให้ฟังหน่อย",
+    h: ["บอสโลกฟาดมาทีเดียว เลือดเหลือไม่ถึงสิบ", "กินของเน่าเข้าไปเพราะหิวจัด", "ติดพิษแรงแล้วไม่มียาแก้ ต้องวิ่งหาแทบตาย", "ตกใจเสียงอะไรไม่รู้ในอุโมงค์ จนลืมสู้"],
+    z: ["เกือบถูกยิงหัวขาดตอนล่าอยู่ใกล้ฐานทัพ", "ถูกมนุษย์ล้อมไว้เจ็ดคน ถ้าไม่ใช่เพราะหมอกคงจบแล้ว", "ติดพิษแรง ทั้งที่เราควรเป็นฝ่ายกัดนะ", "ตัดสินใจผิดแล้วหนีไม่ทัน"] },
+  { q: "มีคำแนะนำให้ผู้รอดชีวิตมือใหม่ไหม?",
+    h: ["พกผ้าพันแผลเสมอ แม้คิดว่าไม่ถึงตาย", "อย่าเดินไกลตอนพลังงานเหลือน้อย", "คุยกับคนในเซฟโซนทุกวัน ได้ของฟรีด้วย", "ตีบอสเป็นทีม ไปคนเดียวรอดยาก"],
+    z: ["อย่าล่าตอนหิวจัด สายตาจะพร่า", "ใจเย็น ๆ เหยื่อไม่หนีไปไหน", "อดทน วิวัฒนาการต้องใช้เวลา", "อย่าไว้ใจเสียงในหัว"] },
+  { q: "เสบียงชิ้นสุดท้ายของคุณคืออะไร?",
+    h: ["ข้าวกระป๋องที่เปิดไว้แล้วครึ่งกระป๋อง", "น้ำครึ่งขวดกับความหวัง", "ชุดปฐมพยาบาลที่ยังไม่ได้แกะ", "ช็อกโกแลตแท่งที่เก็บไว้ตั้งแต่วันแรก"],
+    z: ["ไม่มี เรากินสิ่งที่หาได้", "เศษเนื้อที่ยังไม่เน่าชิ้นหนึ่ง", "ความทรงจำเก่า ๆ เรากินมันซ้ำทุกวัน", "ความอดทน… กินไม่อิ่ม แต่ก็ยังอยู่"] },
+  { q: "ถ้าเจอซอมบี้ที่คุณจำหน้าได้ คุณจะทำอย่างไร?", qz: "ถ้าเจอมนุษย์ที่คุณจำหน้าได้ คุณจะทำอย่างไร?",
+    h: ["ยกอาวุธขึ้น แต่มือสั่นมาก", "เรียกชื่อมัน เผื่อจะยังได้ยิน", "เดินหนีโดยไม่หันหลังกลับ", "ขอโทษ แล้วทำให้มันสงบเสียที"],
+    z: ["เดินเข้าไปหาโดยไม่รู้ตัวด้วยซ้ำ", "หยุด… แล้วถอยออกมาช้า ๆ", "ตามไปดูห่าง ๆ ว่าเขาจะปลอดภัยไหม", "กัดมัน แล้วเสียใจทีหลัง"] },
+  { q: "คุณคิดว่าคนที่เหลืออยู่ในเมืองนี้เป็นคนแบบไหน?",
+    h: ["ดื้อ ขี้หึง แต่ไม่ยอมตายง่าย ๆ", "เหนื่อย แต่ยังแบ่งปันกันได้", "ทั้งดีและเลวปนกัน แล้วแต่ว่าหิวแค่ไหน", "เป็นครอบครัวที่ไม่ได้เลือกกันเอง"],
+    z: ["เหยื่อ… และบางคนก็เป็นเพื่อนเก่า", "แข็งแกร่งกว่าที่เราคิด", "ส่วนมากกลัว ส่วนน้อยกล้าจนน่าสงสัย", "พวกเขาเหมือนเราตอนที่ยังเป็นคน"] },
+  { q: "ถ้าวิทยุเครื่องนี้ส่งถึงโลกภายนอกได้ คุณจะบอกอะไร?",
+    h: ["เรายังอยู่ ส่งความช่วยเหลือมาที", "อย่าเข้ามาที่นี่ แต่อย่าลืมพวกเรา", "ขอบคุณคนที่ยังฟังเราอยู่", "บอกแม่ว่าฉันไม่เป็นไร"],
+    z: ["พวกเรายังเดินอยู่ และจะเดินต่อไป", "ช่วยเรา… ได้ไหม", "อย่าเปิดประตู", "บอกแม่… ว่าขอโทษ"] },
+  { q: "คุณคิดถึงอะไรจากชีวิตก่อนวิกฤตมากที่สุด?",
+    h: ["กาแฟร้อน ๆ ตอนเช้า", "เสียงรถติดหน้าบ้าน", "การเดินไปไหนมาไหนโดยไม่ต้องมองข้างหลัง", "ข้อความขี้บ่นจากแม่"],
+    z: ["รสข้าวเหนียวมะม่วง", "ความรู้สึกอิ่ม", "ชื่อของตัวเอง", "เสียงหัวเราะ"] }
+];
+const RD_INTRO = {
+  human: [(n) => `🎙️ ผู้สื่อข่าวภาคสนามยื่นไมค์ให้ ${n}`, (n) => `🎙️ สถานีสัมภาษณ์สดจาก ${n}`, (n) => `🎙️ เสียงจากผู้รอดชีวิต: เรากำลังคุยกับ ${n}`, (n) => `🎙️ ช่วงสัมภาษณ์พิเศษกับ ${n}`],
+  zombie: [(n) => `🎙️ (สัญญาณแทรกหนัก) ผู้สื่อข่าวเสี่ยงชีวิตเข้าไปสัมภาษณ์ ${n} ซึ่งดูเหมือนจะไม่ใช่คนอีกต่อไป`, (n) => `🎙️ เสียงขู่คำรามดังแทรก… เราขอสัมภาษณ์ ${n} จากระยะที่ปลอดภัยที่สุด`, (n) => `🎙️ ภาคสนามรายงาน: ${n} ยินดีให้สัมภาษณ์ แม้ท่าทางจะน่ากลัวไปหน่อย`]
+};
+const rdMyLast = () => state.radioRec?.[state.uid]?.ts || 0;
+function radioPanel() {
+  const box = $("radio-box"); if (!box) return;
+  box.textContent = "";
+  const items = (state.radioLog || []).slice(0, RADIO_KEEP);
+  const sum = mk("summary", "", `📻 วิทยุฉุกเฉิน${items.length ? ` (${items.length})` : ""}`); sum.style.cssText = "cursor:pointer;font-weight:600";
+  box.append(sum);
+  const wrap = mk("div"); wrap.style.cssText = "display:grid;gap:6px;margin-top:6px";
+  wrap.append(mk("div", "", siegeInfoLine()));
+  items.forEach((it) => {
+    const row = mk("div", "muted", `${new Date(it.ts).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" })} • ${it.text}`); row.style.cssText = "font-size:.88em;line-height:1.4"; wrap.append(row);
+  });
+  if (!items.length) wrap.append(mk("div", "muted", "ยังไม่มีข่าว — รอฟังสักครู่"));
+  const left = RADIO_COOL - (serverNow() - rdMyLast());
+  const b = btn(left > 0 ? `🎙️ ขึ้นวิทยุได้อีก ~${Math.ceil(left / 60000)} นาที` : "🎙️ ขอขึ้นวิทยุ (ตอบสัมภาษณ์)", () => radioAsk(), "btn ghost mini");
+  b.disabled = left > 0; wrap.append(b); box.append(wrap);
+}
+function radioPush(text, ts, live) {
+  state.radioLog = state.radioLog || [];
+  state.radioLog.unshift({ text, ts }); state.radioLog.sort((a, c) => c.ts - a.ts); state.radioLog.length = Math.min(state.radioLog.length, RADIO_KEEP);
+  if (live) logLine(text, "system");
+  radioPanel();
+}
+function radioShowInterview(uid, r, live) {
+  const t = RD_TOPICS[r.q]; if (!t || !Number.isInteger(r.a) || r.a < 0 || r.a > 3) return;
+  const fac = r.f === "zombie" ? "zombie" : "human", n = String(r.n || "?").slice(0, 16), rnd = bmRng(rdHash(uid, r.ts));
+  const intro = rdPick(rnd, RD_INTRO[fac])(n), q = fac === "zombie" && t.qz ? t.qz : t.q, a = t[fac === "zombie" ? "z" : "h"][r.a];
+  if (live) { logLine(`${intro}: “${q}”`, "system"); logLine(`💬 ${n}: “${a}”`, "system"); }
+  radioPush(`🎙️ ${n}: “${q}” → “${a}”`, r.ts || serverNow(), false);
+}
+function radioAsk() {
+  const p = state.profile; if (!p || p.hp <= 0) return;
+  if (serverNow() - rdMyLast() < RADIO_COOL) return toast("ขึ้นวิทยุได้ทุก 30 นาที");
+  radioInviteClose();
+  const fac = p.faction === "zombie" ? "zombie" : "human";
+  let qi = rdHash(state.uid, Date.now()) % RD_TOPICS.length;
+  const last = state.radioRec?.[state.uid]?.q, lastAll = state.radioLastQ;
+  for (let k = 0; k < RD_TOPICS.length && (qi === last || qi === lastAll); k++) qi = (qi + 1) % RD_TOPICS.length;
+  const t = RD_TOPICS[qi];
+  const m = mk("div", "modal"); m.id = "radio-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+  const bx = mk("div", "modal-box"); bx.style.cssText = "display:grid;gap:10px";
+  bx.append(mk("h2", "", "📻 สถานีวิทยุขอสัมภาษณ์"), mk("p", "muted", "ตอบ 1 ข้อ คำตอบของคุณจะถูกประกาศให้ผู้รอดชีวิตทุกคนที่ออนไลน์ได้ยิน"), mk("p", "", `🎙️ “${fac === "zombie" && t.qz ? t.qz : t.q}”`));
+  const close = () => m.remove();
+  t[fac === "zombie" ? "z" : "h"].forEach((txt, ai) => {
+    const b = btn(`“${txt}”`, async () => {
+      bx.querySelectorAll("button").forEach((x) => { x.disabled = true; });
+      try {
+        await set(ref(db, "radio/" + state.uid), { q: qi, a: ai, f: fac, n: p.username, ts: serverTimestamp() });
+        toast("ออกอากาศแล้ว 📻"); close();
+      } catch (e) { toast(errMsg(e)); bx.querySelectorAll("button").forEach((x) => { x.disabled = false; }); }
+    }, "btn ghost");
+    b.style.cssText = "text-align:left;white-space:normal"; bx.append(b);
+  });
+  bx.append(btn("ไว้ก่อน", close, "btn ghost mini")); m.append(bx); document.body.append(m);
+}
+function radioInviteClose() { state.radioInvEl?.remove(); state.radioInvEl = null; clearTimeout(state.radioInvT); }
+function radioInvite() {
+  if (state.radioInvEl) return;
+  state.radioInvAt = Date.now();
+  const el = mk("div"); el.style.cssText = "position:fixed;left:12px;right:12px;bottom:76px;z-index:60;background:#1b2330;border:1px solid #e0a030;border-radius:12px;padding:10px 12px;display:grid;gap:8px;box-shadow:0 4px 16px rgba(0,0,0,.5)";
+  el.append(mk("div", "", "📻 สถานีวิทยุฉุกเฉินขอสัมภาษณ์คุณ — ตอบแค่ข้อเดียว แล้วคำตอบจะถูกประกาศให้ทุกคนได้ยิน"));
+  const row = mk("div", "row-btns"); row.append(btn("🎙️ ตอบรับ", () => radioAsk(), "btn primary mini"), btn("ไว้ก่อน", radioInviteClose, "btn ghost mini")); el.append(row);
+  document.body.append(el); state.radioInvEl = el; state.radioInvT = setTimeout(radioInviteClose, 120000);
+  try { sfx("boss"); } catch { /* */ }
+}
+function radioTick(n) {
+  const p = state.profile; if (!p || !state.radioReady) return;
+  const slot = Math.floor(serverNow() / RADIO_SLOT);
+  if (state.radioSlot !== slot) { const first = state.radioSlot === undefined; state.radioSlot = slot; setTimeout(() => radioPush(`📻 [วิทยุฉุกเฉิน] ${radioBulletin(slot)}`, serverNow(), true), first ? 6000 : 0); }
+  if (n % 4 || p.hp <= 0 || document.hidden || state.radioInvEl || $("radio-modal") || $("npc-modal") && !$("npc-modal").classList.contains("hidden")) return;
+  const now = serverNow(), online = Math.max(1, Object.values(state.zcount || {}).reduce((s, x) => s + x, 0));
+  if (now - rdMyLast() < RADIO_COOL || now - (state.radioLastGlobal || 0) < RADIO_GLOBAL_GAP || Date.now() - (state.radioInvAt || 0) < 20 * 60000) return;
+  if (Math.random() < 0.12 / online) radioInvite();
+}
+function listenRadio() {
+  if (state.radioStarted) return; state.radioStarted = true;
+  if (!$("radio-box")) { const ul = $("zone-list"); if (ul) { const d = mk("details", "radio-box"); d.id = "radio-box"; d.style.cssText = "margin:10px 0 4px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.05)"; ul.after(d); } }
+  state.radioSeen = {};
+  onValue(ref(db, "radio"), (s) => {
+    const all = s.val() || {}; state.radioRec = all;
+    Object.entries(all).sort((a, c) => (a[1].ts || 0) - (c[1].ts || 0)).forEach(([uid, r]) => {
+      if (!r || typeof r.ts !== "number") return;
+      const key = uid + ":" + r.ts; if (state.radioSeen[key]) return; state.radioSeen[key] = 1;
+      state.radioLastGlobal = Math.max(state.radioLastGlobal || 0, r.ts); state.radioLastQ = r.q;
+      radioShowInterview(uid, r, state.radioReady && r.ts >= state.sessionStart);
+    });
+    state.radioReady = true; radioPanel();
+  }, (e) => console.error("radio", e));
+  let n = 0; setInterval(() => radioTick(++n), 15000);
+  setInterval(() => { try { siegeAnnounce(); siegeBar(); } catch (e) { console.warn("siege", e); } }, 10000);
+}
+
+/* =========================================================
+   27) คืนปิดล้อม (ทุกวัน 30 นาที ช่วงหัวค่ำ — เวลาเริ่มสุ่มจากวัน ทุกเครื่องตรงกัน)
+   ฝั่ง client ล้วน ไม่แตะ rules: ซอมบี้ทุบกำแพง / มนุษย์ซ่อมกำแพงที่เซฟโซน (ระบบกำแพงเดิม) ระหว่างช่วงนี้นับเป็นเควส
+   ev "siege" (ต่อครั้ง) และ "siegen" (วันละครั้ง) • วิทยุประกาศเตือน/เริ่ม/กลางคืน/สรุป • แถบนับถอยหลังเหนือแชท
+   ========================================================= */
+const SIEGE_DUR = 30 * 60000, SIEGE_PRE = 10 * 60000, SIEGE_TZ = 7 * 3600000, SIEGE_DAY = 86400000;
+function siegeSched(day) {
+  const rnd = bmRng(rdHash("siege", day)), startMin = 19 * 60 + Math.floor(rnd() * 10) * 15;   // 19:00 – 21:15 (เวลาไทย)
+  const start = day * SIEGE_DAY - SIEGE_TZ + startMin * 60000; return { day, start, end: start + SIEGE_DUR };
+}
+const siegeNext = (ms = serverNow()) => { const s = siegeSched(Math.floor((ms + SIEGE_TZ) / SIEGE_DAY)); return ms < s.end ? s : siegeSched(s.day + 1); };
+const siegeLive = (ms = serverNow()) => { const s = siegeSched(Math.floor((ms + SIEGE_TZ) / SIEGE_DAY)); return ms >= s.start && ms < s.end ? s : null; };
+const siegeClock = (ms) => { const d = new Date(ms + SIEGE_TZ); return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+// เรียกหลังทุบ/ซ่อมกำแพงสำเร็จ
+function siegeHit() {
+  const s = siegeLive(); if (!s) return;
+  questBump("siege");
+  if (state.siegeDay !== s.day) { state.siegeDay = s.day; questBump("siegen"); toast("🚨 คุณร่วมคืนปิดล้อมแล้ว!"); }
+}
+const SG_PRE = ["ด่วน! ตรวจพบฝูงซอมบี้ขนาดใหญ่กำลังรวมตัวนอกกำแพงเซฟโซน คาดว่าจะบุกในอีกประมาณ {min} นาที ผู้รอดชีวิตเตรียมเศษวัสดุให้พร้อม", "สัญญาณเตือนภัย: ฝูงผีกำลังเคลื่อนเข้ามาทางกำแพงเซฟโซน อีกราว {min} นาทีจะถึง ใครอยู่ในค่ายโปรดเตรียมซ่อมกำแพง"];
+const SG_START = ["🚨 การปิดล้อมเริ่มแล้ว! ฝูงซอมบี้รุมทุบกำแพงเซฟโซน — ใครอยู่ในค่ายช่วยกันซ่อมด่วน!", "🚨 กำแพงถูกโจมตีหนักแล้ว! ผู้รอดชีวิตทุกคนที่อยู่ใกล้เซฟโซน ใช้เศษวัสดุซ่อมกำแพงเดี๋ยวนี้!"];
+const SG_MID = ["🚨 ครึ่งทางของคืนปิดล้อม กำแพงเซฟโซนเหลือราว {pct}% — สู้ต่อไป!", "🚨 รายงานกลางเหตุการณ์: กำแพงเซฟโซนอยู่ที่ราว {pct}% ฝูงซอมบี้ยังไม่ถอย"];
+const SG_END = { broken: "การปิดล้อมจบลง… กำแพงเซฟโซนพังทลาย ค่ายไม่ปลอดภัย ฝูงซอมบี้ได้ชัยชนะในคืนนี้", low: "การปิดล้อมจบลง กำแพงเซฟโซนรอดมาได้อย่างหวุดหวิด เหลือเพียง {pct}% ซ่อมด่วนก่อนคืนถัดไป", ok: "การปิดล้อมจบลง ค่ายรอดมาได้! กำแพงเซฟโซนยังเหลือ {pct}% ขอบคุณทุกคนที่ช่วยกันสู้" };
+function siegeBar() {
+  let bar = $("siege-bar");
+  if (!bar) { const log = $("chat-log"); if (!log) return; bar = mk("div"); bar.id = "siege-bar"; bar.style.cssText = "display:none;margin:6px 0;padding:8px 10px;border-radius:10px;font-size:.92em;line-height:1.4;border:1px solid"; log.before(bar); }
+  const now = serverNow(), s = siegeNext(now), live = now >= s.start && now < s.end, pre = !live && s.start - now <= SIEGE_PRE;
+  if (!state.profile || (!live && !pre)) { bar.style.display = "none"; return; }
+  const h = wallHp(), pct = h === null ? null : Math.round((h / WALL_MAX) * 100), z = state.profile.faction === "zombie";
+  bar.style.display = "block";
+  bar.style.background = live ? "rgba(200,40,40,.18)" : "rgba(224,160,48,.15)"; bar.style.borderColor = live ? "#c82828" : "#e0a030";
+  bar.textContent = live
+    ? `🚨 คืนปิดล้อม! เหลืออีก ~${Math.max(1, Math.ceil((s.end - now) / 60000))} นาที${pct !== null ? ` • กำแพงเซฟโซน ${pct}%` : ""} • ${z ? "ไปเซฟโซนแล้วกด “ทุบกำแพง” ช่วยฝูง!" : "ไปเซฟโซนแล้วซ่อมกำแพงด้วยเศษวัสดุ!"} (ทุบ/ซ่อมนับเป็นเควส “ปิดล้อม”)`
+    : `⏳ อีก ~${Math.max(1, Math.ceil((s.start - now) / 60000))} นาที ฝูงซอมบี้จะบุกกำแพงเซฟโซน — ${z ? "รวมพลที่เซฟโซน!" : "เตรียมเศษวัสดุ!"}`;
+}
+function siegeAnnounce() {
+  const p = state.profile; if (!p) return;
+  state.siegeAnn = state.siegeAnn || {};
+  const now = serverNow(), s = siegeNext(now), ps = siegeSched(s.day - 1);
+  const h = wallHp(), pct = h === null ? 0 : Math.round((h / WALL_MAX) * 100), rnd = bmRng(rdHash("sgann", s.day));
+  const say = (key, text) => { if (state.siegeAnn[key]) return; state.siegeAnn[key] = 1; radioPush(`📻 [วิทยุฉุกเฉิน] ${text}`, serverNow(), true); };
+  if (now < s.start && s.start - now <= SIEGE_PRE) say(s.day + "p", rdFill(rdPick(rnd, SG_PRE), { min: Math.max(1, Math.ceil((s.start - now) / 60000)) }));
+  if (now >= s.start && now < s.end) {
+    say(s.day + "s", rdPick(rnd, SG_START));
+    if (now >= s.start + SIEGE_DUR / 2) say(s.day + "m", rdFill(rdPick(rnd, SG_MID), { pct }));
+  }
+  if (now >= ps.end && now < ps.end + 5 * 60000 && h !== null) say(ps.day + "e", rdFill(SG_END[h <= 0 ? "broken" : pct < 35 ? "low" : "ok"], { pct }));
+}
+function siegeInfoLine() {
+  const now = serverNow(), s = siegeNext(now), live = now >= s.start && now < s.end, today = s.day === Math.floor((now + SIEGE_TZ) / SIEGE_DAY);
+  return live ? `🚨 กำลังปิดล้อมอยู่ถึง ${siegeClock(s.end)} น.` : `🚨 คืนปิดล้อม${today ? "วันนี้" : "พรุ่งนี้"} ${siegeClock(s.start)}–${siegeClock(s.end)} น.`;
+}
+
 if (HAS_DOM) initNpcUi();
