@@ -766,3 +766,7 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .ga-done .ga-res{animation:gaPop .5s ease-out}.ga-done.ga-t3{box-shadow:0 0 28px #ffc24788}.ga-done.ga-t2{box-shadow:0 0 22px #a55cff77}
 @keyframes gaPop{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
 @media (prefers-reduced-motion: reduce){.ga-done .ga-res{animation:none}}
+
+/* ---- เหตุการณ์ใหญ่ / ค่าหัว ---- */
+.world-row.evt-live{border-left:3px solid #ffc247;padding-left:8px;background:linear-gradient(90deg,#ffc24714,transparent)}
+.bty-btn{white-space:nowrap}

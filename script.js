@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1903";
+const APP_VERSION = "2026-10-04.1909";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1281,6 +1281,7 @@ function renderPlayers(snap) {
       const grp = mk("div", "row-btns");
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
+      if (v.role !== "gm" && v.role !== "owner") grp.append(btn(bountyOn(c.key) ? "💰 มีค่าหัว" : "💰", () => bountyPlace(c.key, v.name), "btn ghost mini bty-btn"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
         ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-gv-id", "adm-sk-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
@@ -1711,6 +1712,7 @@ async function processDeath(attempt = 0) {
     { const en = evoDeathWrites(u); if (en) lost.push(en); }
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
     const deadZone = state.zone;
+    if (state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
     await update(ref(db), u);
     try { if (effDanger(deadZone) >= 5) feedPost(3, deadZone); } catch { /* ข้าม */ }
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
@@ -1740,6 +1742,7 @@ async function scavengeOnce() {
     const isZombie = p.faction === "zombie";
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
     if (state.deep && !starving) table = deepTable(table, isZombie);
+    table = evtTable(table, isZombie);   // เหตุการณ์ใหญ่ประจำโซน (เครื่องบินทิ้งเสบียง/ฝูงบุก)
     table = gearTable(table);   // เครื่องราง/หน้ากาก/จมูกกลายพันธุ์ ปรับน้ำหนักตาราง   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
     let found = rollDrop(table);
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
@@ -1779,6 +1782,7 @@ async function scavengeOnce() {
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
+    try { evtSearchHook(); } catch { /* ข้าม */ }
   }
 }
 
@@ -2564,7 +2568,7 @@ async function freeHit(targetUid, targetName, w, sk = null) {
   if (w) wearUpdates(u, w);
   if (!dodged) {
     u[`users/${targetUid}/hp`] = left;
-    if (left === 0) text += ` — ${targetName} ล้มลง!`;
+    if (left === 0) { text += ` — ${targetName} ล้มลง!`; try { bountyKillWrite(u, targetUid, p.username); } catch { /* ข้าม */ } }
   }
   if (p.faction === "zombie" && !dodged) {
     u[`bites/${state.uid}/${targetUid}`] = biteRec(state.players[targetUid]?.faction === "human" && !state.players[targetUid]?.infected); text += " 🦷";
@@ -2618,7 +2622,7 @@ async function resolveAttack(key, a) {
       if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
     }
     u[`users/${state.uid}/hp`] = newHp;
-    if (newHp === 0) text += ` — ${p.username} ล้มลง!`;
+    if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; try { bountyKillWrite(u, state.uid, a.fromName); } catch { /* ข้าม */ } }
   } else if (dodged) {
     text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`; achBump("pdodge");
   } else {
@@ -5810,6 +5814,9 @@ const ACH_FAM = [
   ["evo", "🧬", "camp", "z", "วิวัฒนาการ", "ขั้น", [1, 5, 12], ["เริ่มกลายพันธุ์", "ผ่านการกลายพันธุ์", "สายพันธุ์เหนือมนุษย์"]],
   ["siegen", "🚨", "camp", "", "ร่วมคืนปิดล้อม", "คืน", [1, 3, 7, 15], ["คืนปิดล้อมแรก", "นักรบรัตติกาล", "ทหารผ่านศึกปิดล้อม", "ตำนานคืนปิดล้อม"]],
   ["siege", "⚡", "camp", "", "ทุบ/ซ่อมกำแพงในช่วงปิดล้อม", "ครั้ง", [5, 25, 100], ["สู้ในคืนอันตราย", "แนวหน้า", "ไม่หลับไม่นอน"]],
+  ["bty", "💰", "combat", "", "เก็บค่าหัวสำเร็จ", "ครั้ง", [1, 3, 8, 20], ["นักล่าค่าหัวมือใหม่", "คนรับจ้างเก็บหัว", "นักล่าค่าหัวชื่อดัง", "ตำนานนักล่าค่าหัว"]],
+  ["btyset", "📜", "social", "", "ตั้งค่าหัวคนอื่น", "ครั้ง", [1, 5, 15], ["ผู้ประกาศจับ", "เจ้าหนี้แค้นฝังหุ่น", "ผู้อยู่เบื้องหลังทุกการล่า"]],
+  ["evt", "🪂", "world", "", "ค้นหาในโซนที่เกิดเหตุการณ์ใหญ่", "ครั้ง", [3, 15, 50, 150], ["ไปถึงที่เกิดเหตุ", "ขาประจำเหตุการณ์", "นักล่าโอกาส", "ผู้อยู่กลางพายุ"]],
   ["chat", "💬", "social", "", "ส่งข้อความแชท", "ข้อความ", [20, 100, 400, 1500], ["ทักทายแรก", "คนช่างคุย", "แกนนำวงสนทนา", "เสียงแห่งซากเมือง"]],
   ["radio", "🎙️", "social", "", "ขึ้นวิทยุตอบสัมภาษณ์", "ครั้ง", [1, 5, 15], ["เสียงแรกทางคลื่น", "ดีเจเถื่อน", "ผู้ประกาศประจำคลื่น"]],
   ["npc", "🗣️", "social", "", "คุยกับ NPC", "ครั้ง", [3, 15, 50, 120], ["ได้ทักทาย", "เพื่อนร่วมค่าย", "คนสนิทคนหนึ่ง", "ผู้รู้ทุกเรื่องราว"]],
@@ -6163,7 +6170,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  feedListen(); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
+  feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -6190,6 +6197,7 @@ function worldRender(box) {
     else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
     box.append(row);
   });
+  try { evtWorldRows(box); bountyWorldRows(box); } catch (e) { console.warn("world rows", e); }
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
@@ -6239,7 +6247,7 @@ function feedListen() {
   }, (er) => console.warn("feed listen", er?.code || er));
 }
 
-const FAME = [["srch", "🔍 นักค้นหา", "ครั้ง"], ["zwin", "⚔️ นักล่าซอมบี้", "ครั้ง"], ["scrap", "🔩 ช่างซ่อมกำแพง", "ชิ้น"], ["smash", "🔨 ผู้ทลายกำแพง", "ครั้ง"], ["bite", "🦷 เขี้ยวคม", "ครั้ง"], ["trav", "🧭 นักเดินทาง", "ครั้ง"], ["craft", "🔧 ช่างฝีมือ", "ชิ้น"], ["mkt", "🏪 พ่อค้า", "ครั้ง"]];
+const FAME = [["srch", "🔍 นักค้นหา", "ครั้ง"], ["zwin", "⚔️ นักล่าซอมบี้", "ครั้ง"], ["scrap", "🔩 ช่างซ่อมกำแพง", "ชิ้น"], ["smash", "🔨 ผู้ทลายกำแพง", "ครั้ง"], ["bite", "🦷 เขี้ยวคม", "ครั้ง"], ["trav", "🧭 นักเดินทาง", "ครั้ง"], ["craft", "🔧 ช่างฝีมือ", "ชิ้น"], ["mkt", "🏪 พ่อค้า", "ครั้ง"], ["bty", "💰 นักล่าค่าหัว", "ครั้ง"], ["evt", "🪂 ผู้ร่วมเหตุการณ์", "ครั้ง"]];
 async function fameLoad() {
   const C = state.fameCache; if (C && serverNow() - C.at < 300000) return C.rows;
   const all = (await get(ref(db, "ach"))).val() || {};
@@ -6263,6 +6271,107 @@ async function fameRender(box) {
     FAME.forEach(([k, label, unit]) => block(label, rows.filter((r) => (r.c[k] || 0) > 0).sort((a, b) => (b.c[k] || 0) - (a.c[k] || 0)).slice(0, 3), (r) => `${(r.c[k] || 0).toLocaleString("en-US")} ${unit}`));
     block("📅 เข้าเล่นต่อเนื่องนานสุด", rows.filter((r) => (r.c.mxstrk || 0) > 0).sort((a, b) => (b.c.mxstrk || 0) - (a.c.mxstrk || 0)).slice(0, 3), (r) => `${r.c.mxstrk} วัน`);
   } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดหอเกียรติยศไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("fame", e); }
+}
+
+
+/* =========================================================
+   31) 💰 ค่าหัว (bounty)  +  ⚡ เหตุการณ์ใหญ่ทั้งเซิร์ฟเวอร์
+   ค่าหัว: bounty/{เป้าหมาย} = {by,bn,tn,ts,kb?} อยู่ได้ 90 นาที ตั้งได้ทุก 15 นาที (bountyBy)
+   เหตุการณ์: คำนวณจากวัน+ลำดับ (rdHash) ทุกเครื่องได้ตารางเดียวกัน ไม่ต้องมีเซิร์ฟเวอร์/rules
+   ========================================================= */
+const BTY_LIFE = 5400000, BTY_CD = 900000;
+state.bounty = state.bounty || {};
+const bountyActive = (b, now = serverNow()) => !!b && typeof b.ts === "number" && now - b.ts < BTY_LIFE && !b.kb;
+const bountyOn = (uid) => bountyActive(state.bounty?.[uid]);
+async function bountyPlace(uid, name) {
+  const p = state.profile; if (!p || p.hp <= 0 || uid === state.uid) return;
+  if (bountyOn(uid)) return toast(`${name} มีค่าหัวอยู่แล้ว`);
+  const left = BTY_CD - (serverNow() - LS.get(lsKey("btyat"), 0));
+  if (left > 0) return toast(`ตั้งค่าหัวได้อีกครั้งใน ~${Math.ceil(left / 60000)} นาที`);
+  if (!confirm(`ตั้งค่าหัว ${name}? ทุกคนจะได้ยินทางวิทยุ และค่าหัวอยู่ 90 นาที (คนที่ล้มเขาได้จะได้แต้มนักล่าค่าหัว)`)) return;
+  try {
+    await update(ref(db), { [`bounty/${uid}`]: { by: state.uid, bn: p.username, tn: name, ts: serverTimestamp() }, [`bountyBy/${state.uid}`]: { ts: serverTimestamp() } });
+    LS.set(lsKey("btyat"), serverNow()); achBump("btyset", 1); toast(`💰 ตั้งค่าหัว ${name} แล้ว`);
+  } catch (e) { toast(String(e?.code || e).includes("PERMISSION_DENIED") ? "ตั้งไม่ได้ — เป้าหมายมีค่าหัวอยู่ หรือคุณเพิ่งตั้งไป" : errMsg(e)); }
+}
+// ใส่ลงในคำสั่งอัปเดตตอนฆ่า: บอกว่าใครเก็บค่าหัว (rules ตรวจว่าเป้าหมาย HP=0 จริง และชื่อผู้ฆ่ามีอยู่จริง)
+function bountyKillWrite(u, targetUid, killerName) {
+  const b = state.bounty?.[targetUid]; if (!bountyActive(b) || !killerName || b.bn === killerName) return;
+  u[`bounty/${targetUid}/kb`] = String(killerName).slice(0, 16);
+}
+function bountyListen() {
+  if (state.btyOn || !state.uid) return; state.btyOn = true;
+  let first = true; const seen = {};
+  onValue(ref(db, "bounty"), (snap) => {
+    const all = snap.val() || {}, now = serverNow(), fresh = [];
+    state.bounty = all;
+    Object.entries(all).forEach(([uid, b]) => {
+      if (!b || typeof b.ts !== "number") return;
+      const key = `${b.ts}`, was = seen[uid] || {}, live = !first;
+      if (was.ts !== key && now - b.ts < BTY_LIFE) {
+        if (!(first && now - b.ts > 1800000)) fresh.push({ ts: b.ts, live, t: uid === state.uid ? `💰 ${b.bn} ประกาศค่าหัวบนตัวคุณ! ระวังตัวไว้ 90 นาที` : `💰 ${b.bn} ประกาศค่าหัว ${b.tn} — ใครล้มเขาได้ รับแต้มนักล่าค่าหัว!` });
+      }
+      if (b.kb && !was.kb && now - b.ts < BTY_LIFE + 600000) {
+        if (!(first && now - b.ts > 1800000)) fresh.push({ ts: Math.max(b.ts, now - 1), live, t: `🎯 ${b.kb} เก็บค่าหัวของ ${b.tn} ได้สำเร็จ (ผู้ตั้ง: ${b.bn})` });
+        const flag = lsKey("btykb_" + uid + "_" + b.ts);
+        if (!first && b.kb === state.profile?.username && !LS.get(flag, 0)) { LS.set(flag, 1); achBump("bty", 1); toast(`💰 เก็บค่าหัว ${b.tn} สำเร็จ!`); }
+      }
+      seen[uid] = { ts: key, kb: !!b.kb };
+    });
+    fresh.sort((a, b) => a.ts - b.ts).forEach((f) => radioPush(`📻 [วิทยุ] ${f.t}`, f.ts, f.live));
+    first = false;
+    document.querySelectorAll(".bty-btn").forEach(() => { /* ปุ่มอัปเดตเมื่อเปลี่ยนโซน/รายชื่อ */ });
+    try { if (state.psnap) renderPlayers(state.psnap); worldRefresh(); } catch { /* ข้าม */ }
+  }, (er) => console.warn("bounty", er?.code || er));
+}
+function bountyWorldRows(box) {
+  box.append(mk("div", "hub-day", "💰 ค่าหัวตอนนี้"));
+  const now = serverNow(), list = Object.entries(state.bounty || {}).filter(([, b]) => b && typeof b.ts === "number" && now - b.ts < BTY_LIFE).sort((a, b) => b[1].ts - a[1].ts);
+  if (!list.length) return box.append(mk("div", "muted", "ยังไม่มีใครถูกตั้งค่าหัว — กดปุ่ม 💰 ที่รายชื่อผู้เล่นเพื่อตั้ง"));
+  list.forEach(([uid, b]) => {
+    const row = mk("div", "world-row"), mins = Math.max(1, Math.ceil((BTY_LIFE - (now - b.ts)) / 60000));
+    row.append(mk("div", "", b.kb ? `🎯 ${b.tn} ถูก ${b.kb} เก็บค่าหัวแล้ว` : `💰 ${b.tn}${uid === state.uid ? " (คุณ!)" : ""}`), mk("div", "muted", b.kb ? `ผู้ตั้ง: ${b.bn}` : `ตั้งโดย ${b.bn} • เหลือ ~${mins} นาที`));
+    box.append(row);
+  });
+}
+
+/* ---- เหตุการณ์ใหญ่ ---- */
+const EVT_TYPES = {
+  air: { icon: "🪂", name: "เครื่องบินทิ้งเสบียง", say: (z) => `เครื่องบินขนส่งทิ้งเสบียงลงที่${z}! ค้นหาที่นั่นตอนนี้จะเจอของดีกว่าปกติ`, end: (z) => `เสบียงที่${z}ถูกเก็บจนเกลี้ยงแล้ว`, tip: "ค้นหาในโซนนี้เจอของมากขึ้น ของหายากออกง่ายขึ้น" },
+  horde: { icon: "🧟‍♂️", name: "ฝูงซอมบี้บุก", say: (z) => `มีรายงานฝูงซอมบี้ใหญ่เคลื่อนเข้าสู่${z}! ระวังตัวให้ดี (ซอมบี้: กลิ่นเลือดฟุ้ง เนื้อเน่าออกเยอะ)`, end: (z) => `ฝูงซอมบี้ที่${z}สลายตัวแล้ว`, tip: "มนุษย์: เจอซอมบี้บ่อยขึ้น • ซอมบี้: เนื้อเน่าออกเยอะขึ้น" }
+};
+const EVT_DUR = 30 * 60000, EVT_PER_DAY = 3;
+function evtOf(day, i) {
+  const dayStart = day * COOP_DAY_MS - COOP_TZ, zl = Object.keys(ZONES).filter((z) => z !== "safe");
+  const start = dayStart + (8 + i * 5) * 3600000 + (rdHash("evs", day, i) % (4 * 3600000));
+  const type = rdHash("evt", day, i) % 2 ? "air" : "horde", zone = zl[rdHash("evz", day, i) % zl.length];
+  return { key: `e${day}_${i}`, type, zone, start, end: start + EVT_DUR };
+}
+function evtList(now = serverNow()) { const d = coopDay(now), out = []; for (const dd of [d - 1, d, d + 1]) for (let i = 0; i < EVT_PER_DAY; i++) out.push(evtOf(dd, i)); return out; }
+const evtActive = (now = serverNow()) => evtList(now).filter((e) => now >= e.start && now < e.end);
+const evtHere = (zone = state.zone, now = serverNow()) => evtActive(now).find((e) => e.zone === zone) || null;
+function evtTable(t, isZ) {
+  const e = evtHere(); if (!e) return t;
+  if (e.type === "air") return t.map((d) => d.id === null ? { ...d, w: d.w * 0.4 } : (d.id === "zombie" || d.id === "boss") ? d : d.w <= 5 ? { ...d, w: d.w * 2.2 } : { ...d, w: d.w * 1.3 });
+  return t.map((d) => isZ ? (d.id === "rotten_meat" ? { ...d, w: d.w * 2.5 } : d.id === null ? { ...d, w: d.w * 0.6 } : d) : (d.id === "zombie" ? { ...d, w: d.w * 2 } : d.id === null ? { ...d, w: d.w * 0.7 } : d));
+}
+function evtSearchHook() { const e = evtHere(); if (e) { achBump("evt", 1); stat("evt"); } }
+function evtTick() {
+  if (!state.profile || !state.ach?.loaded) return;
+  const now = serverNow(), say = (k, text) => { if (LS.get(lsKey("evt_" + k), 0)) return; LS.set(lsKey("evt_" + k), 1); radioPush(`📻 [วิทยุฉุกเฉิน] ${text}`, now, true); };
+  evtList(now).forEach((e) => {
+    const T = EVT_TYPES[e.type], zn = ZONES[e.zone]?.name || e.zone;
+    if (now >= e.start && now < e.end) say("s" + e.key, `${T.icon} ${T.say(zn)} (เหลือ ~${Math.max(1, Math.ceil((e.end - now) / 60000))} นาที)`);
+    else if (now >= e.end && now < e.end + 600000) { if (LS.get(lsKey("evt_s" + e.key), 0)) say("e" + e.key, `${T.icon} ${T.end(zn)}`); }
+  });
+  try { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") worldRefresh(); } catch { /* ข้าม */ }
+}
+function evtWorldRows(box) {
+  box.append(mk("div", "hub-day", "⚡ เหตุการณ์ใหญ่"));
+  const now = serverNow(), act = evtActive(now), nxt = evtList(now).filter((e) => e.start > now).sort((a, b) => a.start - b.start)[0];
+  if (!act.length && !nxt) return;
+  act.forEach((e) => { const T = EVT_TYPES[e.type], row = mk("div", "world-row evt-live"); row.append(mk("div", "", `${T.icon} ${T.name} • ${ZONES[e.zone]?.name || e.zone}`), mk("div", "muted", `${T.tip} • เหลือ ~${Math.max(1, Math.ceil((e.end - now) / 60000))} นาที${state.zone === e.zone ? " • คุณอยู่ที่นี่!" : ""}`)); box.append(row); });
+  if (!act.length && nxt) { const m = Math.ceil((nxt.start - now) / 60000), row = mk("div", "world-row"); row.append(mk("div", "muted", `ยังไม่มีเหตุการณ์ตอนนี้ — รอบถัดไปในอีก ${m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`} (ไม่บอกล่วงหน้าว่าที่ไหน ฟังวิทยุไว้)`)); box.append(row); }
 }
 
 if (HAS_DOM) initNpcUi();
