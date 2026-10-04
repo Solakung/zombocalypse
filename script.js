@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.0747";
+const APP_VERSION = "2026-10-04.0836";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -592,6 +592,12 @@ function openGuide() {
     "Safe Zone ต่อสู้ไม่ได้และมีเสบียงแค่พอเสมอตัว ส่วนใหญ่เป็นวัสดุคราฟต์ อยากได้ของดีต้องออกไปโซนข้างนอก ซึ่งมีซอมบี้และผู้เล่นอื่น",
     "กดชื่อผู้เล่นในโซนเพื่อดูประวัติ กระซิบ หรือโจมตี (นอก Safe Zone เท่านั้น)"
   ]);
+  sec("คนในค่าย (มิรา / เคน)", [
+    "ที่ Safe Zone มี มิรา (พยาบาล) กับ เคน (ยามกำแพง) ให้คุยด้วย — กดการ์ด “คนในค่าย” ใต้รายการโซน",
+    "คุยครั้งแรกของวันได้ความสนิท (หัวใจ ❤️) + ของขวัญประจำวันที่ปุ่มภารกิจ หัวใจยิ่งเยอะ ของขวัญยิ่งดี และปลดล็อกเรื่องราวตอนใหม่ รวม 5 ตอน",
+    "คำตอบที่เลือกมีผลต่อเนื้อเรื่องและความสนิท ทั้งสองคนจำสิ่งที่คุณเคยเลือกได้ ออกจากฉากกลางคันจะไม่นับความคืบหน้าของฉากนั้น",
+    "ซอมบี้ก็คุยได้ แต่เขาจะระวังตัวกว่า"
+  ]);
   sec("หิวและกระหาย", [
     `อาหารของมนุษย์ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.human)} ซอมบี้หิวเร็วกว่า ลด 1 ทุก ${fmtDur(FOOD_DECAY_MS.zombie)}`,
     `น้ำลด 1 ทุก ${fmtDur(WATER_DECAY_MS)} ความหิวและกระหายหยุดนับตอนออกจากเกม (อาจคลาดเคลื่อนไม่กี่สิบวินาที)`,
@@ -713,6 +719,7 @@ function renderTravelState() {
     t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
   });
   try { zmapBadges(); } catch { /* ยังไม่พร้อม */ }
+  try { renderNpcBox(); } catch { /* ยังไม่พร้อม */ }
 }
 
 function renderBars() {
@@ -4014,7 +4021,7 @@ function qpResetIn(per, ms = serverNow()) {
 }
 function qpFmt(ms) { const m = Math.max(0, Math.ceil(ms / 60000)), d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60); return d ? `${d} วัน ${h} ชม.` : h ? `${h} ชม. ${m % 60} นาที` : `${m} นาที`; }
 function qpList(per) {   // เควสที่ฝ่ายของฉันทำได้ เรียงตามรหัส
-  return Object.entries(state.qDefs?.[per] || {}).filter(([, d]) => d && (d.dw === undefined || d.dw === qpWd())).filter(([, d]) => d && !d.f || d && d.f === state.profile?.faction)
+  return Object.entries(state.qDefs?.[per] || {}).filter(([, d]) => d && (d.dw === undefined || d.dw === qpWd())).filter(([, d]) => d && !d.f || d && d.f === state.profile?.faction).filter(([qid, d]) => npcQuestShown(per, qid, d))
     .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }));
 }
 function qpState(per, qid) {
@@ -4078,6 +4085,7 @@ function qpListen() {
   onValue(ref(db, "config/questDefs"), (s) => { state.qDefs = s.val() || {}; qpRefresh(); }, (e) => console.error("questDefs", e));
   onValue(ref(db, "questProg/" + state.uid), (s) => { state.qProg = s.val() || {}; qpRefresh(); }, (e) => console.error("questProg", e));
   setInterval(qpRefresh, 30000);   // อัปเดตนับถอยหลัง/ข้ามรอบเที่ยงคืน
+  npcListen();
 }
 function qpRefresh() {
   const b = $("btn-quests"); if (b) { const n = qpClaimable(); b.textContent = n ? `📜 ภารกิจ (${n} รับได้)` : "📜 ภารกิจ"; }
@@ -4123,7 +4131,7 @@ function qpRender() {
   if (state.profile?.role === "owner") {
     const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
-    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini")); c.append(r); body.append(c);
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini")); c.append(r); body.append(c);
   }
 }
 
@@ -4873,3 +4881,304 @@ function initMapUi() {
   const bars = document.querySelector(".bars"); if (bars && !$("hotbar")) { const h = mk("div", "hotbar hidden"); h.id = "hotbar"; bars.after(h); }
 }
 if (HAS_DOM) { initMapUi(); }
+
+/* =========================================================
+   NPC ในค่าย (sec24): มิรา / เคน — คุยแบบนิยายภาพ สะสมหัวใจ ได้ของขวัญรายวัน
+   - ข้อมูลความสัมพันธ์ npc/{uid}/{id} = { p: คะแนน 0-100, d: วันที่คุยล่าสุด(qpDayKey), s: ตอนเรื่องราวที่จบแล้ว 0-5,
+     m: บิตแฟลกความจำ (บิต 0-15 = แฟลกในบท, บิต 20 = แนะนำตัวแล้ว), v: บิตหัวข้อคุยที่เคยเจอ }
+   - บทพูดอยู่ในไฟล์ npc-{id}.json (โหลดตอนเปิดคุยครั้งแรก) — แก้/เพิ่มบทได้โดยไม่ต้องแตะ rules; ห้ามสลับลำดับ topics (บิต v ผูกกับลำดับ) ให้เพิ่มต่อท้ายเท่านั้น
+   - ของขวัญรายวัน = เควสรายวัน {id}_h1…h5 (ev=npc_{id}) ใน config/questDefs — เจ้าของกดปุ่ม "เติมเควส NPC" ในหน้าภารกิจหนึ่งครั้ง
+   ========================================================= */
+const NPC_IDS = ["mira", "kane"];
+const NPC_META = {
+  mira: { name: "มิรา", icon: "🧑‍⚕️", title: "หมอประจำค่าย", blurb: "ประจำเต็นท์พยาบาลริมกำแพง พูดน้อย มือนิ่งเสมอ ชอบชงชามอสให้คนที่ดูไม่ไหว" },
+  kane: { name: "เคน", icon: "🪖", title: "ยามเฝ้ากำแพง", blurb: "อดีตทหารช่าง เดินตรวจกำแพงทุกรอบ ห้วนๆ แต่จำได้ว่าใครกลับมาไม่ครบ" }
+};
+const NPC_HEART_AT = [8, 20, 36, 56, 80], NPC_INTRO_BIT = 1 << 20, NPC_DAILY_CAP = 4, NPC_FLAG_MASK = 0xFFFF;
+// ของขวัญตามหัวใจ (ต้องเป็นของที่ rules ของเควสอนุญาต, qty ≤ 20)
+const NPC_GIFT = {
+  mira: [
+    { human: { id: "bandage", qty: 1 }, zombie: { id: "rotten_meat", qty: 1 } },
+    { human: { id: "bandage", qty: 2 }, zombie: { id: "rotten_meat", qty: 2 } },
+    { human: { id: "antidote", qty: 1 }, zombie: { id: "rotten_meat", qty: 2 } },
+    { human: { id: "medkit", qty: 1 }, zombie: { id: "rotten_meat", qty: 3 } },
+    { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "rotten_meat", qty: 4 } }
+  ],
+  kane: [
+    { human: { id: "scrap", qty: 3 }, zombie: { id: "rotten_meat", qty: 1 } },
+    { human: { id: "canned_food", qty: 2 }, zombie: { id: "rotten_meat", qty: 1 } },
+    { human: { id: "army_meal", qty: 1 }, zombie: { id: "rotten_meat", qty: 2 } },
+    { human: { id: "energy_drink", qty: 2 }, zombie: { id: "rotten_meat", qty: 3 } },
+    { human: { id: "stim_shot", qty: 1 }, zombie: { id: "rotten_meat", qty: 3 } }
+  ]
+};
+const NPC_DATA = {};
+const npcRec = (id) => ({ p: 0, d: 0, s: 0, m: 0, v: 0, ...(state.npc?.[id] || {}) });
+const npcHeartsOf = (p) => NPC_HEART_AT.filter((x) => p >= x).length;
+const npcHearts = (id) => npcHeartsOf(npcRec(id).p);
+const npcToday = () => qpDayKey(serverNow());
+const npcHeartStr = (h) => "❤️".repeat(h) + "🤍".repeat(5 - h);
+const npcChapterReady = (id) => { const r = npcRec(id); return !!(r.m & NPC_INTRO_BIT) && r.s < 5 && npcHeartsOf(r.p) >= r.s + 1; };
+
+function npcQuestSeed() {
+  const o = {};
+  NPC_IDS.forEach((id) => NPC_GIFT[id].forEach((g, i) => {
+    o[`${id}_h${i + 1}`] = { title: `${NPC_META[id].icon} คุยกับ${NPC_META[id].name} (❤️${i + 1}) รับของขวัญ`, desc: `คุยกับ${NPC_META[id].name}ที่ Safe Zone วันละครั้ง (ของขวัญดีขึ้นตามหัวใจ)`, ev: "npc_" + id, need: 1, r: g };
+  }));
+  return o;
+}
+async function qpSeedNpc() {
+  if (state.profile?.role !== "owner") return;
+  if (!confirm("เติมเควส NPC?\nจะเพิ่ม/อัปเดตเควส mira_h1…h5, kane_h1…h5 (10 ข้อ) ใน config/questDefs/daily โดยไม่แตะเควสอื่น")) return;
+  try { await update(ref(db, "config/questDefs/daily"), npcQuestSeed()); toast("เติมเควส NPC แล้ว"); }
+  catch (e) { console.error("qpSeedNpc", e?.code || e); toast(errMsg(e)); }
+}
+// เควสของขวัญ NPC: แสดงเฉพาะขั้นสูงสุดที่หัวใจถึง (วันละหนึ่งชิ้นต่อ NPC)
+function npcQuestShown(per, qid, d) {
+  if (!d || typeof d.ev !== "string" || !d.ev.startsWith("npc_")) return true;
+  const id = d.ev.slice(4), m = /_h(\d)$/.exec(qid);
+  if (!m || !NPC_IDS.includes(id) || !qid.startsWith(id + "_h")) return true;
+  const tier = +m[1], hearts = npcHearts(id);
+  if (tier > hearts) return false;
+  const top = Math.max(0, ...Object.keys(state.qDefs?.[per] || {}).filter((k) => k.startsWith(id + "_h")).map((k) => +k.slice(id.length + 2)).filter((n) => n <= hearts));
+  return tier === top;
+}
+function npcListen() {
+  if (state.npcOn || !state.uid) return; state.npcOn = true; state.npc = {};
+  onValue(ref(db, "npc/" + state.uid), (s) => { state.npc = s.val() || {}; try { renderNpcBox(); qpRefresh(); } catch { /* ยังไม่พร้อม */ } }, (e) => console.error("npc", e));
+}
+async function npcLoad(id) {
+  if (NPC_DATA[id]) return NPC_DATA[id];
+  try { const r = await fetch(`npc-${id}.json`, { cache: "no-cache" }); if (!r.ok) throw new Error(r.status); NPC_DATA[id] = await r.json(); return NPC_DATA[id]; }
+  catch (e) { console.warn("npc load", id, e); toast("โหลดบทสนทนาไม่สำเร็จ ลองใหม่อีกครั้ง"); return null; }
+}
+function npcCtx() {
+  const p = state.profile || {}, dk = dayKey();
+  return {
+    slot: timeSlot(), zombie: p.faction === "zombie", human: p.faction !== "zombie",
+    hurt: p.hp > 0 && p.hp < maxHp() * 0.4, hungry: curFood() < 30 || curWater() < 30,
+    wallbroken: (() => { try { return wallBroken(); } catch { return false; } })(),
+    wboss: Object.values(state.wb || {}).some((b) => wbAlive(b)),
+    died: (statSum(dk, dk).death || 0) > 0, infected: !!p.infected && p.faction === "human"
+  };
+}
+const npcPick = (a) => (a && a.length ? a[Math.floor(Math.random() * a.length)] : null);
+function npcGreeting(data, id) {
+  const g = data.greet || {}, c = npcCtx(), h = npcHearts(id);
+  const act = ["zombie", "infected", "wallbroken", "died", "hurt", "hungry", "wboss"].filter((k) => c[k] && g.cond?.[k]?.length);
+  const r = Math.random();
+  let pool;
+  if (act.length && r < (c.zombie ? 0.5 : 0.55)) pool = g.cond[act.length > 1 && c.zombie && Math.random() < 0.4 ? npcPick(act.filter((k) => k !== "zombie")) || "zombie" : npcPick(act)];
+  else if (r < 0.85 && g.slot?.[c.slot]?.length) pool = g.slot[c.slot];
+  else pool = g.byHearts?.[h] || g.byHearts?.["0"];
+  return npcPick((pool || []).filter((l) => !l.f || l.f === (c.zombie ? "zombie" : "human")));
+}
+function npcPickTopic(data, id) {
+  const rec = npcRec(id), c = npcCtx(), h = npcHearts(id), T = data.topics || [];
+  const ok = (s, i, ignoreSeen) => s.min <= h && (!s.for || s.for === (c.zombie ? "zombie" : "human")) && (!s.when || s.when === c.slot) && (!s.if || c[s.if]) && (ignoreSeen || !(rec.v & (1 << i)));
+  let cand = T.map((s, i) => [s, i]).filter(([s, i]) => ok(s, i, false));
+  let reset = false;
+  if (!cand.length) { cand = T.map((s, i) => [s, i]).filter(([s, i]) => ok(s, i, true)); reset = true; }
+  if (!cand.length) return null;
+  const sc = ([s]) => (s.if ? 4 : 0) + (s.when ? 2 : 0) + (s.min === h ? 1 : 0) + Math.random() * 3;
+  cand.sort((a, b) => sc(b) - sc(a));
+  return { scene: cand[0][0], idx: cand[0][1], reset };
+}
+
+/* ---- เครื่องเล่นฉาก (UI แบบนิยายภาพ) ---- */
+const npcRun = { tok: 0, mode: "", skip: null, adv: null, id: null, lines: 0 };
+const NPC_CPS = 42;
+const npcName = () => state.profile?.username || "คุณ";
+function npcTap() { if (npcRun.mode === "typing") npcRun.skip?.(); else if (npcRun.mode === "wait") npcRun.adv?.(); }
+function npcEnsureModal() {
+  let m = $("npc-modal"); if (m) return m;
+  m = mk("div", "modal hidden"); m.id = "npc-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+  const bx = mk("div", "modal-box npc-vn"), hd = mk("div", "npc-head");
+  const face = mk("div", "npc-face"); face.id = "npc-face";
+  const info = mk("div", "npc-info"); info.id = "npc-info";
+  hd.append(face, info, btn("ปิด", () => npcClose(), "btn ghost mini"));
+  const log = mk("div", "npc-log"); log.id = "npc-log"; log.addEventListener("click", npcTap);
+  const ctl = mk("div", "npc-ctl"); ctl.id = "npc-ctl";
+  bx.append(hd, log, ctl); m.append(bx); document.body.append(m);
+  m.addEventListener("click", (e) => { if (e.target === m) npcClose(); });
+  return m;
+}
+function npcClose(force) {
+  const m = $("npc-modal"); if (!m || m.classList.contains("hidden")) return;
+  if (!force && npcRun.mode && npcRun.lines > 0 && npcRun.inScene && !confirm("ออกกลางคัน?\nความคืบหน้าของฉากนี้จะไม่ถูกบันทึก")) return;
+  npcRun.tok++; npcRun.mode = ""; npcRun.inScene = false; m.classList.add("hidden");
+}
+function npcHeader(id) {
+  const rec = npcRec(id), h = npcHeartsOf(rec.p), meta = NPC_META[id], info = $("npc-info"); if (!info) return;
+  info.textContent = "";
+  const nxt = h < 5 ? NPC_HEART_AT[h] : null, prev = h ? NPC_HEART_AT[h - 1] : 0;
+  const bar = mk("div", "npc-pbar"), fill = mk("i"); fill.style.width = (nxt ? Math.max(4, Math.min(100, ((rec.p - prev) / (nxt - prev)) * 100)) : 100) + "%"; bar.append(fill);
+  info.append(mk("b", "npc-nm", `${meta.name} `), mk("small", "muted", meta.title), mk("div", "npc-hearts", npcHeartStr(h)), bar);
+}
+function npcFace(e) { const f = $("npc-face"); if (f) f.textContent = e; }
+function npcScroll() { const l = $("npc-log"); if (l) l.scrollTop = l.scrollHeight; }
+function npcSetCtl(...els) { const c = $("npc-ctl"); c.textContent = ""; els.forEach((e) => e && c.append(e)); }
+const npcFlagBit = (flags, n) => { const i = (npcRun.flagNames || []).indexOf(n); return i >= 0 && !!(flags & (1 << i)); };
+// แปลงบรรทัดบท → ส่วนที่จะแสดง [{t,e,nar}] (กรองตามฝ่าย/แฟลก, แยกบรรยาย "*...*" ออกจากคำพูด)
+function npcParts(l, flags, zom) {
+  const o = typeof l === "string" ? { t: l } : l || {}; if (!o.t) return [];
+  if (o.f && o.f !== (zom ? "zombie" : "human")) return [];
+  if (o.if && !npcFlagBit(flags, o.if)) return []; if (o.not && npcFlagBit(flags, o.not)) return [];
+  let t = String(o.t).replace(/\{name\}/g, npcName()), e = o.e || null;
+  const m = /^(\S{1,8})\|/u.exec(t); if (m) { e = m[1]; t = t.slice(m[0].length); }
+  t = t.trim(); if (!t) return [];
+  if (!t.startsWith("*")) return [{ t, e, nar: false }];
+  const mm = /^\*([^*]+)\*\s*([\s\S]*)$/.exec(t), out = [];
+  if (mm) { out.push({ t: mm[1].trim(), e, nar: true }); if (mm[2].trim()) out.push({ t: mm[2].trim(), e: null, nar: false }); }
+  else { const x = t.replace(/^\*+|\*+$/g, "").trim(); if (x) out.push({ t: x, e, nar: true }); }
+  return out;
+}
+async function npcSay(raw, flags, tok, id) {
+  for (const o of npcParts(raw, flags, state.profile?.faction === "zombie")) if (!(await npcSayPart(o, tok, id))) return false;
+  return true;
+}
+async function npcSayPart(o, tok, id) {
+  if (npcRun.tok !== tok) return false;
+  const log = $("npc-log"), b = mk("div", "npc-b " + (o.nar ? "nar" : "npc"));
+  if (o.e) npcFace(o.e);
+  if (!o.nar) b.append(mk("small", "npc-who", NPC_META[id].name)); const tx = mk("span", "npc-tx"); b.append(tx); log.append(b); npcRun.lines++;
+  npcRun.mode = "typing";
+  await new Promise((res) => {
+    let i = 0; const t = o.t; npcRun.skip = () => { i = t.length; tx.textContent = t; npcScroll(); res(); };
+    const tick = () => { if (npcRun.tok !== tok || npcRun.mode !== "typing") return res(); i = Math.min(t.length, i + 1 + (t[i] === " " ? 1 : 0)); tx.textContent = t.slice(0, i); npcScroll(); if (i >= t.length) return res(); setTimeout(tick, 1000 / NPC_CPS); };
+    tick();
+  });
+  if (npcRun.tok !== tok) return false;
+  tx.textContent = o.t; npcScroll();
+  npcSetCtl(btn("▶ ต่อ", () => npcTap(), "btn primary npc-next"));
+  npcRun.mode = "wait";
+  await new Promise((res) => { npcRun.adv = res; });
+  npcRun.mode = ""; if (npcRun.tok !== tok) return false;
+  return true;
+}
+async function npcAsk(choices, flags, tok) {
+  let list = choices.filter((c) => (!c.if || npcFlagBit(flags, c.if)) && (!c.not || !npcFlagBit(flags, c.not)));
+  if (!list.length) list = choices.slice(0, 1);
+  return new Promise((res) => {
+    npcRun.mode = "ask";
+    const wrap = mk("div", "npc-choices");
+    list.forEach((c) => wrap.append(btn(c.t, () => {
+      if (npcRun.tok !== tok) return; npcRun.mode = "";
+      const b = mk("div", "npc-b me"); b.append(mk("span", "npc-tx", c.t)); $("npc-log").append(b); npcScroll(); npcRun.lines++;
+      npcSetCtl(); res(c);
+    }, "btn ghost npc-choice")));
+    npcSetCtl(wrap); npcScroll();
+  });
+}
+// เล่นหนึ่งฉาก → { m, gained } หรือ null ถ้าถูกปิดกลางคัน
+async function npcPlay(id, scene, flags0, tok) {
+  let flags = flags0, gained = 0, nid = scene.start, guard = 0; npcRun.inScene = true; npcRun.lines = 0;
+  while (nid && guard++ < 300) {
+    const n = scene.nodes[nid]; if (!n) break;
+    const setF = (arr) => (arr || []).forEach((f) => { const i = (npcRun.flagNames || []).indexOf(f); if (i >= 0) flags |= 1 << i; });
+    setF(n.set);
+    for (const l of n.say || []) if (!(await npcSay(l, flags, tok, id))) { npcRun.inScene = false; return null; }
+    if (n.ask) { const c = await npcAsk(n.ask, flags, tok); if (npcRun.tok !== tok) { npcRun.inScene = false; return null; } gained += Math.max(0, Math.min(3, c.p || 0)); setF(c.set); nid = c.next; }
+    else if (n.next) nid = n.next; else nid = null;
+  }
+  npcRun.inScene = false; return { m: flags, gained };
+}
+async function npcSave(id, kind, scene, idx, res) {
+  const rec = npcRec(id), today = npcToday(), first = rec.d !== today, hBefore = npcHeartsOf(rec.p);
+  let gain = first ? Math.min(NPC_DAILY_CAP, res.gained) : 0;
+  if (kind === "intro" || kind === "chapter") gain += Math.max(0, Math.min(4, scene.bonus ?? 4));
+  const nr = { p: Math.min(100, rec.p + gain), d: today, s: rec.s, m: (res.m | (kind === "intro" ? NPC_INTRO_BIT : 0)) >>> 0, v: rec.v };
+  if (kind === "chapter") nr.s = Math.min(5, rec.s + 1);
+  if (kind === "daily" && idx >= 0) nr.v = (rec.v | (1 << idx)) >>> 0;
+  try {
+    await set(ref(db, `npc/${state.uid}/${id}`), nr);
+  } catch (e) { console.error("npcSave", e?.code || e); toast("บันทึกความสัมพันธ์ไม่สำเร็จ — ลองใหม่อีกครั้ง"); return null; }
+  state.npc = { ...(state.npc || {}), [id]: nr };
+  stat("npc");
+  if (first) questBump("npc_" + id);
+  renderNpcBox(); npcHeader(id);
+  return { gain, hUp: npcHeartsOf(nr.p) > hBefore, hearts: npcHeartsOf(nr.p), first };
+}
+function npcSummary(id, r) {
+  const wrap = mk("div", "npc-sum");
+  if (r.gain > 0) wrap.append(mk("div", "npc-gain", `💗 ความสนิทเพิ่มขึ้น +${r.gain}`));
+  else wrap.append(mk("div", "npc-gain muted", "วันนี้คุยแล้ว — พรุ่งนี้ค่อยมาใหม่ได้ความสนิทเพิ่ม"));
+  if (r.hUp) wrap.append(mk("div", "npc-up", `✨ หัวใจเพิ่มเป็น ${npcHeartStr(r.hearts)}`));
+  if (r.first && state.qDefs?.daily && Object.keys(state.qDefs.daily).some((k) => k.startsWith(id + "_h"))) wrap.append(mk("div", "npc-gift", "🎁 ของขวัญวันนี้รอรับที่ปุ่ม “ภารกิจ”"));
+  return wrap;
+}
+async function npcMenu(id, greetFirst) {
+  const tok = npcRun.tok, data = await npcLoad(id); if (!data || npcRun.tok !== tok) return;
+  npcRun.flagNames = data.flags || []; npcRun.id = id; npcFace(NPC_META[id].icon); npcHeader(id);
+  const rec = npcRec(id), zom = state.profile?.faction === "zombie";
+  if (!(rec.m & NPC_INTRO_BIT)) {   // ครั้งแรก: ฉากแนะนำตัว
+    const res = await npcPlay(id, data.intro, rec.m, tok); if (!res) return;
+    const sv = await npcSave(id, "intro", data.intro, -1, res); npcFace(NPC_META[id].icon);
+    if (npcRun.tok !== tok) return;
+    npcSetCtl(sv ? npcSummary(id, sv) : null, btn("ต่อ", () => npcMenu(id, false), "btn primary")); return;
+  }
+  if (greetFirst) { const g = npcGreeting(data, id); if (g && !(await npcSay(g, rec.m, tok, id))) return; npcFace(NPC_META[id].icon); }
+  if (npcRun.tok !== tok) return;
+  const today = npcRec(id).d === npcToday(), opts = mk("div", "npc-menu");
+  opts.append(btn(today ? "💬 คุยเล่นต่อ" : "💬 คุยกัน", () => npcDaily(id), "btn primary npc-opt"));
+  if (npcChapterReady(id)) opts.append(btn(`📖 เรื่องราวของ${NPC_META[id].name} · ตอนที่ ${rec.s + 1} ✨`, () => npcChapter(id), "btn npc-opt npc-new"));
+  else if (rec.s < 5 && data.chapters?.[rec.s]) opts.append(mk("div", "npc-lock", `🔒 เรื่องราวตอนที่ ${rec.s + 1} — ต้องมีหัวใจ ${rec.s + 1} ดวง`));
+  opts.append(btn("👋 ลาก่อน", async () => { const tk = npcRun.tok; const b = npcPick(data.bye); npcSetCtl(); if (b && (await npcSay(b, npcRec(id).m, tk, id))) npcClose(true); }, "btn ghost npc-opt"));
+  const tip = mk("small", "muted npc-tip", today ? "วันนี้คุยแล้ว ✓" : "คุยครั้งแรกของวันได้ความสนิท + ของขวัญ");
+  npcSetCtl(tip, opts);
+}
+async function npcDaily(id) {
+  const tok = npcRun.tok, data = await npcLoad(id); if (!data) return;
+  const rec = npcRec(id);
+  if (rec.d === npcToday()) {   // คุยแล้ววันนี้ → แค่คุยเล่นสั้นๆ ไม่เปลืองบท
+    npcSetCtl(); const l = npcPick(data.repeat); if (l && !(await npcSay(l, rec.m, tok, id))) return; npcFace(NPC_META[id].icon); return npcMenu(id, false);
+  }
+  const pk = npcPickTopic(data, id);
+  if (!pk) { npcSetCtl(); const l = npcPick(data.repeat); if (l && !(await npcSay(l, rec.m, tok, id))) return; return npcMenu(id, false); }
+  npcSetCtl();
+  const res = await npcPlay(id, pk.scene, rec.m, tok); if (!res) return;
+  if (pk.reset) { /* บทหมดแล้ว: เริ่มวนใหม่ */ }
+  const r0 = npcRec(id); if (pk.reset) state.npc = { ...(state.npc || {}), [id]: { ...r0, v: 0 } };
+  const sv = await npcSave(id, "daily", pk.scene, pk.idx, res); npcFace(NPC_META[id].icon);
+  if (npcRun.tok !== tok) return;
+  npcSetCtl(sv ? npcSummary(id, sv) : null, btn("ต่อ", () => npcMenu(id, false), "btn primary"));
+}
+async function npcChapter(id) {
+  const tok = npcRun.tok, data = await npcLoad(id); if (!data) return;
+  const rec = npcRec(id), sc = data.chapters?.[rec.s]; if (!sc || !npcChapterReady(id)) return npcMenu(id, false);
+  npcSetCtl();
+  const res = await npcPlay(id, sc, rec.m, tok); if (!res) return;
+  const sv = await npcSave(id, "chapter", sc, -1, res); npcFace(NPC_META[id].icon);
+  if (npcRun.tok !== tok) return;
+  npcSetCtl(sv ? npcSummary(id, sv) : null, btn("ต่อ", () => npcMenu(id, false), "btn primary"));
+}
+function npcOpen(id) {
+  if (!NPC_META[id] || !state.profile || state.profile.hp <= 0) return;
+  if (state.zone !== "safe") return toast("NPC อยู่ที่ Safe Zone");
+  if (state.boss) return toast("กำลังสู้อยู่ ไปคุยทีหลัง");
+  const m = npcEnsureModal(); $("npc-log").textContent = ""; npcSetCtl(); npcRun.tok++; npcRun.mode = ""; npcRun.inScene = false; npcRun.lines = 0;
+  m.classList.remove("hidden"); npcFace(NPC_META[id].icon); npcHeader(id); npcMenu(id, true);
+}
+
+/* ---- การ์ดคนในค่าย (ใต้รายการโซน, เฉพาะอยู่ Safe Zone) ---- */
+function renderNpcBox() {
+  const box = $("npc-box"); if (!box) return;
+  const show = state.zone === "safe" && !!state.profile && state.profile.hp > 0;
+  const sig = show ? [state.uid, npcToday(), ...NPC_IDS.map((id) => { const r = npcRec(id); return `${r.p}:${r.d}:${r.s}:${r.m & NPC_INTRO_BIT}`; })].join("|") : "";
+  box.classList.toggle("hidden", !show);
+  if (!show || box.dataset.sig === sig) return;
+  box.dataset.sig = sig; box.textContent = "";
+  box.append(mk("h2", "", "👥 คนในค่าย"));
+  NPC_IDS.forEach((id) => {
+    const m = NPC_META[id], r = npcRec(id), met = !!(r.m & NPC_INTRO_BIT), h = npcHeartsOf(r.p), today = r.d === npcToday();
+    const card = mk("button", "npc-card"); card.type = "button"; card.dataset.npc = id;
+    const st = !met ? "ยังไม่เคยคุย — แวะไปทักทาย" : npcChapterReady(id) ? "✨ มีเรื่องเล่าตอนใหม่" : today ? "วันนี้คุยแล้ว ✓" : "🎁 วันนี้ยังไม่ได้คุย";
+    const tx = mk("div", "npc-ct"); tx.append(mk("b", "", `${m.name} `), mk("small", "muted", m.title), mk("div", "npc-hearts", met ? npcHeartStr(h) : "🤍🤍🤍🤍🤍"), mk("small", "npc-st", st));
+    card.append(mk("div", "npc-ic", m.icon), tx, mk("span", "npc-go", "💬"));
+    card.addEventListener("click", () => npcOpen(id)); box.append(card);
+  });
+}
+function initNpcUi() {
+  if (!$("npc-box")) { const ul = $("zone-list"); if (ul) { const b = mk("div", "npc-box hidden"); b.id = "npc-box"; ul.after(b); } }
+}
+if (HAS_DOM) initNpcUi();
