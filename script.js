@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1026";
+const APP_VERSION = "2026-10-04.1037";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1266,7 +1266,7 @@ function renderPlayers(snap) {
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
-        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-sk-id"].forEach((id) => { $(id).value = c.key; });
+        ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-gv-id", "adm-sk-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
         $("admin-modal").classList.remove("hidden");
       }, "btn ghost mini"));
@@ -2649,7 +2649,7 @@ function buildAdmin() {
   itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
-  buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor();
+  buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor(); buildGiveUi();
   buildSkillBox("adm-skill-box", "adm-spk-"); buildSkillBox("adm-q-skill-box", "adm-q-spk-");
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
@@ -2918,6 +2918,52 @@ $("adm-se-save").addEventListener("click", async () => {
     if (!(await get(ref(db, "stats/" + pid))).exists()) return toast("ผู้เล่นยังไม่ได้แจกแต้มสเตตัส แก้ให้ไม่ได้");
     await set(ref(db, "stats/" + pid), vals);
     toast(`แก้สเตตัสของ ${t.val().username} แล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+});
+// ให้บัฟ/ดีบัฟชั่วคราว + สถานะพิเศษกับผู้เล่นโดยตรง (rules เดิมให้ GM/Owner เขียน buffs/effects ได้อยู่แล้ว — ช่วงค่าอิงตาม .validate เดิม)
+const BF_MIN = { str: -5, hp: -2, st: -3, regen: -1, agi: -5, tough: -5 };
+function buildGiveUi() {
+  const box = $("adm-bf-box"), sel = $("adm-fx-type"); if (!box || !sel) return;
+  box.innerHTML = ""; sel.innerHTML = "";
+  STAT_KEYS.forEach((k) => {
+    const row = mk("label", "", STAT_LABEL[k]); row.style.cssText = "display:grid;gap:4px;font-weight:400";
+    const i = document.createElement("input"); i.type = "number"; i.id = "adm-bf-" + k; i.placeholder = `${BF_MIN[k]} ถึง 99`;
+    row.append(i); box.append(row);
+  });
+  FX_KEYS.forEach((t) => { const o = document.createElement("option"); o.value = t; o.textContent = `${FX_TYPES[t].icon} ${FX_TYPES[t].name}`; sel.append(o); });
+}
+async function giveTarget() {
+  const pid = $("adm-gv-id").value.trim(); if (!pid) { toast("ใส่ Player ID ก่อน"); return null; }
+  const t = await get(ref(db, "users/" + pid));
+  if (!t.exists()) { toast("ไม่พบ Player ID นี้"); return null; }
+  if (state.profile?.role !== "owner" && (t.val().role || "player") !== "player") { toast("GM ให้ได้เฉพาะผู้เล่นทั่วไป"); return null; }
+  return { pid, name: t.val().username };
+}
+$("adm-bf-give")?.addEventListener("click", async () => {
+  try {
+    const tg = await giveTarget(); if (!tg) return;
+    const mins = Number($("adm-bf-min").value);
+    if (!Number.isInteger(mins) || mins < 1 || mins > BUFF_MAX_MIN) return toast(`นาทีต้องเป็นจำนวนเต็ม 1–${BUFF_MAX_MIN}`);
+    const b = { bstart: serverTimestamp(), mins }; let any = false;
+    for (const k of STAT_KEYS) {
+      const raw = $("adm-bf-" + k).value, n = raw === "" ? 0 : Number(raw);
+      if (!Number.isInteger(n) || n < BF_MIN[k] || n > 99) return toast(`${STAT_LABEL[k]} ต้องเป็นจำนวนเต็ม ${BF_MIN[k]} ถึง 99`);
+      b[k] = n; if (n) any = true;
+    }
+    if (!any) return toast("ใส่ค่าอย่างน้อย 1 ช่อง");
+    await set(ref(db, "buffs/" + tg.pid), b);
+    toast(`ให้บัฟ/ดีบัฟแก่ ${tg.name} นาน ${mins} นาทีแล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+});
+$("adm-fx-give")?.addEventListener("click", async () => {
+  try {
+    const tg = await giveTarget(); if (!tg) return;
+    const type = $("adm-fx-type").value, v = Number($("adm-fx-v").value), mins = Number($("adm-fx-min").value);
+    if (!Number.isInteger(mins) || mins < 1 || mins > FX_MAX_MIN) return toast(`นาทีต้องเป็นจำนวนเต็ม 1–${FX_MAX_MIN}`);
+    const ok = type === "dice" ? Number.isInteger(v) && v >= -5 && v <= 5 && v !== 0 : type === "stun" ? v === 1 : Number.isInteger(v) && v >= 1 && v <= 20;
+    if (!ok) return toast(type === "dice" ? "ทอยเต๋า: v ต้องเป็น −5..5 (ไม่ใช่ 0)" : type === "stun" ? "มึนงง: v ต้องเป็น 1" : "v ต้องเป็นจำนวนเต็ม 1–20");
+    await set(ref(db, `effects/${tg.pid}/${type}`), { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() });
+    toast(`ให้${FX_TYPES[type].name}แก่ ${tg.name} นาน ${mins} นาทีแล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
 $("adm-se-cleareff").addEventListener("click", async () => {
