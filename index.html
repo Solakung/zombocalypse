@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-04.1044">
+  <link rel="stylesheet" href="style.css?v=2026-10-04.1122">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -253,6 +253,17 @@
       <div class="modal-head">
         <h2 id="adm-title">Admin Console</h2>
         <button id="adm-close" class="btn ghost">ปิด</button>
+      </div>
+
+      <div class="adm-section" id="adm-dash">
+        <h3>แดชบอร์ดผู้เล่น</h3>
+        <div id="adm-dash-sum" class="muted" style="display: flex; flex-wrap: wrap; gap: 6px;"></div>
+        <div class="row-btns">
+          <select id="adm-dash-filter" style="flex: 1;"></select>
+          <button id="adm-dash-refresh" class="btn ghost">รีเฟรช</button>
+        </div>
+        <div id="adm-dash-list" style="display: grid; gap: 6px; max-height: 50vh; overflow-y: auto;"></div>
+        <p class="muted" id="adm-dash-note">กดรีเฟรชเพื่อโหลด (รีเฟรชเองทุก 30 วินาทีขณะเปิดหน้านี้) • ออนไลน์ = ส่งสัญญาณภายใน 90 วินาที • โซนที่แสดงคือโซนล่าสุดที่บันทึกไว้ แม้ออฟไลน์</p>
       </div>
 
       <div class="adm-section">
@@ -509,6 +520,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-04.1044"></script>
+  <script type="module" src="script.js?v=2026-10-04.1122"></script>
 </body>
 </html>

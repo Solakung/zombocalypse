@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1044";
+const APP_VERSION = "2026-10-04.1122";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2657,7 +2657,7 @@ function buildAdmin() {
 $("btn-admin").addEventListener("click", () => {
   if (!isStaff()) return;
   $("adm-clear-zone").value = state.zone; watchMutes();
-  $("admin-modal").classList.remove("hidden");
+  $("admin-modal").classList.remove("hidden"); loadDash();
 });
 $("adm-close").addEventListener("click", () => $("admin-modal").classList.add("hidden"));
 $("adm-mode").addEventListener("change", (e) => {
@@ -2966,6 +2966,67 @@ $("adm-gfx-give")?.addEventListener("click", async () => {
     toast(`ให้${FX_TYPES[type].name}แก่ ${tg.name} นาน ${mins} นาทีแล้ว`);
   } catch (e) { toast(errMsg(e)); }
 });
+// แดชบอร์ดผู้เล่น (Staff): รวมรายชื่อจาก stats (ทุกคนที่แจกแต้มแล้ว) + zonePlayers (ผู้ที่ออนไลน์อยู่) แล้วอ่าน users/effects/buffs ทีละคน (rules ให้ staff อ่านได้) — อ่านอย่างเดียว ไม่เขียนอะไร
+const DASH_ONLINE_MS = 90000;
+const dashAgo = (ms) => { const m = Math.floor(ms / 60000); return m < 1 ? "เมื่อครู่" : m < 60 ? `${m} นาทีที่แล้ว` : m < 1440 ? `${Math.floor(m / 60)} ชม.ที่แล้ว` : `${Math.floor(m / 1440)} วันที่แล้ว`; };
+function buildDashFilter() {
+  const sel = $("adm-dash-filter"); if (!sel || sel.options.length) return;
+  [["all", "ทั้งหมด"], ["online", "🟢 ออนไลน์"], ["offline", "⚪ ออฟไลน์"], ["inf", "🦠 ติดเชื้อ"], ["fx", "⚠️ มีสถานะ/บัฟ"], ["ban", "🚫 ถูกแบน"], ...Object.keys(ZONES).map((z) => ["z:" + z, "📍 " + ZONES[z].name])]
+    .forEach(([v, t]) => { const o = document.createElement("option"); o.value = v; o.textContent = t; sel.append(o); });
+}
+async function loadDash() {
+  const list = $("adm-dash-list"), sumEl = $("adm-dash-sum"); if (!list || !isStaff() || state.dashBusy) return;
+  state.dashBusy = true; buildDashFilter();
+  try {
+    const uids = new Set(Object.keys((await get(ref(db, "stats"))).val() || {}));
+    const zp = await Promise.all(Object.keys(ZONES).map((z) => get(ref(db, "zonePlayers/" + z)).catch(() => null)));
+    zp.forEach((s) => s?.forEach((c) => { uids.add(c.key); }));
+    const now = serverNow();
+    const rows = (await Promise.all([...uids].map(async (uid) => {
+      const [u, e, b] = await Promise.all([get(ref(db, "users/" + uid)), get(ref(db, "effects/" + uid)), get(ref(db, "buffs/" + uid))]);
+      const v = u.val(); if (!v) return null;
+      const fx = Object.entries(e.val() || {}).filter(([, x]) => x && x.bstart + x.mins * 60000 > now).map(([t, x]) => (FX_TYPES[t]?.icon || "") + (t === "poison" && x.v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t]?.name || t));
+      const bv = b.val(), buff = bv && bv.bstart + bv.mins * 60000 > now ? STAT_KEYS.filter((k) => bv[k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(bv[k])}`).join(" ") : "";
+      return { uid, name: v.username || "?", faction: v.faction, role: v.role || "player", banned: v.banned === true, zone: v.zone, hp: v.hp, inf: !!v.infected, seen: typeof v.seenAt === "number" ? v.seenAt : 0, fx, buff };
+    }))).filter(Boolean);
+    rows.forEach((r) => { r.on = r.seen && now - r.seen < DASH_ONLINE_MS; });
+    rows.sort((a, c) => (c.on - a.on) || (c.seen - a.seen));
+    state.dashRows = rows; state.dashAt = now; renderDash();
+  } catch (e) { sumEl.textContent = "โหลดไม่สำเร็จ: " + errMsg(e); }
+  finally { state.dashBusy = false; }
+}
+function renderDash() {
+  const list = $("adm-dash-list"), sumEl = $("adm-dash-sum"), rows = state.dashRows || []; if (!list) return;
+  const now = serverNow(), f = $("adm-dash-filter").value || "all";
+  const on = rows.filter((r) => r.on), byZone = {};
+  on.forEach((r) => { byZone[r.zone] = (byZone[r.zone] || 0) + 1; });
+  sumEl.innerHTML = "";
+  const chip = (t) => { const c = mk("span", "", t); c.style.cssText = "padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08)"; sumEl.append(c); };
+  chip(`🟢 ออนไลน์ ${on.length}/${rows.length}`);
+  Object.keys(ZONES).filter((z) => byZone[z]).forEach((z) => chip(`${ZONES[z].name} ${byZone[z]}`));
+  const bosses = Object.entries(state.wb || {}).filter(([, b]) => wbAlive(b));
+  if (bosses.length) chip("👹 บอสโลก: " + bosses.map(([z, b]) => `${b.name}@${ZONES[z]?.name || z}`).join(", "));
+  const ok = (r) => f === "all" || (f === "online" ? r.on : f === "offline" ? !r.on : f === "inf" ? r.inf : f === "fx" ? r.fx.length || r.buff : f === "ban" ? r.banned : f.startsWith("z:") ? r.zone === f.slice(2) : true);
+  list.innerHTML = "";
+  rows.filter(ok).forEach((r) => {
+    const row = mk("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;padding:6px 8px;border-radius:8px;background:rgba(255,255,255,.05)";
+    const info = mk("div"); info.style.cssText = "min-width:0;display:grid;gap:2px";
+    const head = mk("div", "", `${r.on ? "🟢" : "⚪"} ${FACTION[r.faction]?.icon || ""} ${r.name}${r.role !== "player" ? ` [${r.role}]` : ""}${r.banned ? " 🚫" : ""}${r.inf ? " 🦠" : ""}`); head.style.fontWeight = "600";
+    const place = mk("div", "muted", `📍 ${ZONES[r.zone]?.name || r.zone || "—"} • ❤️ ${r.hp ?? "?"}${r.hp === 0 ? " 💀" : ""} • ${r.on ? "ออนไลน์" : r.seen ? "เห็นล่าสุด " + dashAgo(now - r.seen) : "ไม่เคยออนไลน์"}`);
+    info.append(head, place);
+    if (r.fx.length || r.buff) info.append(mk("div", "muted", `${r.fx.length ? "⚠️ " + r.fx.join(" ") : ""}${r.fx.length && r.buff ? " • " : ""}${r.buff ? "✨ " + r.buff : ""}`));
+    row.append(info, btn("เลือก", () => {
+      ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-gv-id", "adm-sk-id"].forEach((id) => { const el = $(id); if (el) el.value = r.uid; });
+      watchMutes(); toast(`เลือก ${r.name} แล้ว — เลื่อนลงไปใช้เครื่องมือด้านล่างได้`);
+    }, "btn ghost mini"));
+    list.append(row);
+  });
+  if (!list.children.length) list.append(mk("p", "muted", "ไม่มีผู้เล่นตรงตัวกรอง"));
+  $("adm-dash-note").textContent = `อัปเดต ${new Date(now).toLocaleTimeString("th-TH")} • รีเฟรชเองทุก 30 วินาทีขณะเปิดหน้านี้ • ออนไลน์ = ส่งสัญญาณภายใน 90 วินาที • โซนคือโซนล่าสุดที่บันทึกไว้ (ผู้เล่นที่ยังไม่เคยแจกแต้มสเตตัสและออฟไลน์จะไม่อยู่ในรายการ)`;
+}
+$("adm-dash-refresh")?.addEventListener("click", loadDash);
+$("adm-dash-filter")?.addEventListener("change", renderDash);
+setInterval(() => { if (isStaff() && !$("admin-modal").classList.contains("hidden")) loadDash(); }, 30000);
 $("adm-se-cleareff").addEventListener("click", async () => {
   const pid = $("adm-se-id").value.trim(); if (!pid) return toast("ใส่ Player ID ก่อน");
   try { await remove(ref(db, "effects/" + pid)); toast("ล้างสถานะพิเศษแล้ว"); } catch (e) { toast(errMsg(e)); }
