@@ -442,7 +442,7 @@ textarea#chat-input {
   .wb-box {
     margin-top: 6px; padding: 6px 8px; gap: 4px 8px;
     grid-template-columns: 1fr auto;
-    grid-template-areas: "head head" "bar act" "tag tag" "top top";
+    grid-template-areas: "head head" "art art" "bar act" "tag tag" "top top";
     align-items: center;
   }
   .wb-head { grid-area: head; }
@@ -451,6 +451,9 @@ textarea#chat-input {
   .wb-box.open .wb-head::after { content: "▴"; }
   .wb-box .bar { grid-area: bar; height: 20px; }
   .wb-box .bar span { font-size: 12px; line-height: 18px; }
+  #wb-art { grid-area: art; margin: 0; height: 64px; }
+  .wb-box.open #wb-art { height: 140px; }
+  .wb-box > * { min-width: 0; }
   #wb-tag { grid-area: tag; }
   #wb-top { grid-area: top; }
   .wb-actions { grid-area: act; }
@@ -725,4 +728,4 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .chat-head.has-banner { background-image: linear-gradient(90deg, rgba(10,12,16,.92) 35%, rgba(10,12,16,.35)), var(--banner); background-size: cover; background-position: center; }
 @media (prefers-reduced-motion: reduce) { .boss-art { animation: none; } }
 
-.wb-art { height: 110px; margin: 6px 0; }
+.wb-art { height: 110px; margin: 6px 0; grid-column: 1 / -1; }
