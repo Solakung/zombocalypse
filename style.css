@@ -626,3 +626,101 @@ textarea#chat-input {
 @keyframes npcIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (max-width: 640px) { .npc-vn { width: 100%; height: 88vh; max-height: 88vh; border-radius: 14px 14px 0 0; } }
 @media (prefers-reduced-motion: reduce) { .npc-b { animation: none; } .npc-pbar i { transition: none; } }
+
+/* =========================================================
+   ยกระดับหน้าตา v2 — บรรยากาศ • ฟีดแบ็ก • หลอดสถานะ (CSS + เอฟเฟกต์ฝั่ง client ล้วน)
+   ========================================================= */
+#screen-game { --zone: #e0a030; }
+#screen-game[data-zone="safe"] { --zone: #6fbf7b; }
+#screen-game[data-zone="forest"] { --zone: #8fb84a; }
+#screen-game[data-zone="ruins"] { --zone: #c9a14a; }
+#screen-game[data-zone="base"] { --zone: #9aa05a; }
+#screen-game[data-zone="port"] { --zone: #4fa3b8; }
+#screen-game[data-zone="factory"] { --zone: #d0803a; }
+#screen-game[data-zone="mall"] { --zone: #c070c0; }
+#screen-game[data-zone="hospital"] { --zone: #e0605a; }
+#screen-game[data-zone="police"] { --zone: #6a86e0; }
+#screen-game[data-zone="tunnel"] { --zone: #8a68e0; }
+
+/* พื้นหลังมีเนื้อ + ขอบมืดเล็กน้อย */
+body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .035), transparent 60%); background-attachment: fixed; }
+#screen-game::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 38;
+  background: radial-gradient(ellipse at center, transparent 58%, rgba(0, 0, 0, .28) 100%);
+}
+
+/* หัวโซนมีสีประจำโซน */
+.chat-head { border-left: 3px solid var(--zone); background: linear-gradient(90deg, color-mix(in srgb, var(--zone) 14%, transparent), transparent 70%); transition: border-color .4s, background .4s; }
+.chat-head h2 { text-shadow: 0 0 14px color-mix(in srgb, var(--zone) 55%, transparent); }
+.chat-head h2::before { background: var(--zone) !important; }
+
+/* หลอดสถานะ: ไล่สี มีไอคอน เด่นชัด */
+.bar { height: 24px; border-radius: 6px; background: #0f1215; box-shadow: inset 0 1px 3px rgba(0, 0, 0, .6); }
+.bar i { border-radius: 5px; box-shadow: inset 0 -6px 8px rgba(0, 0, 0, .25), inset 0 2px 3px rgba(255, 255, 255, .18); }
+.bar.hp i { background: linear-gradient(90deg, #8f2a1f, #d2503c); }
+.bar.st i { background: linear-gradient(90deg, #a97a20, #e8b64c); }
+.bar.fd i, #bar-fd { background: linear-gradient(90deg, #b8650c, #f39c12) !important; }
+.bar.wt i, #bar-wt { background: linear-gradient(90deg, #1f6ea3, #43a6e8) !important; }
+.bar span { font-weight: 600; letter-spacing: .1px; }
+.bar.hp span::before { content: "❤️ "; } .bar.st span::before { content: "⚡ "; }
+.bar.fd span::before { content: "🍖 "; } .bar.wt span::before { content: "💧 "; }
+.bar.low { animation: barLow 1s ease-in-out infinite; }
+@keyframes barLow { 50% { box-shadow: 0 0 0 2px rgba(210, 67, 47, .75), inset 0 1px 3px rgba(0, 0, 0, .6); } }
+.faction-dot { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--zone) 60%, transparent)); }
+
+/* เอฟเฟกต์ขอบจอตามสถานะ */
+#fx-vignette { position: fixed; inset: 0; pointer-events: none; z-index: 40; opacity: 0; transition: opacity .5s; }
+#fx-vignette.on { opacity: 1; }
+#fx-vignette.lowhp { box-shadow: inset 0 0 90px 14px rgba(190, 30, 20, .55); animation: fxPulse 1.4s ease-in-out infinite; }
+#fx-vignette.poison { box-shadow: inset 0 0 110px 18px rgba(90, 170, 40, .38); }
+#fx-vignette.bleed { box-shadow: inset 0 0 100px 14px rgba(140, 10, 10, .42); }
+#fx-vignette.lowhp.poison { box-shadow: inset 0 0 90px 14px rgba(190, 30, 20, .5), inset 0 0 130px 30px rgba(90, 170, 40, .3); }
+#fx-vignette.stun { backdrop-filter: blur(1.6px) saturate(.8); -webkit-backdrop-filter: blur(1.6px) saturate(.8); }
+#fx-vignette.dead { background: rgba(20, 20, 24, .5); backdrop-filter: grayscale(1); -webkit-backdrop-filter: grayscale(1); }
+@keyframes fxPulse { 50% { opacity: .55; } }
+#fx-vignette.hit { animation: fxHit .35s ease-out; }
+@keyframes fxHit { 0% { box-shadow: inset 0 0 120px 40px rgba(220, 40, 30, .6); opacity: 1; } 100% { opacity: 0; } }
+
+/* ข้อความในแชท: เด้งเข้า + สไตล์พิเศษ */
+.msg .bubble { animation: bubbleIn .22s ease-out; }
+@keyframes bubbleIn { from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; } }
+.msg.crit .bubble { border-color: #ffd54a; color: #ffe27a; background: rgba(255, 190, 40, .18); box-shadow: 0 0 14px rgba(255, 200, 60, .45); animation: bubbleIn .22s ease-out, critShake .45s ease-out; font-weight: 600; }
+@keyframes critShake { 20% { transform: translateX(-4px) rotate(-.6deg); } 40% { transform: translateX(4px) rotate(.6deg); } 60% { transform: translateX(-2px); } 80% { transform: translateX(2px); } }
+.msg.loot .bubble { border: 1px solid #e0a030 !important; background: linear-gradient(110deg, rgba(224, 160, 48, .12) 20%, rgba(255, 230, 150, .28) 45%, rgba(224, 160, 48, .12) 70%) !important; background-size: 220% 100% !important; animation: bubbleIn .22s ease-out, lootShine 1.6s ease-out; color: #ffd98a !important; border-radius: 8px; }
+@keyframes lootShine { from { background-position: 120% 0; } to { background-position: -40% 0; } }
+.msg.radio .bubble { background: rgba(60, 130, 160, .14) !important; border-left: 3px solid #4fa3b8; border-radius: 4px 10px 10px 4px; color: #b8dce8 !important; text-align: left !important; padding: 6px 10px !important; }
+.msg.radio { align-items: stretch !important; }
+.msg.alert .bubble { background: rgba(200, 40, 40, .2) !important; border: 1px solid #c82828; color: #ff9a8a !important; border-radius: 8px; font-weight: 600; }
+.msg.alert { align-items: center; }
+
+/* ตัวเลขลอย + ลูกเต๋า + ประกายรางวัล */
+#fx-float { position: fixed; inset: 0; pointer-events: none; z-index: 45; overflow: hidden; }
+.fxn { position: absolute; font-family: var(--font-head); font-weight: 700; font-size: 26px; text-shadow: 0 2px 6px #000, 0 0 12px currentColor; white-space: nowrap; animation: fxRise 1.1s ease-out forwards; transform: translate(-50%, 0); }
+.fxn.dmg { color: #ff6a55; } .fxn.heal { color: #6fe08a; } .fxn.deal { color: #ffd54a; } .fxn.crit { color: #ffb020; font-size: 38px; animation-duration: 1.4s; }
+@keyframes fxRise { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1.15); } 100% { opacity: 0; transform: translate(-50%, -64px) scale(1); } }
+.fxdie { position: absolute; left: 50%; top: 42%; font-size: 54px; transform: translate(-50%, -50%); animation: fxDie 1s ease-out forwards; text-shadow: 0 4px 14px #000; }
+.fxdie b { font-family: var(--font-head); font-size: 40px; color: #fff; margin-left: 6px; }
+.fxdie.six b { color: #ffd54a; }
+@keyframes fxDie { 0% { opacity: 0; transform: translate(-50%, -50%) rotate(-360deg) scale(.4); } 45% { opacity: 1; transform: translate(-50%, -50%) rotate(0) scale(1.2); } 80% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 100% { opacity: 0; transform: translate(-50%, -64%) scale(1); } }
+.fxsp { position: absolute; font-size: 20px; animation: fxSp .9s ease-out forwards; }
+@keyframes fxSp { 0% { opacity: 0; transform: translate(0, 0) scale(.4); } 25% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.1); } }
+
+/* แท็บบาร์ + การ์ด */
+.tabbar button.on { box-shadow: inset 0 3px 0 var(--zone); }
+.list li { transition: border-color .2s, transform .1s; }
+.list li:active { transform: scale(.992); }
+.btn.primary { box-shadow: 0 2px 0 rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .22); }
+.btn.primary:active { transform: translateY(1px); box-shadow: 0 1px 0 rgba(0, 0, 0, .35); }
+
+@media (prefers-reduced-motion: reduce) {
+  .msg .bubble, .msg.crit .bubble, .msg.loot .bubble, #fx-vignette.lowhp, .bar.low, #fx-vignette.hit { animation: none !important; }
+  .fxn, .fxdie, .fxsp { animation-duration: .01s !important; }
+}
+
+/* ช่องภาพ (ใช้เมื่อมีไฟล์ใน img/) */
+.npc-face.has-img { background-size: cover; background-position: center top; width: 72px; height: 72px; flex-basis: 72px; border-radius: 14px; font-size: 0; }
+.boss-art { height: 150px; margin: 8px 0; border-radius: 12px; background: #000 center/cover no-repeat; box-shadow: inset 0 -40px 40px -20px rgba(0,0,0,.7), 0 0 0 1px rgba(255,255,255,.1); animation: bossIn .5s ease-out; }
+.boss-art.hidden { display: none; }
+@keyframes bossIn { from { opacity: 0; transform: scale(1.04); } to { opacity: 1; transform: none; } }
+.chat-head.has-banner { background-image: linear-gradient(90deg, rgba(10,12,16,.92) 35%, rgba(10,12,16,.35)), var(--banner); background-size: cover; background-position: center; }
+@media (prefers-reduced-motion: reduce) { .boss-art { animation: none; } }

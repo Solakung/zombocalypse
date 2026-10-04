@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1254";
+const APP_VERSION = "2026-10-04.1407";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -767,6 +767,7 @@ function renderBars() {
   }
   updateAttackButtons();
   renderBuffRow(); clampToMax();
+  try { fxStatus(); } catch { /* */ }
 }
 
 /* =========================================================
@@ -1040,8 +1041,8 @@ async function enterZone(z, initial = false, moved = false) {
       }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
-    teardownZone(); state.zone = z; state.ground = {}; state.wbHits = {}; state.wbClaim = null;
-    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; renderZoneDanger(z); wallRender();
+    teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender();
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
@@ -1066,7 +1067,7 @@ async function enterZone(z, initial = false, moved = false) {
 function logLine(text, cls = "info") {
   try { jrnlAdd(text, cls); } catch { /* บันทึกไม่ได้ก็ข้าม */ }
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  const el = mk("div", "msg " + cls);
+  const el = mk("div", "msg " + cls + fxOnLog(text, cls));
   el.append(mk("div", "bubble", text));
   log.append(el);
   if (near) log.scrollTop = log.scrollHeight; notifyChat();
@@ -1855,6 +1856,7 @@ function renderBoss() {
   if (!open) return;
   const won = bs.hp <= 0, busy = !!state.bossBusy, w = equippedWeapon();
   $("boss-title").textContent = `${b.icon} ${b.name}`;
+  { const art = $("boss-art"); if (art) { const src = `img/boss/${bs.boss}.webp`; art.classList.add("hidden"); imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } }
   $("boss-tag").textContent = b.tag + fxChanceText(bs.boss);
   $("bar-boss").style.width = Math.max(0, (bs.hp / bs.max) * 100) + "%"; $("txt-boss").textContent = `บอส ${Math.max(0, bs.hp)}/${bs.max}`;
   $("bar-boss-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-boss-me").textContent = `HP ${p.hp}/${maxHp()}`;
@@ -4994,6 +4996,7 @@ function renderSettings() {
   row("🔊 เสียงและสั่นเตือน", "ตอนบอสโลกเกิด โดนตีแรง และ HP ต่ำ", SFX.on, (v) => { SFX.on = v; LS.set("zc_sfx", v); const s = $("btn-sfx"); if (s) s.title = v ? "ตั้งค่า (เสียงเปิดอยู่)" : "ตั้งค่า (เสียงปิดอยู่)"; if (v) sfx("low"); });
   row("🔔 แจ้งเตือนบนอุปกรณ์", "เด้งเมื่อพลังงานเต็ม เดินทาง/บอสโซนพร้อม บอสโลกเกิด หรือโดนตี — เฉพาะตอนเกมถูกพับอยู่เบื้องหลัง (ต้องไม่ปิดแท็บ/แอป)", NT.on, toggleNotif);
   row("💬 ซ่อนข้อความบรรยากาศ", "ปิดข้อความสั้น ๆ ที่โผล่ตอนค้นหา", LS.get("zc_noamb", false), (v) => { LS.set("zc_noamb", v); });
+  row("✨ เอฟเฟกต์ภาพ", "ขอบจอตามสถานะ ตัวเลขดาเมจลอย ลูกเต๋า (ปิดถ้าเครื่องช้า)", !LS.get("zc_fxoff", false), (v) => { LS.set("zc_fxoff", !v); try { fxStatus(); } catch { /* */ } });
   row("🗺️ แสดงโซนเป็นแผนที่", "ปิด = แสดงเป็นรายการแบบเดิม", zmapOn(), (v) => { LS.set("zc_zmap", v ? "map" : "list"); zmapApply(); });
   const ins = mk("div", "set-install"); ins.append(mk("b", "", "📲 ติดตั้งเป็นแอป"));
   if (isStandalone()) ins.append(mk("small", "muted", "คุณกำลังใช้งานแบบแอปอยู่แล้ว"));
@@ -5191,7 +5194,25 @@ function npcHeader(id) {
   const bar = mk("div", "npc-pbar"), fill = mk("i"); fill.style.width = (nxt ? Math.max(4, Math.min(100, ((rec.p - prev) / (nxt - prev)) * 100)) : 100) + "%"; bar.append(fill);
   info.append(mk("b", "npc-nm", `${meta.name} `), mk("small", "muted", meta.title), mk("div", "npc-hearts", npcHeartStr(h)), bar);
 }
-function npcFace(e) { const f = $("npc-face"); if (f) f.textContent = e; }
+// ---- ช่องภาพ (ไม่บังคับ): วางไฟล์ WebP ใน img/ แล้วเกมใช้เองถ้าพบ ไม่พบ = ใช้อีโมจิเดิม ----
+const IMG_OK = {};
+function imgProbe(src, cb) {
+  if (IMG_OK[src] === true) return cb(true); if (IMG_OK[src] === false) return cb(false);
+  const im = new Image(); im.onload = () => { IMG_OK[src] = true; cb(true); }; im.onerror = () => { IMG_OK[src] = false; cb(false); }; im.src = src;
+}
+const NPC_MOOD = { "🙂": "calm", "😐": "calm", "😶": "calm", "😌": "calm", "😏": "smirk", "😊": "smile", "😔": "sad", "🥲": "sad", "😮\u200d💨": "tired", "😴": "tired", "😠": "angry", "😮": "shock", "😳": "shock" };
+function npcPortrait(el, id, e) {
+  if (!el || !id) return;
+  const mood = NPC_MOOD[e] || "calm", want = `img/npc/${id}_${mood}.webp`, base = `img/npc/${id}_calm.webp`;
+  imgProbe(want, (ok) => {
+    if (el.dataset.want !== want) return;
+    if (ok) { el.style.backgroundImage = `url(${want})`; el.classList.add("has-img"); el.textContent = ""; }
+    else imgProbe(base, (ok2) => { if (el.dataset.want !== want) return; if (ok2) { el.style.backgroundImage = `url(${base})`; el.classList.add("has-img"); el.textContent = ""; } else { el.style.backgroundImage = ""; el.classList.remove("has-img"); el.textContent = e; } });
+  });
+  el.dataset.want = want;
+}
+function zoneBanner(z) { const h = $("zone-title")?.closest(".chat-head"); if (!h) return; const src = `img/zone/${z}.webp`; h.classList.remove("has-banner"); h.style.removeProperty("--banner"); imgProbe(src, (ok) => { if (ok && $("screen-game")?.dataset.zone === z) { h.style.setProperty("--banner", `url(${src})`); h.classList.add("has-banner"); } }); }
+function npcFace(e) { const f = $("npc-face"); if (!f) return; if (!f.classList.contains("has-img")) f.textContent = e; npcPortrait(f, npcRun.id, e); if (f.dataset.want && IMG_OK[f.dataset.want] === false && !f.classList.contains("has-img")) f.textContent = e; }
 function npcScroll() { const l = $("npc-log"); if (l) l.scrollTop = l.scrollHeight; }
 function npcSetCtl(...els) { const c = $("npc-ctl"); c.textContent = ""; els.forEach((e) => e && c.append(e)); }
 const npcFlagBit = (flags, n) => { const i = (npcRun.flagNames || []).indexOf(n); return i >= 0 && !!(flags & (1 << i)); };
@@ -5611,6 +5632,68 @@ function siegeAnnounce() {
 function siegeInfoLine() {
   const now = serverNow(), s = siegeNext(now), live = now >= s.start && now < s.end, today = s.day === Math.floor((now + SIEGE_TZ) / SIEGE_DAY);
   return live ? `🚨 กำลังปิดล้อมอยู่ถึง ${siegeClock(s.end)} น.` : `🚨 คืนปิดล้อม${today ? "วันนี้" : "พรุ่งนี้"} ${siegeClock(s.start)}–${siegeClock(s.end)} น.`;
+}
+
+/* =========================================================
+   28) เอฟเฟกต์หน้าตา (ฝั่ง client ล้วน — ไม่เขียนข้อมูลใดขึ้นเซิร์ฟเวอร์)
+   • ขอบจอตามสถานะ (HP ต่ำ/พิษ/เลือดไหล/มึนงง/ล้มลง) • หลอดพลังกะพริบเมื่อใกล้หมด
+   • ตัวเลขดาเมจลอย (โดนตี/ฟื้น/ทำดาเมจ) • ลูกเต๋าหมุน • ประกายรางวัล • สไตล์ข้อความ (คริ/ของรางวัล/วิทยุ/แจ้งเตือน)
+   • สีประจำโซนที่ #screen-game[data-zone] • ปิดได้ที่ ⚙️ ตั้งค่า และเคารพ prefers-reduced-motion
+   ========================================================= */
+const fxOff = () => LS.get("zc_fxoff", false) || !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+function fxLayer() { let l = $("fx-float"); if (!l) { l = document.createElement("div"); l.id = "fx-float"; document.body.append(l); } return l; }
+function fxVig() { let v = $("fx-vignette"); if (!v) { v = document.createElement("div"); v.id = "fx-vignette"; document.body.append(v); } return v; }
+function fxNum(text, kind, anchorId) {
+  if (!HAS_DOM || fxOff()) return;
+  const l = fxLayer(); if (l.childElementCount > 14) return;
+  const r = anchorId ? $(anchorId)?.getBoundingClientRect?.() : null;
+  const x = r && r.width ? r.left + r.width * (0.25 + Math.random() * 0.5) : innerWidth / 2, y = r && r.height ? r.top + r.height / 2 : innerHeight * 0.4;
+  const e = mk("div", "fxn " + kind, text); e.style.left = x + "px"; e.style.top = y + "px"; l.append(e); setTimeout(() => e.remove(), 1600);
+}
+function fxDie(n) {
+  if (!HAS_DOM || fxOff()) return;
+  const l = fxLayer(); l.querySelectorAll(".fxdie").forEach((x) => x.remove());
+  const e = mk("div", "fxdie" + (n === 6 ? " six" : "")); e.append(document.createTextNode("🎲"), mk("b", "", String(n))); l.append(e); setTimeout(() => e.remove(), 1100);
+}
+function fxSparks(n = 8) {
+  if (!HAS_DOM || fxOff()) return;
+  const l = fxLayer(), cx = innerWidth / 2, cy = innerHeight * 0.45;
+  for (let i = 0; i < n; i++) {
+    const e = mk("div", "fxsp", i % 3 ? "✨" : "⭐"), a = (Math.PI * 2 * i) / n + Math.random() * 0.5, d = 50 + Math.random() * 60;
+    e.style.left = cx + "px"; e.style.top = cy + "px"; e.style.setProperty("--dx", Math.cos(a) * d + "px"); e.style.setProperty("--dy", Math.sin(a) * d - 20 + "px"); l.append(e); setTimeout(() => e.remove(), 1000);
+  }
+}
+// เรียกจาก logLine: คืนคลาสเสริมของข้อความ + ยิงเอฟเฟกต์
+function fxOnLog(text, cls) {
+  let extra = "";
+  try {
+    if (/^(📻|🎙️)/.test(text) || /^💬 .*: “/.test(text)) extra = " radio";
+    else if (/^🚨/.test(text)) extra = " alert";
+    if (cls === "combat") {
+      const crit = /คริติคอล/.test(text), dm = /โดน[^\d−-]{0,40}[−-](\d+)/.exec(text), dice = /🎲 ทอย (\d)/.exec(text);
+      if (dice) fxDie(+dice[1]);
+      if (dm) fxNum("−" + dm[1], crit ? "crit" : "deal", "chat-log");
+      if (crit) extra += " crit";
+    }
+    if (/^(🎁|🏆 รางวัล|🥇 คุณทำดาเมจสูงสุด)|ได้รับ |รับรางวัล|ได้ชิ้นพิเศษ|เกราะสุ่มจากคลัง/.test(text)) { extra += " loot"; fxSparks(); }
+  } catch { /* เอฟเฟกต์พลาดไม่กระทบเกม */ }
+  return extra;
+}
+function fxStatus() {
+  const p = state.profile; if (!p || !HAS_DOM) return;
+  const max = maxHp(), frac = max ? p.hp / max : 1, dead = p.hp <= 0, v = fxVig(), off = fxOff();
+  const low = !dead && frac < 0.3, poison = effActive("poison"), bleed = effActive("bleed"), stun = effActive("stun");
+  const on = !off && (dead || low || poison || bleed || stun);
+  v.classList.toggle("on", on);
+  v.classList.toggle("lowhp", on && low); v.classList.toggle("poison", on && poison); v.classList.toggle("bleed", on && bleed); v.classList.toggle("stun", on && stun); v.classList.toggle("dead", on && dead);
+  const st = curStamina() / (maxStamina() || 1);
+  [["bar-hp", low], ["bar-st", st < 0.15 && !dead], ["bar-fd", curFood() <= 15], ["bar-wt", curWater() <= 15]].forEach(([id, c]) => { $(id)?.parentElement?.classList.toggle("low", !off && c); });
+  if (state.fxUid === state.uid && typeof state.fxHp === "number" && p.hp !== state.fxHp) {
+    const d = p.hp - state.fxHp;
+    if (d < 0) { fxNum("−" + -d, "dmg", "bar-hp"); if (!off) { v.classList.add("hit"); setTimeout(() => v.classList.remove("hit"), 400); } }
+    else if (d >= 5) fxNum("+" + d, "heal", "bar-hp");
+  }
+  state.fxHp = p.hp; state.fxUid = state.uid;
 }
 
 if (HAS_DOM) initNpcUi();

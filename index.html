@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-04.1254">
+  <link rel="stylesheet" href="style.css?v=2026-10-04.1407">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -83,8 +83,8 @@
       <div class="bars" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">
         <div class="bar hp"><i id="bar-hp"></i><span id="txt-hp">HP</span></div>
         <div class="bar st"><i id="bar-st"></i><span id="txt-st">พลังงาน</span></div>
-        <div class="bar" style="border-color: #b9770e;"><i id="bar-fd" style="background: #f39c12;"></i><span id="txt-fd">อาหาร</span></div>
-        <div class="bar" style="border-color: #21618c;"><i id="bar-wt" style="background: #3498db;"></i><span id="txt-wt">น้ำ</span></div>
+        <div class="bar fd" style="border-color: #b9770e;"><i id="bar-fd" style="background: #f39c12;"></i><span id="txt-fd">อาหาร</span></div>
+        <div class="bar wt" style="border-color: #21618c;"><i id="bar-wt" style="background: #3498db;"></i><span id="txt-wt">น้ำ</span></div>
       </div>
       <div class="top-actions">
         <button id="btn-guide" class="btn ghost mini">วิธีเล่น</button>
@@ -161,6 +161,7 @@
   <div id="boss-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="boss-title">
     <div class="modal-box" style="max-width: 420px;">
       <div class="modal-head"><h2 id="boss-title">—</h2></div>
+      <div id="boss-art" class="boss-art hidden"></div>
       <p id="boss-tag" class="muted" style="margin: 6px 0 10px;"></p>
       <div class="bar boss"><i id="bar-boss"></i><span id="txt-boss"></span></div>
       <div class="bar hp" style="margin-top: 6px;"><i id="bar-boss-me"></i><span id="txt-boss-me"></span></div>
@@ -520,6 +521,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-04.1254"></script>
+  <script type="module" src="script.js?v=2026-10-04.1407"></script>
 </body>
 </html>
