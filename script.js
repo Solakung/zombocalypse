@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1714";
+const APP_VERSION = "2026-10-04.1835";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1710,7 +1710,9 @@ async function processDeath(attempt = 0) {
     if (state.boss) u[`bossFights/${uid}`] = null;
     { const en = evoDeathWrites(u); if (en) lost.push(en); }
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
+    const deadZone = state.zone;
     await update(ref(db), u);
+    try { if (effDanger(deadZone) >= 5) feedPost(3, deadZone); } catch { /* ข้าม */ }
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
     await enterZone("safe", false, true);
   } catch (e) {
@@ -3552,6 +3554,7 @@ function syncEvoTitle() {
   if (!state.zone || state.profile?.faction !== "zombie") return;
   const r = ref(db, `zonePlayers/${state.zone}/${state.uid}/evo4`), k = evoTitleKey();
   (k ? set(r, k) : remove(r)).catch(() => {});
+  if (k && !LS.get(lsKey("feed_evo_" + k), 0)) { LS.set(lsKey("feed_evo_" + k), 1); try { feedPost(2, k); } catch { /* ข้าม */ } }
 }
 
 // สายตะกละ: หิวเร็วขึ้นตามขั้น (หักอาหารเพิ่มเอง ทีละ 30 วิ ขณะออนไลน์ — rules อนุญาตให้ food ลดได้เสมอ)
@@ -4866,7 +4869,7 @@ function hubTab(tab) {
   const m = $("hub-modal"); if (!m) return; m.dataset.tab = tab;
   m.querySelectorAll(".hub-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   const box = $("hub-body"); box.textContent = "";
-  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else hubJournal(box);
+  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else if (tab === "fame") fameRender(box); else hubJournal(box);
 }
 function openHub(tab = "day") {
   let m = $("hub-modal");
@@ -4874,7 +4877,7 @@ function openHub(tab = "day") {
     m = mk("div", "modal hidden"); m.id = "hub-modal"; m.setAttribute("role", "dialog");
     const bx = mk("div", "modal-box"); bx.style.maxWidth = "440px";
     const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • ความสำเร็จ • โลก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
+    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["fame", "🏆"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
     const body = mk("div", "hub-body"); body.id = "hub-body";
     bx.append(hd, tabs, body); m.append(bx); document.body.append(m);
     m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
@@ -5813,6 +5816,7 @@ function achUnlock(a, silent) {
   const T = ACH_TIER[a.tier], msg = `🏅 ปลดล็อกความสำเร็จ: ${a.ic} ${a.name} (${T[1]} ${T[2]})`;
   try { toast(msg); logLine(msg, "system"); sfx("boss"); } catch { /* ข้าม */ }
   const fr = LS.get(lsKey("achnew"), []); fr.push(a.id); LS.set(lsKey("achnew"), fr.slice(-80));
+  if (a.tier >= 2) { try { feedPost(1, a.id); } catch { /* ข้าม */ } }   // ทอง/ตำนาน → ประกาศทางวิทยุ
   achBtn();
 }
 function achZvis() {
@@ -5880,10 +5884,11 @@ function achLoginDay() {
   const st = LS.get(lsKey("achday"), { d: 0, s: 0 }), s = st.d === day - 1 ? st.s + 1 : 1;
   LS.set(lsKey("achday"), { d: day, s });
   achSet("ld", ld); achBump("login", 1); achSet("mxstrk", s);
+  if ([7, 14, 30, 60, 100].includes(s)) setTimeout(() => { try { feedPost(4, String(s)); } catch { /* ข้าม */ } }, 8000);
 }
 async function achFlush() {
   const A = state.ach; if (!A?.loaded || A.busy || !state.profile || state.profile.banned) return;
-  const keys = Object.keys(A.dirty); if (!keys.length && !A.tDirty) return;
+  const keys = Object.keys(A.dirty), nm = String(state.profile.username || "").slice(0, 16); if (!keys.length && !A.tDirty && A.nSent === nm) return;
   const wait = ACH_GAP - (serverNow() - A.last);
   if (wait > 0) { clearTimeout(A.tm); A.tm = setTimeout(achFlush, wait + 250); return; }
   A.busy = true;
@@ -5893,10 +5898,11 @@ async function achFlush() {
     if (v > (A.srv[k] || 0)) { u["c/" + k] = v; sent[k] = v; } else delete A.dirty[k];
   });
   if (A.tDirty) u.t = A.t || null;
+  if (nm && A.nSent !== nm) u.n = nm;   // ชื่อไว้แสดงในหอเกียรติยศ
   try {
     if (Object.keys(u).length > 1) await update(ref(db, "ach/" + state.uid), u);
     Object.entries(sent).forEach(([k, v]) => { A.srv[k] = v; if (A.c[k] === v) delete A.dirty[k]; });
-    A.tDirty = false;
+    A.tDirty = false; if (u.n) A.nSent = u.n;
   } catch (e) {
     console.warn("ach flush", e?.code || e);   // อาจชนกับอีกเครื่อง: อ่านค่าจริงมารวมแล้วลองใหม่รอบหน้า
     try { const s = (await get(ref(db, "ach/" + state.uid))).val(); Object.entries(s?.c || {}).forEach(([k, v]) => { A.srv[k] = v; if ((A.c[k] || 0) < v) A.c[k] = v; }); } catch { /* ข้าม */ }
@@ -6109,7 +6115,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
+  feedListen(); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -6139,6 +6145,75 @@ function worldRender(box) {
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
+}
+
+
+/* =========================================================
+   30) ข่าววิทยุจากผู้เล่น (feed) + 🏆 หอเกียรติยศ
+   feed/{uid} = {k:ชนิด, x:รหัส, n:ชื่อ, ts} — ช่องเดียวต่อคน เขียนทับได้ทุก ≥15 วิ
+   ทุกเครื่องฟังทั้งโหนด แล้วแปลงเป็นข้อความวิทยุเอง (ไม่เก็บข้อความ ไม่มีช่องให้พิมพ์เอง)
+   ========================================================= */
+const FEED_GAP = 16000;
+state.feed = state.feed || { last: 0, q: null, tm: 0, seen: {}, first: true, on: false };
+function feedPost(k, x) {
+  const F = state.feed; if (!state.uid || !state.profile || state.profile.banned) return;
+  F.q = { k, x: x === undefined ? null : String(x).slice(0, 12) }; feedDrain();
+}
+function feedDrain() {
+  const F = state.feed; if (!F.q || F.busy) return;
+  const wait = FEED_GAP - (serverNow() - F.last);
+  if (wait > 0) { clearTimeout(F.tm); F.tm = setTimeout(feedDrain, wait + 300); return; }
+  const e = F.q; F.q = null; F.busy = true;
+  const body = { k: e.k, n: String(state.profile.username).slice(0, 16), ts: serverTimestamp(), ...(e.x ? { x: e.x } : {}) };
+  set(ref(db, "feed/" + state.uid), body).catch((er) => console.warn("feed", er?.code || er)).finally(() => { F.last = serverNow(); F.busy = false; if (F.q) feedDrain(); });
+}
+function feedText(e) {
+  const n = String(e.n || "?").slice(0, 16), x = String(e.x || "");
+  if (e.k === 1) { const a = ACH_BY_ID[x]; if (!a) return ""; const T = ACH_TIER[a.tier]; return `🏅 ${n} ปลดล็อกความสำเร็จ ${T[1]} ${a.ic} ${a.name}${a.tier === 3 ? " — ระดับตำนาน!" : ""}`; }
+  if (e.k === 2) { const L = EVO_LINES[x]; return L ? `🧬 ${n} วิวัฒนาการถึงขั้นสุดท้าย กลายเป็น ${L.icon}${L.title} — ฝูงซอมบี้ส่งเสียงคำราม` : ""; }
+  if (e.k === 3) { const z = ZONES[x]; return z ? `💀 ผู้รอดชีวิตชื่อ ${n} ล้มลงที่${z.name} — ระวังตัวกันด้วย` : ""; }
+  if (e.k === 4) { const d = Number(x); return d >= 7 && d <= 100 ? `🔥 ${n} อยู่รอดมาต่อเนื่อง ${d} วันแล้ว` : ""; }
+  return "";
+}
+function feedListen() {
+  const F = state.feed; if (F.on || !state.uid) return; F.on = true;
+  onValue(ref(db, "feed"), (snap) => {
+    const all = snap.val() || {}, now = serverNow(), fresh = [];
+    Object.entries(all).forEach(([uid, e]) => {
+      if (!e || typeof e.ts !== "number" || F.seen[uid] === e.ts) return;
+      const old = F.seen[uid] === undefined; F.seen[uid] = e.ts;
+      if (old && F.first && now - e.ts > 1800000) return;   // เปิดเกมมาครั้งแรก: เอาแค่ข่าว 30 นาทีล่าสุด
+      const t = feedText(e); if (t) fresh.push({ t, ts: e.ts, live: !F.first });
+    });
+    fresh.sort((a, b) => a.ts - b.ts).forEach((f) => radioPush(`📻 [วิทยุ] ${f.t}`, f.ts, f.live));
+    F.first = false;
+  }, (er) => console.warn("feed listen", er?.code || er));
+}
+
+const FAME = [["srch", "🔍 นักค้นหา", "ครั้ง"], ["zwin", "⚔️ นักล่าซอมบี้", "ครั้ง"], ["scrap", "🔩 ช่างซ่อมกำแพง", "ชิ้น"], ["smash", "🔨 ผู้ทลายกำแพง", "ครั้ง"], ["bite", "🦷 เขี้ยวคม", "ครั้ง"], ["trav", "🧭 นักเดินทาง", "ครั้ง"], ["craft", "🔧 ช่างฝีมือ", "ชิ้น"], ["mkt", "🏪 พ่อค้า", "ครั้ง"]];
+async function fameLoad() {
+  const C = state.fameCache; if (C && serverNow() - C.at < 300000) return C.rows;
+  const all = (await get(ref(db, "ach"))).val() || {};
+  const rows = Object.entries(all).map(([uid, e]) => {
+    const c = e?.c || {}, got = ACH.filter((a) => (c[a.k] || 0) >= a.n).length + ACH_SEC.filter((a) => { try { return a.t(c); } catch { return false; } }).length;
+    return { uid, n: String(e?.n || "ผู้รอดนิรนาม").slice(0, 16), c, got, t: e?.t || null };
+  });
+  state.fameCache = { at: serverNow(), rows }; return rows;
+}
+async function fameRender(box) {
+  box.append(mk("p", "muted", "กำลังโหลดหอเกียรติยศ…"));
+  try {
+    const rows = await fameLoad(), me = state.uid; box.textContent = "";
+    box.append(mk("div", "muted", "อัปเดตทุก ~5 นาที • นับสถิติตลอดชีพของแต่ละคน"));
+    const block = (title, list, fmt) => {
+      box.append(mk("div", "hub-day", title));
+      if (!list.length) return box.append(mk("div", "muted", "ยังไม่มีใครบันทึกไว้"));
+      list.forEach((r, i) => { const row = mk("div", r.uid === me ? "me" : "", `${["🥇", "🥈", "🥉"][i]} ${r.n} — ${fmt(r)}`); const a = r.t && ACH_BY_ID[r.t]; if (a) { const b = mk("span", "ach-t tier-" + ACH_TIER[a.tier][0], `${a.ic} ${a.name}`); row.append(" ", b); } box.append(row); });
+    };
+    block("🏅 นักสะสมความสำเร็จ", rows.filter((r) => r.got > 0).sort((a, b) => b.got - a.got).slice(0, 3), (r) => `${r.got} อัน`);
+    FAME.forEach(([k, label, unit]) => block(label, rows.filter((r) => (r.c[k] || 0) > 0).sort((a, b) => (b.c[k] || 0) - (a.c[k] || 0)).slice(0, 3), (r) => `${(r.c[k] || 0).toLocaleString("en-US")} ${unit}`));
+    block("📅 เข้าเล่นต่อเนื่องนานสุด", rows.filter((r) => (r.c.mxstrk || 0) > 0).sort((a, b) => (b.c.mxstrk || 0) - (a.c.mxstrk || 0)).slice(0, 3), (r) => `${r.c.mxstrk} วัน`);
+  } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดหอเกียรติยศไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("fame", e); }
 }
 
 if (HAS_DOM) initNpcUi();
