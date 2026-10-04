@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1407";
+const APP_VERSION = "2026-10-04.1616";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2119,6 +2119,7 @@ const wbMine = (b) => { const h = state.wbHits?.[state.uid]; return h && h.bid =
 const wbRewardText = (b) => { if (b.rid === "skill" && b.rsk) return `📖 สกิล ${b.rsk.icon || "✨"} ${b.rsk.name}`; if (b.rid === "custom_gear" && b.rcg) return `${b.rcg.icon || "🛡️"} ${b.rcg.name}`; const d = ITEMS[b.rid]; return d ? `${d.icon} ${d.name}${d.type === "weapon" ? "" : " ×" + b.rqty}` : "—"; };
 const wbBonusText = (b) => (b.rpool ? " + 🎲 เกราะสุ่ม" : "") + (b.rtop ? " + 🥇 ชิ้นพิเศษอันดับ 1" : "");
 
+const WB_ART = { "ซอมบี้ยักษ์หิวโหย": "hungry", "ผีคลั่งข้างถนน": "mad", "ราชาซอมบี้": "king", "สัตว์ประหลาดกลายพันธุ์": "mutant", "ทรราชแห่งความตาย": "tyrant", "เจ้าแห่งฝูงผี": "horde" };
 function renderWB() {
   const box = $("wb-box"); if (!box) return;
   const z = state.zone, b = z && z !== "safe" ? wbOf(z) : null, p = state.profile;
@@ -2130,6 +2131,7 @@ function renderWB() {
   // ผู้ร่วมตีที่ยังไม่รับรางวัล → รับให้อัตโนมัติ 1 ครั้งต่อบอส (ถ้าพลาดยังกดปุ่มเองได้)
   if (dead && mine && !claimed && !state.wbBusy && state.wbAutoClaimed !== b.startedAt) { state.wbAutoClaimed = b.startedAt; setTimeout(wbClaim, 300); }
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
+  { const art = $("wb-art"), id = WB_ART[b.name]; if (art) { art.classList.add("hidden"); if (id) { const src = `img/wb/${id}.webp`; imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } } }
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
   $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}${fxChanceText("wboss")}`;
   $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
