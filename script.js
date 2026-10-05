@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1610";
+const APP_VERSION = "2026-10-05.1720";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -276,6 +276,10 @@ const ITEMS = {
   lab_core: { name: "แกนวิจัย", icon: "💠", type: "material" },
   exp_serum: { name: "ซีรั่มทดลอง", icon: "🧪", type: "consumable", heal: 60 },
   mut_fang3: { name: "ต่อมพิษ", icon: "☣️", type: "gear", slot: "mf", zombieOnly: true },
+  fish: { name: "ปลาสด", icon: "🐟", type: "material" },
+  golden_fish: { name: "ปลาทอง", icon: "🐠", type: "material" },
+  fish_grill: { name: "ปลาย่าง", icon: "🍢", type: "consumable", heal: 10, food: 40 },
+  fish_stew: { name: "ซุปปลา", icon: "🍲", type: "consumable", heal: 25, food: 45, water: 25 },
   mut_fang1: { name: "เขี้ยวแหลม", icon: "🦷", type: "gear", slot: "mf", zombieOnly: true },
   mut_fang2: { name: "เขี้ยวเหล็กไน", icon: "🐍", type: "gear", slot: "mf", zombieOnly: true },
   mut_hide1: { name: "หนังหนา", icon: "🦴", type: "gear", slot: "mh", red: 8, zombieOnly: true },
@@ -303,7 +307,9 @@ const RECIPES = {
   scrap_plate: { need: { scrap: 10, chem: 2 }, out: "scrap_plate", qty: 1 },
   headlamp: { need: { scrap: 4, energy_drink: 1 }, out: "headlamp", qty: 1 },
   toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 },
-  exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 }
+  exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 },
+  fish_grill: { need: { fish: 1, scrap: 1 }, out: "fish_grill", qty: 1 },
+  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -686,6 +692,8 @@ function openGuide() {
     "🌳 ต้นไม้ทักษะ: ทำสายไหนบ่อย สายนั้นได้แต้มทักษะ (ดูที่ 📅 → 🌍 → เส้นทางอาชีพ) ใช้เรียนทักษะเสริมของสายนั้น 5 ขั้น แล้วเลือกปลายสาย 1 จาก 2 • เรียนแล้วเปลี่ยนไม่ได้ ได้โบนัสเล็ก ๆ เหมือนโบนัสอื่น ๆ ในเกม",
     "🧭 ทีมสำรวจ (ปุ่ม 🏠 ที่พัก): ที่พักขั้น 1+ ส่งทีมออกนอกค่าย 4 ชั่วโมง จ่ายเสบียงเล็กน้อย กลับมารับของตามโซนที่ส่งไป แม้ไม่ได้ออนไลน์ • ทีละ 1 ทีม",
     "🧬 ศูนย์วิจัยร้าง (โซนใหม่ ไกลและอันตราย): หาได้ยาทดลอง/สารเคมี และของเฉพาะที่นี่ — 🧫 ตัวอย่างวิจัย (สมทบโปรเจกต์ค่าย/รังได้ 5 แต้มต่อชิ้น) • 🥼 เสื้อกาวน์ปลอดเชื้อ (เกราะ ลดดาเมจ ~17%) • 🔬 เลนส์สแกนชีวภาพ (ของหายากออกง่ายขึ้น) • 🧤 ถุงมือกันสารเคมี (ทนพิษ) • ☣️ ต่อมพิษ (ซอมบี้ ทุบกำแพง+5 ทนพิษ) • ประกอบ 🧪 ซีรั่มทดลอง (ตัวอย่างวิจัย×2 + สารเคมี×2 ที่ Safe Zone: ฟื้น 60 HP รักษาเลือดไหล/พิษทุกระดับ) • บอสประจำโซนมีโอกาสทิ้ง 🔪 มีดผ่าตัดเลเซอร์ กับ 💠 แกนวิจัย (ส่งให้ห้องวิจัยของค่ายได้ผลวิจัยชั่วคราว) • บางช่วงเกิดเหตุการณ์ 🔌 ไฟดับฉุกเฉิน (ของหายากออกง่ายมากแต่ซอมบี้โผล่เพิ่ม) • ส่งทีมสำรวจไปได้",
+    "🧭 ภารกิจวันแรก (ปุ่ม 🧭 บนแถบบน): ทำ 6 ข้อเพื่อรู้จักเกมแล้วรับของรางวัล ข้อละครั้งเดียว • 🌳 ปุ่มต้นไม้ทักษะอยู่บนแถบบนเช่นกัน มีจุดแดงเมื่อมีแต้มว่าง",
+    "🐾 สัตว์เลี้ยงประจำค่าย (ปุ่ม 🏠 ที่พักขั้น 1+): ส่งออกไปหาของรอบละ 3 ชั่วโมง กลับมารับได้แม้ไม่ได้ออนไลน์ • 🎣 ตกปลาที่ท่าเรือ (มนุษย์ เสีย 10 พลังงาน กดดึงตอนเครื่องหมายอยู่โซนเขียว ฝนช่วยให้ง่ายขึ้น พายุยากขึ้น) ได้ 🐟 ปลาสด/🐠 ปลาทอง แล้วคราฟต์ 🍢 ปลาย่าง กับ 🍲 ซุปปลา ที่ Safe Zone กินแล้วฟื้นพร้อมบัฟสั้น ๆ",
     "🎮 มินิเกมก่อนค้นลึก: จำรหัสวิทยุ 📻 หรือลำดับเสียงป่า 🌲 ให้ถูกครบ = ค้นครั้งนั้นเจอของว่างเปล่าน้อยลง 40% ของหายากออกง่ายขึ้น 50% ซอมบี้น้อยลง 15% (ผิดตัวเดียวได้โบนัสครึ่งหนึ่ง) • กด ข้าม ได้ตลอด หรือปิดด้วยปุ่ม 🎮 ข้างปุ่มค้นลึก",
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
@@ -1038,7 +1046,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); achInit(); wallListen(); deepInit(); headCompactInit();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); try { kInit(); } catch (e) { console.warn("kInit", e); } achInit(); wallListen(); deepInit(); headCompactInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -1091,7 +1099,7 @@ async function enterZone(z, initial = false, moved = false) {
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
     teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } try { achZone(z); } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
-    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender();
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender(); kZoneHook();
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
@@ -1437,7 +1445,7 @@ async function craft(id) {
     u[`inventory/${state.uid}/${m}` + (left > 0 ? "/qty" : "")] = left > 0 ? left : null;
   }
   invAddUpdate(u, r.out, r.qty);
-  try { await update(ref(db), u); questBump("craft"); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+  try { await update(ref(db), u); questBump("craft"); if (id === "fish_grill" || id === "fish_stew") achBump("cook"); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
   catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
 }
@@ -1732,7 +1740,7 @@ async function useItem(slot) {
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
-  try { await update(ref(db), u); questBump("use"); if (def.heal > 0) achBump("heal"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
+  try { await update(ref(db), u); questBump("use"); try { mealOnUse(it.id); } catch { /* ข้าม */ } if (def.heal > 0) achBump("heal"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
   catch (e) { toast(errMsg(e)); }
 }
 
@@ -6023,6 +6031,9 @@ const ACH_FAM = [
   ["vis", "🏡", "social", "", "เยี่ยมบ้านเพื่อน (คนละ 1 ครั้ง/วัน)", "ครั้ง", [3, 15, 50, 150], ["แวะทักทาย", "แขกประจำ", "เพื่อนบ้านทั้งเมือง", "ผู้ไม่เคยลืมใคร"]],
   ["gft", "🎁", "social", "", "ฝากของให้เพื่อน", "ชิ้น", [1, 5, 20, 60], ["น้ำใจแรก", "คนใจดี", "ซานต้ากลางป่า", "ผู้ให้ไม่รู้จบ"]],
   ["labs", "🧫", "world", "", "ส่งตัวอย่างวิจัยให้ค่าย", "ชิ้น", [5, 25, 80, 200], ["ผู้ช่วยนักวิจัย", "คนเก็บตัวอย่าง", "หัวหน้าห้องแล็บสนาม", "ผู้ไขปริศนาโครงการลับ"]],
+  ["fish", "🎣", "explore", "", "ตกปลาได้", "ตัว", [5, 25, 80, 200], ["มือใหม่หัดตกปลา", "นักตกปลาท่าเรือ", "เจ้าแห่งทุ่นลอย", "ตำนานแห่งท่าเรือ"]],
+  ["cook", "🍲", "world", "", "ทำอาหารจากปลา", "จาน", [3, 15, 50], ["พ่อครัวมือใหม่", "แม่ครัวประจำค่าย", "เชฟแห่งเมืองร้าง"]],
+  ["petc", "🐾", "world", "", "สัตว์เลี้ยงหาของกลับมา", "ครั้ง", [3, 15, 50, 150], ["เพื่อนตัวน้อย", "คู่หูสี่ขา", "ผู้ฝึกสัตว์", "เจ้าของฝูงที่ภักดี"]],
   ["expd", "🧭", "explore", "", "ทีมสำรวจกลับมารับของสำเร็จ", "ครั้ง", [1, 5, 20, 60], ["ส่งทีมแรก", "หัวหน้าทีมสำรวจ", "เจ้าของเส้นทางเสบียง", "ผู้ไม่เคยให้ค่ายอดอยาก"]],
   ["book", "📖", "world", "", "บันทึกลงสมุดสะสม", "รายการ", [10, 25, 45, 70], ["นักจดบันทึก", "นักสะสมตัวยง", "ผู้รอบรู้เมืองร้าง", "สารานุกรมเดินได้"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
@@ -6934,13 +6945,13 @@ function careerCheck() {
 }
 const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
 let fxMemo = { k: "", v: null };
 function fxMods(z) {
-  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0, labBuffLeft() > 0 ? 1 : 0, typeof skEff === "function" ? skEff.s || "" : ""].join(",");
+  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0, labBuffLeft() > 0 ? 1 : 0, mealRec() ? 1 : 0, typeof skEff === "function" ? skEff.s || "" : ""].join(",");
   if (fxMemo.k === k) return fxMemo.v;
   const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0, it: {} }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
   festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
@@ -6948,7 +6959,7 @@ function fxMods(z) {
   if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
   if (duoBuffLeft() > 0) m.a *= 1.1;
   if (typeof skApply === "function") skApply(m);
-  labBuffMods(m);
+  labBuffMods(m); mealMods(m);
   if (typeof fxCampMods === "function") fxCampMods(m, z);
   if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
   if (typeof fxNpcMods === "function") fxNpcMods(m, z);
@@ -7108,7 +7119,7 @@ function fxInit() {
      จบสัปดาห์ ฝั่งที่แต้มมากกว่าในโซนนั้น "ยึดโซน" ตลอดสัปดาห์ถัดไป → สมาชิกฝั่งผู้ชนะได้โบนัสเล็ก ๆ ในโซนนั้น
    - ปรับได้จากแท็บ 🎛️: proj_on, proj_scale, proj_str, proj_season, zw_on, zw_str, zw_min
    ========================================================= */
-const PROJ_ITEMS = { human: { scrap: 1, chem: 3, bandage: 2, canned_food: 2, water: 1, medkit: 6, lab_sample: 5, lab_core: 25 }, zombie: { rotten_meat: 1, chem: 3, moss: 2, medkit: 6, lab_sample: 5, lab_core: 25 } };
+const PROJ_ITEMS = { human: { scrap: 1, chem: 3, bandage: 2, canned_food: 2, water: 1, medkit: 6, lab_sample: 5, lab_core: 25, fish: 3, golden_fish: 8 }, zombie: { rotten_meat: 1, chem: 3, moss: 2, medkit: 6, lab_sample: 5, lab_core: 25 } };
 const PROJ = {
   human: [
     { id: 1, icon: "🗼", name: "หอสังเกตการณ์", cost: 500, tip: "ตาไวขึ้น: เจอซอมบี้ตอนค้นหาน้อยลง 5%", eff: { z: 0.95 } },
@@ -7288,7 +7299,7 @@ function baseUnits(rec, now = serverNow()) {
   if (!rec || !BASE_P[rec.k] || typeof rec.t !== "number") return 0;
   return Math.max(0, Math.min(BASE_CAP[rec.k], Math.floor((now - rec.t) / BASE_P[rec.k])));
 }
-const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); try { n += benchDone(); } catch { /* ข้าม */ } try { if (expReady()) n += 1; } catch { /* ข้าม */ } return n; };
+const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); try { n += benchDone(); } catch { /* ข้าม */ } try { if (expReady()) n += 1; } catch { /* ข้าม */ } try { if (petReady()) n += 1; } catch { /* ข้าม */ } return n; };
 const baseHm = (ms) => { const m = Math.max(1, Math.ceil(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`; };
 let baseLastTx = 0;
 function baseInit() {
@@ -7296,6 +7307,7 @@ function baseInit() {
   const b = btn("🏠 ที่พัก", openBase, "btn ghost mini"); b.id = "btn-base"; const pr = $("btn-profile"); if (pr) pr.before(b);
   onValue(ref(db, "base/" + state.uid), (s) => { state.base = s.val() || {}; baseBadge(); baseAgain(); }, (e) => console.warn("base", e?.code || e));
   try { expInit(); } catch (e) { console.warn("exp init", e); }
+  try { petInit(); } catch (e) { console.warn("pet init", e); }
   setInterval(() => { baseBadge(); baseAgain(); baseNotice(); try { expNotice(); } catch { /* ข้าม */ } }, 20000); setTimeout(baseNotice, 8000);
 }
 function baseBadge() { const b = $("btn-base"); if (!b) return; const n = baseOn() ? baseReady() : 0; b.textContent = n > 0 ? `🏠 ที่พัก (${n})` : "🏠 ที่พัก"; b.classList.toggle("hidden", !baseOn()); }
@@ -7405,7 +7417,7 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
-  try { benchRows(body); expRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+  try { benchRows(body); expRows(body); petRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
 }
 
 /* =========================================================
@@ -7956,7 +7968,7 @@ async function baseSceneBio(uid, facIn) {
    - สมุดสะสม: เก็บเป็นบิตลงตัวนับ ach (ชิ้นละ 11 บิต ≤ 2047 < เพดาน +3000/ครั้ง) แล้วรวม (OR) กลับเข้าทุกเครื่อง
    ========================================================= */
 const BK_SP = {   // ลำดับต้องคงที่ตลอดไป: เพิ่มของใหม่ได้เฉพาะต่อท้ายเท่านั้น
-  i: ["canned_food", "water", "bandage", "medkit", "wooden_bat", "knife", "crowbar", "pistol", "bread", "fruit", "moss", "energy_drink", "scrap", "chem", "pocket_knife", "spiked_bat", "fire_axe", "crossbow", "samurai_sword", "shotgun", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat", "rag_vest", "scrap_plate", "riot_vest", "army_vest", "lucky_charm", "headlamp", "gas_mask", "toolkit", "mut_fang1", "mut_fang2", "mut_hide1", "mut_hide2", "mut_nose1", "mut_nose2", "lab_coat", "bio_lens", "lab_sample", "chem_gloves", "lab_blade", "lab_core", "exp_serum", "mut_fang3"],
+  i: ["canned_food", "water", "bandage", "medkit", "wooden_bat", "knife", "crowbar", "pistol", "bread", "fruit", "moss", "energy_drink", "scrap", "chem", "pocket_knife", "spiked_bat", "fire_axe", "crossbow", "samurai_sword", "shotgun", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat", "rag_vest", "scrap_plate", "riot_vest", "army_vest", "lucky_charm", "headlamp", "gas_mask", "toolkit", "mut_fang1", "mut_fang2", "mut_hide1", "mut_hide2", "mut_nose1", "mut_nose2", "lab_coat", "bio_lens", "lab_sample", "chem_gloves", "lab_blade", "lab_core", "exp_serum", "mut_fang3", "fish", "golden_fish", "fish_grill", "fish_stew"],
   z: ["safe", "ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel", "lab"],
   f: ["newmoon", "fullmoon", "meteor", "songkran", "loy", "halloween", "harvest", "newyear"],
   s: ["plane", "truck", "bunker"]
@@ -8399,6 +8411,203 @@ function expRows(body) {
 }
 
 /* =========================================================
+   47) 🎒 Release K — ปุ่มลัดบนแถบบน • 🧭 ภารกิจวันแรก • 🐾 สัตว์เลี้ยงประจำค่าย • 🎣 ตกปลา • 🍲 อาหารจากปลา (rules v39: onb/ pet/ + ปลาในท่าเรือ + อาหารปลา)
+   - 🌳 ปุ่มต้นไม้ทักษะ/🧭 ภารกิจวันแรกอยู่แถบบน มีจุดแดงเมื่อมีสิ่งให้ทำ
+   - ภารกิจวันแรก 6 ข้อ: รับของข้อละครั้งเดียวตลอดชีพ (onb/{uid}/s1..s6) — ความคืบหน้านับจากตัวนับความสำเร็จ ฝั่งเกมตรวจ rules ตรวจแค่ "รับซ้ำไม่ได้ + ของ/จำนวนตรงตาราง"
+   - สัตว์เลี้ยง: ส่งออกไปหาของ 3 ชม. กลับมารับของ (pet/{uid} = {k, t}) ของที่ได้ผูกกับชนิดสัตว์ (rules ตรวจตรง ๆ)
+   - ตกปลา: มนุษย์ที่ท่าเรือ เสีย 10 พลังงานต่อครั้ง ได้ปลา/ปลาทอง (เขียนผ่านช่องทางเก็บของโซนเดิม) อากาศมีผลกับความยากของมินิเกม
+   - ปลา → ปลาย่าง/ซุปปลา (คราฟต์ที่ Safe Zone) กินแล้วฟื้นตามตาราง + บัฟสั้น ๆ (ฝั่งเกมล้วน ๆ เก็บในเครื่อง)
+   ========================================================= */
+const ONB_STEPS = [
+  { k: "srch", n: 5, t: "ค้นหาไอเทม 5 ครั้ง", id: "bandage", q: 2 },
+  { k: "use", n: 1, t: "ใช้ไอเทมจากกระเป๋า 1 ครั้ง", id: "water", q: 2 },
+  { k: "trav", n: 1, t: "เดินทางไปโซนอื่น (แท็บ โซน/ผู้เล่น)", id: "energy_drink", q: 1 },
+  { k: "found", n: 10, t: "ค้นหาจนเจอของรวม 10 ชิ้น", id: "medkit", q: 1 },
+  { k: "bup", n: 1, t: "สร้างที่พัก (ปุ่ม 🏠 ที่พัก)", id: "water_jug", q: 1 },
+  { k: "npc", n: 1, t: "คุยกับ NPC ที่ Safe Zone (มิรา/เคน)", id: "trauma_kit", q: 1 }
+];
+const onbOn = () => T("onb_on", 1) === 1;
+const onbCnt = (k) => state.ach?.loaded ? (state.ach.c?.[k] || 0) : 0;
+const onbDone = (i) => !!state.onb?.["s" + (i + 1)];
+function onbOk(i) { const s = ONB_STEPS[i]; if (s.k === "bup" && baseLv() >= 1) return true; return onbCnt(s.k) >= s.n; }
+const onbReady = () => ONB_STEPS.filter((_, i) => !onbDone(i) && onbOk(i)).length;
+const onbLeft = () => ONB_STEPS.filter((_, i) => !onbDone(i)).length;
+function onbInit() {
+  if (state.onbOn || !state.uid) return; state.onbOn = true; state.onb = null;
+  onValue(ref(db, "onb/" + state.uid), (s) => { state.onb = s.val() || {}; try { kTopTick(); onbRender(); } catch { /* ข้าม */ } }, (e) => console.warn("onb", e?.code || e));
+}
+async function onbClaim(i) {
+  const s = ONB_STEPS[i], uid = state.uid; if (!s || !uid || state.busy || onbDone(i) || !onbOk(i)) return;
+  state.busy = true;
+  try {
+    const have = (await get(ref(db, `inventory/${uid}/${s.id}/qty`))).val() || 0;
+    if (have + s.q > 99) return toast(`ช่อง ${ITEMS[s.id].name} เต็ม — ใช้ก่อนแล้วค่อยรับ`);
+    await update(ref(db), { [`onb/${uid}/s${i + 1}`]: serverTimestamp(), [`inventory/${uid}/${s.id}`]: { id: s.id, qty: have + s.q } });
+    toast(`🎁 รับ ${ITEMS[s.id].icon} ${ITEMS[s.id].name} ×${s.q}`); try { logLine(`🧭 ภารกิจวันแรก “${s.t}” สำเร็จ — ได้ ${ITEMS[s.id].name} ×${s.q}`, "system"); } catch { /* ข้าม */ }
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; onbRender(); }
+}
+function onbRender() {
+  const body = $("onb-body"); if (!body || $("onb-modal").classList.contains("hidden")) return; body.innerHTML = "";
+  body.append(mk("div", "muted", "ทำตามขั้นตอนเหล่านี้เพื่อทำความรู้จักเกม รับของรางวัลได้ข้อละครั้งเดียวตลอดชีพ (ทำไปแล้วก็กดรับได้เลย)"));
+  ONB_STEPS.forEach((s, i) => {
+    const done = onbDone(i), ok = onbOk(i), c = Math.min(s.n, onbCnt(s.k)), r = mk("div", "world-row" + (ok && !done ? " evt-live" : ""));
+    r.append(mk("div", "", `${done ? "✅" : ok ? "🎯" : "⬜"} ${i + 1}. ${s.t}`), mk("div", "muted", `${s.k === "bup" && baseLv() >= 1 ? "เสร็จแล้ว" : `ความคืบหน้า ${c}/${s.n}`} • รางวัล ${ITEMS[s.id].icon} ${ITEMS[s.id].name} ×${s.q}`));
+    if (!done && ok) r.append(btn("รับรางวัล", () => onbClaim(i), "btn primary mini"));
+    body.append(r);
+  });
+  if (!onbLeft()) body.append(mk("div", "", "🎉 ครบทุกข้อแล้ว — ขอให้รอดตลอดไป"));
+}
+function onbOpen() {
+  if (!$("onb-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "onb-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🧭 ภารกิจวันแรก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "onb-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("onb-modal").classList.remove("hidden"); onbRender();
+}
+function kInit() {
+  if (state.kOn || !state.uid) return; state.kOn = true;
+  try { onbInit(); } catch (e) { console.warn("onb init", e); }
+  const pr = $("btn-profile"); if (pr) {
+    const sk = btn("🌳 ทักษะ", () => { try { skOpen(); } catch { /* ข้าม */ } }, "btn ghost mini"); sk.id = "btn-sk"; pr.before(sk);
+    const ob = btn("🧭 เริ่มต้น", onbOpen, "btn ghost mini"); ob.id = "btn-onb"; ob.classList.add("hidden"); pr.before(ob);
+  }
+  const sc = $("btn-scavenge"); if (sc) { const fb = btn("🎣 ตกปลา (−10 พลังงาน)", fishOpen, "btn ghost wide"); fb.id = "btn-fish"; fb.classList.add("hidden"); sc.after(fb); }
+  setInterval(kTopTick, 5000); kTopTick();
+}
+function kTopTick() {
+  const sk = $("btn-sk"), ob = $("btn-onb"), fb = $("btn-fish");
+  if (sk) { let on = false, n = 0; try { on = skOn(); n = on ? skFreeAll() : 0; } catch { /* ข้าม */ } sk.classList.toggle("hidden", !on); sk.classList.toggle("btn-dot", n > 0); sk.title = n > 0 ? `มีแต้มทักษะว่าง ${n} แต้ม` : "ต้นไม้ทักษะ"; }
+  if (ob) { const show = onbOn() && !!state.onb && onbLeft() > 0, rd = onbReady(); ob.classList.toggle("hidden", !show); ob.classList.toggle("btn-dot", rd > 0); ob.textContent = `🧭 เริ่มต้น ${ONB_STEPS.length - onbLeft()}/${ONB_STEPS.length}`; }
+  if (fb) fb.classList.toggle("hidden", !fishCan());
+}
+function kZoneHook() { try { kTopTick(); } catch { /* ข้าม */ } }
+
+/* ---- 🐾 สัตว์เลี้ยงประจำค่าย ---- */
+const PET_MS = 10800000;
+const PET_K = {
+  dog: { f: "human", icon: "🐕", name: "หมาเฝ้าค่าย", id: "canned_food", q: 1 },
+  cat: { f: "human", icon: "🐈", name: "แมวสายสืบ", id: "scrap", q: 2 },
+  rat: { f: "zombie", icon: "🐀", name: "หนูซอมบี้", id: "rotten_meat", q: 2 },
+  bat: { f: "zombie", icon: "🦇", name: "ค้างคาวกลางคืน", id: "moss", q: 1 }
+};
+const petOn = () => T("pet_on", 1) === 1;
+const petLeft = () => state.pet?.t > 0 ? Math.max(0, state.pet.t + PET_MS - serverNow()) : 0;
+const petOut = () => !!state.pet && state.pet.t > 0;
+const petReady = () => petOut() && petLeft() <= 0;
+function petInit() {
+  if (state.petOn || !state.uid) return; state.petOn = true; state.pet = null;
+  onValue(ref(db, "pet/" + state.uid), (s) => { state.pet = s.val() || null; try { baseBadge(); baseAgain(); } catch { /* ข้าม */ } }, (e) => console.warn("pet", e?.code || e));
+}
+async function petWrite(label, val, extra) {
+  if (state.busy || !baseCan() || !petOn()) return toast("ต้องอยู่ที่ Safe Zone และมีที่พักขั้น 1 ขึ้นไป"); state.busy = true;
+  try { await update(ref(db), { ...val, ...(extra || {}) }); if (label) toast(label); }
+  catch (e) { toast(baseErr(e)); } finally { state.busy = false; baseAgain(); }
+}
+const petAdopt = (k) => petWrite(`${PET_K[k].icon} รับ${PET_K[k].name}มาเลี้ยงแล้ว`, { ["pet/" + state.uid]: { k, t: 0 } });
+const petSend = () => petWrite(`${PET_K[state.pet.k].icon} ส่ง${PET_K[state.pet.k].name}ออกไปหาของแล้ว กลับมาใน ~3 ชั่วโมง`, { [`pet/${state.uid}/t`]: serverTimestamp() });
+async function petClaim() {
+  const pk = state.pet && PET_K[state.pet.k]; if (!pk || !petReady() || state.busy) return;
+  const have = (await get(ref(db, `inventory/${state.uid}/${pk.id}/qty`))).val() || 0;
+  if (have + pk.q > 99) return toast(`ช่อง ${ITEMS[pk.id].name} เต็ม — ใช้ก่อนแล้วค่อยรับ`);
+  await petWrite(`${pk.icon} ${pk.name}กลับมาแล้ว! ได้ ${ITEMS[pk.id].icon} ${ITEMS[pk.id].name} ×${pk.q}`, { [`pet/${state.uid}/t`]: 0, [`inventory/${state.uid}/${pk.id}`]: { id: pk.id, qty: have + pk.q } });
+  try { achBump("petc"); } catch { /* ข้าม */ }
+}
+function petRows(body) {
+  if (!petOn()) return;
+  const fac = state.profile?.faction, kinds = Object.entries(PET_K).filter(([, d]) => d.f === fac);
+  const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
+  c.append(mk("b", "", "🐾 สัตว์เลี้ยงประจำค่าย"));
+  if (baseLv() < 1) { c.append(mk("span", "muted", "ต้องอัปเกรดที่พักถึงขั้น 1 ก่อนจึงรับเลี้ยงได้")); return body.append(c); }
+  const row = mk("div"); row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px";
+  const pk = state.pet && PET_K[state.pet.k];
+  if (!pk) {
+    c.append(mk("span", "muted", "เลือกเพื่อนร่วมค่าย ส่งออกไปหาของรอบละ 3 ชั่วโมง กลับมารับได้แม้คุณไม่ได้ออนไลน์ (เปลี่ยนตัวได้ตอนที่มันอยู่ที่ค่าย)"));
+    kinds.forEach(([k, d]) => { const b = btn(`${d.icon} ${d.name} → ${ITEMS[d.id].icon}×${d.q}`, () => petAdopt(k), "btn ghost mini"); b.disabled = !baseCan(); row.append(b); });
+    c.append(row); return body.append(c);
+  }
+  if (petOut()) {
+    const left = petLeft(); c.append(mk("span", "", `${pk.icon} ${pk.name} ออกไปหาของ — ${left > 0 ? `กลับมาใน ~${baseHm(left)}` : "กลับมาแล้ว!"}`), worldBar(Math.min(1, 1 - left / PET_MS), left > 0 ? `${Math.round((1 - left / PET_MS) * 100)}%` : "พร้อมรับ"));
+    const b = btn(`รับของ (${ITEMS[pk.id].icon} ${ITEMS[pk.id].name} ×${pk.q})`, petClaim, "btn primary mini"); b.disabled = !baseCan() || left > 0; row.append(b);
+  } else {
+    c.append(mk("span", "muted", `${pk.icon} ${pk.name} อยู่ที่ค่าย — ส่งออกไปหาของ ${ITEMS[pk.id].icon} ${ITEMS[pk.id].name} ×${pk.q} (3 ชั่วโมง)`));
+    const b = btn("ส่งออกไปหาของ", petSend, "btn primary mini"); b.disabled = !baseCan(); row.append(b);
+    kinds.filter(([k]) => k !== state.pet.k).forEach(([k, d]) => { const s = btn(`เปลี่ยนเป็น ${d.icon}`, () => { if (confirm(`เปลี่ยนเป็น ${d.name}?`)) petAdopt(k); }, "btn ghost mini"); s.disabled = !baseCan(); row.append(s); });
+    if (!kinds.some(([k]) => k === state.pet.k)) c.append(mk("span", "muted", "ฝ่ายของคุณเปลี่ยนไปแล้ว เลือกเพื่อนร่วมค่ายตัวใหม่ได้"));
+  }
+  c.append(row); body.append(c);
+}
+
+/* ---- 🍲 บัฟจากอาหารปลา (เก็บในเครื่อง) ---- */
+const MEALS = { fish_grill: { min: 20, name: "อิ่มปลาย่าง", tip: "ไม่เจออะไรน้อยลง 7%" }, fish_stew: { min: 30, name: "อุ่นท้องซุปปลา", tip: "ลดดาเมจที่โดน 5%" } };
+const mealRec = () => { const r = LS.get(lsKey("meal"), null); return r && MEALS[r.id] && r.until > serverNow() ? r : null; };
+function mealOnUse(id) { const m = MEALS[id]; if (!m) return; LS.set(lsKey("meal"), { id, until: serverNow() + m.min * 60000 }); fxMemo = { k: "", v: null }; toast(`🍽️ ${m.name} ${m.min} นาที: ${m.tip}`); }
+function mealMods(m) { const r = mealRec(); if (r && r.id === "fish_grill") m.n *= 0.93; }
+const mealCut = () => { const r = mealRec(); return r && r.id === "fish_stew" ? 0.05 : 0; };
+
+/* ---- 🎣 ตกปลา ---- */
+const FISH_COST = 10;
+const FISH_WX = { clear: [0.22, 1], rain: [0.3, 0.95], fog: [0.22, 1], storm: [0.15, 1.35] };   // [สัดส่วนโซนเขียว, ความเร็วเครื่องหมาย]
+const fishOn = () => T("fish_on", 1) === 1;
+let fishRun = null;
+function fishCan() { const p = state.profile; return !!(fishOn() && p && p.faction === "human" && p.hp > 0 && state.zone === "port" && !state.boss); }
+function fishClose() { if (fishRun) { clearTimeout(fishRun.tm); cancelAnimationFrame(fishRun.raf); fishRun.dead = true; } fishRun = null; $("fish-modal")?.classList.add("hidden"); }
+function fishOpen() {
+  if (!fishCan()) return toast("ตกปลาได้เฉพาะมนุษย์ที่ท่าเรือ");
+  if (state.busy) return;
+  if (curFood() <= 0 || curWater() <= 0) return toast("หิวหรือกระหายเกินไป — กินอาหาร/ดื่มน้ำก่อน");
+  if (curStamina() < FISH_COST) return toast("พลังงานไม่พอ");
+  if (!$("fish-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "fish-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "420px";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎣 ตกปลา"), btn("ปิด", fishClose, "btn ghost mini"));
+    const body = mk("div"); body.id = "fish-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("fish-modal").classList.remove("hidden"); fishCast();
+}
+function fishCast() {
+  const body = $("fish-body"); if (!body) return; body.innerHTML = "";
+  const w = wxNow().type, [zw, sp] = FISH_WX[w] || FISH_WX.clear, W = WX[w];
+  const st = mk("div", "", "🎣 ปล่อยเบ็ดแล้ว… รอให้ทุ่นจม แล้วกด “ดึง!” ตอนเครื่องหมายอยู่ในโซนเขียว"), wx = mk("div", "muted", `${W.icon} ${W.name}: ${w === "rain" ? "ปลากินเบ็ดง่าย โซนเขียวกว้างขึ้น" : w === "storm" ? "คลื่นแรง โซนเขียวแคบและเร็ว" : "ทะเลปกติ"}`);
+  const track = mk("div"); track.style.cssText = "position:relative;height:30px;border-radius:8px;background:#222a33;overflow:hidden";
+  const a = 0.08 + Math.random() * (0.84 - zw), zone = mk("div"); zone.style.cssText = `position:absolute;top:0;bottom:0;left:${a * 100}%;width:${zw * 100}%;background:#2e7d32;opacity:.85`;
+  const mk2 = mk("div"); mk2.style.cssText = "position:absolute;top:2px;bottom:2px;width:6px;left:0;background:#e8a33d;border-radius:3px"; track.append(zone, mk2);
+  const pull = btn("ดึง!", () => fishPull(), "btn primary wide"); body.append(st, track, wx, pull);
+  const run = fishRun = { phase: "wait", a, zw, sp, st, mk2, pull, track, body };
+  run.tm = setTimeout(() => {
+    if (run.dead) return; run.phase = "bite"; run.t0 = performance.now(); st.textContent = "🐟 ทุ่นจมแล้ว! ดึงเลย!";
+    const loop = () => { if (run.dead || run.phase !== "bite") return; const el = performance.now() - run.t0; if (el > 4200) return fishResolve(run, null); const p = (el / (1500 / run.sp)) % 2; run.pos = p < 1 ? p : 2 - p; run.mk2.style.left = `calc(${run.pos * 100}% - 3px)`; run.raf = requestAnimationFrame(loop); };
+    run.raf = requestAnimationFrame(loop);
+  }, 1200 + Math.random() * 2300);
+}
+function fishPull() {
+  const run = fishRun; if (!run || run.dead) return;
+  if (run.phase === "wait") { clearTimeout(run.tm); run.dead = true; run.st.textContent = "ดึงเร็วไป ปลาตกใจหนีไปแล้ว (ไม่เสียพลังงาน)"; run.pull.textContent = "ลองใหม่"; run.pull.onclick = () => { fishRun = null; fishCast(); }; return; }
+  if (run.phase === "bite") { cancelAnimationFrame(run.raf); fishResolve(run, run.pos); }
+}
+async function fishResolve(run, pos) {
+  if (run.phase === "done") return; run.phase = "done"; run.dead = true; run.pull.disabled = true;
+  const hit = pos != null && pos >= run.a && pos <= run.a + run.zw, perfect = hit && Math.abs(pos - (run.a + run.zw / 2)) < run.zw * 0.18;
+  const id = hit ? (perfect && Math.random() < 0.25 ? "golden_fish" : "fish") : null;
+  const again = (msg) => { run.st.textContent = msg; run.pull.disabled = false; run.pull.textContent = "ตกต่อ"; run.pull.onclick = () => { fishRun = null; if (!fishCan() || curStamina() < FISH_COST) return fishClose(); fishCast(); }; };
+  if (state.busy) return again("ระบบกำลังทำงานอยู่ ลองใหม่อีกครั้ง");
+  state.busy = true;
+  try {
+    const u = {}, cur = curStamina();
+    u[`users/${state.uid}/stamina`] = cur - FISH_COST; u[`users/${state.uid}/staminaTs`] = serverTimestamp();
+    if (id) { if ((state.inv[id]?.qty || 0) >= 99) { again("ช่องเก็บปลาเต็ม (99) — ทำอาหารก่อน"); return; } invAddUpdate(u, id, 1); }
+    await update(ref(db), u);
+    if (id) { try { achBump("fish"); } catch { /* ข้าม */ } logLine(`🎣 ตกได้ ${ITEMS[id].icon} ${ITEMS[id].name}${id === "golden_fish" ? " ตัวทองอร่าม!" : ""}`, "info"); again(`${ITEMS[id].icon} ได้ ${ITEMS[id].name}!${perfect ? " (ดึงเป๊ะ)" : ""}`); }
+    else again(pos == null ? "🐟 ปลาหลุดเบ็ดไปแล้ว… (เสีย 10 พลังงาน)" : "ดึงไม่ตรงจังหวะ ปลาหนีไป (เสีย 10 พลังงาน)");
+  } catch (e) { again(errMsg(e)); }
+  finally { state.busy = false; try { kTopTick(); } catch { /* ข้าม */ } }
+}
+
+/* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
    ผู้เล่นฝากข้อความสั้นๆ (≤60 ตัว) ไว้ที่โซนที่ตัวเองยืนอยู่ ได้คนละ 1 ป้ายต่อโซน (เขียนใหม่ทับได้ทุก 60 วิ) • คนที่อยู่โซนนั้นเห็น ป้ายอายุ 24 ชม.
    ========================================================= */
@@ -8703,6 +8912,9 @@ function tuneDefs() {
   rows.push(["sk_on", "ต้นไม้ทักษะสายอาชีพ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🌳 ทักษะอาชีพ"]);
   rows.push(["sk_str", "ความแรงของทักษะ (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🌳 ทักษะอาชีพ"]);
   rows.push(["exp_on", "ทีมสำรวจ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🧭 ทีมสำรวจ"]);
+  rows.push(["onb_on", "ภารกิจวันแรก (1 = เปิด, 0 = ซ่อนปุ่ม)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
+  rows.push(["pet_on", "สัตว์เลี้ยงประจำค่าย (1 = เปิด, 0 = ปิด • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
+  rows.push(["fish_on", "ตกปลาที่ท่าเรือ (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);

@@ -784,3 +784,7 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
   .wall-box { max-height: 24vh !important; }
   .chat { grid-template-rows: auto minmax(120px, 1fr) auto; }
 }
+
+/* Release K: จุดแดงบนปุ่มลัด */
+.btn-dot { position: relative; }
+.btn-dot::after { content: ""; position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%; background: #e53935; box-shadow: 0 0 0 2px #14171c; }
