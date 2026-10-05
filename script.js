@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0950";
+const APP_VERSION = "2026-10-05.1003";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3732,6 +3732,9 @@ const MKT_SLOTS = 3, MKT_MAX = 99;
 const mktIdsFor = () => MKT_IDS.filter((id) => id !== "rotten_meat" || state.profile?.faction === "zombie");
 const mktHave = (id) => state.inv?.[id]?.qty || 0;
 const mktLabel = (id) => { const d = ITEMS[id]; return d ? `${d.icon || "📦"} ${d.name}` : id; };
+const mktWants = (l) => [l?.want, l?.want2, l?.want3].filter((w) => w && w.id);   // ประกาศขอได้ 1–3 อย่าง (ผู้ซื้อต้องจ่ายครบทุกอย่าง)
+const mktWantTxt = (l) => mktWants(l).map((w) => `${mktLabel(w.id)} ×${w.qty}`).join(" + ");
+const mktWantKey = ["", "b", "c"];   // คีย์ใบรับของ: lid_ts / lid_b{ts} / lid_c{ts}
 const mktInt = (v) => { const n = Number(v); return Number.isInteger(n) && n >= 1 && n <= MKT_MAX ? n : 0; };
 // ใส่ของเข้าคลังตัวเอง (บวกจากของเดิม) ลง u — ถ้าช่องมีอยู่แล้วแก้แค่ qty
 function mktCredit(u, id, qty) {
@@ -3785,28 +3788,36 @@ function mktGuard(needSafe = true) {
 // ลงขาย: ของออกจากคลัง → ประกาศ (escrow)
 async function mktCreate() {
   const f = state.mktForm, p = state.profile; if (!mktGuard()) return;
-  const gq = mktInt(f.gq), wq = mktInt(f.wq);
-  if (!f.g || !f.w || f.g === f.w) return toast("เลือกของที่ขายกับของที่ต้องการให้ต่างกัน");
-  if (!gq || !wq) return toast("จำนวนต้องเป็น 1–99");
+  const gq = mktInt(f.gq), list = [{ id: f.w, q: f.wq }, ...(f.x || [])].slice(0, 3);
+  if (!f.g || !gq) return toast("จำนวนต้องเป็น 1–99");
+  const ws = [];
+  for (const x of list) {
+    const q = mktInt(x.q);
+    if (!x.id || !q) return toast("จำนวนต้องเป็น 1–99");
+    if (x.id === f.g) return toast("ของที่ต้องการต้องไม่ซ้ำกับของที่ขาย");
+    if (ws.some((w) => w.id === x.id)) return toast("ของที่ต้องการห้ามซ้ำกันเอง");
+    ws.push({ id: x.id, qty: q });
+  }
   if (mktHave(f.g) < gq) return toast("ของในกระเป๋าไม่พอ");
   const n = [1, 2, 3].find((i) => !state.market?.[`${state.uid}_${i}`]);
   if (!n) return toast(`ลงขายได้สูงสุด ${MKT_SLOTS} ประกาศ — ยกเลิกอันเก่าก่อน`);
-  const u = { [`market/${p.faction}/${state.uid}_${n}`]: { seller: state.uid, sellerName: p.username, give: { id: f.g, qty: gq }, want: { id: f.w, qty: wq }, ts: serverTimestamp() } };
+  const L = { seller: state.uid, sellerName: p.username, give: { id: f.g, qty: gq }, want: ws[0], ts: serverTimestamp() };
+  if (ws[1]) L.want2 = ws[1]; if (ws[2]) L.want3 = ws[2];
+  const u = { [`market/${p.faction}/${state.uid}_${n}`]: L };
   mktDebit(u, f.g, gq);
-  if (await mktRun(u, `ลงขาย ${ITEMS[f.g].name} ×${gq} แล้ว`)) questBump("market");
+  if (await mktRun(u, `ลงขาย ${ITEMS[f.g].name} ×${gq} แล้ว`)) { f.x = []; questBump("market"); }
 }
 // ซื้อ: จ่ายของที่ขอ → ได้ของในประกาศ • ผู้ขายได้ใบรับของ (ซื้อทั้งประกาศ ไม่แบ่งซื้อ)
 async function mktBuy(lid) {
   const l = state.market?.[lid], p = state.profile; if (!l || !mktGuard()) return;
   if (l.seller === state.uid) return toast("ซื้อประกาศตัวเองไม่ได้");
-  if (mktHave(l.want.id) < l.want.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(l.want.id)} ×${l.want.qty}`);
+  const ws = mktWants(l);
+  const lack = ws.find((w) => mktHave(w.id) < w.qty);
+  if (lack) return toast(`ของไม่พอ — ต้องมี ${mktWantTxt(l)}`);
   if (mktHave(l.give.id) + l.give.qty > MKT_MAX) return toast(`${ITEMS[l.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
-  const u = {
-    [`market/${p.faction}/${lid}`]: null,
-    [`marketTx/${state.uid}`]: { op: "buy", lid, ts: serverTimestamp() },
-    [`marketPayouts/${l.seller}/${lid}_${l.ts}`]: { id: l.want.id, qty: l.want.qty, lid }
-  };
-  mktDebit(u, l.want.id, l.want.qty); mktCredit(u, l.give.id, l.give.qty);
+  const u = { [`market/${p.faction}/${lid}`]: null, [`marketTx/${state.uid}`]: { op: "buy", lid, ts: serverTimestamp() } };
+  ws.forEach((w, i) => { u[`marketPayouts/${l.seller}/${i ? `${lid}_${mktWantKey[i]}${l.ts}` : `${lid}_${l.ts}`}`] = { id: w.id, qty: w.qty, lid }; mktDebit(u, w.id, w.qty); });
+  mktCredit(u, l.give.id, l.give.qty);
   if (await mktRun(u, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`)) questBump("market");
 }
 // ยกเลิกประกาศของตัวเอง: ของกลับเข้าคลัง
@@ -3863,6 +3874,7 @@ function renderMarket() {
   if (pays.length) {
     const c = card("📬 ของที่ขายได้ รอรับ");
     pays.forEach(([pid, p]) => { const r = row(); r.append(mk("span", "", `${mktLabel(p.id)} ×${p.qty}`), btn("รับ", () => mktClaim(pid), "btn primary mini")); c.append(r); });
+    if (pays.length > 1) c.append(btn("📬 รับทั้งหมด", async () => { for (const [pid] of Object.entries(state.mktPay || {})) { if (!state.mktPay?.[pid]) continue; await mktClaim(pid); } }, "btn primary mini"));
     body.append(c);
   }
 
@@ -3870,19 +3882,22 @@ function renderMarket() {
   if (typeof gachaRender === "function") gachaRender(body, card, row);   // ตู้กาชา (ข้อ 17)
   const mine = [1, 2, 3].map((i) => [`${state.uid}_${i}`, state.market?.[`${state.uid}_${i}`]]).filter(([, l]) => l);
   const c2 = card(`📦 ประกาศของฉัน (${mine.length}/${MKT_SLOTS})`);
-  mine.forEach(([lid, l]) => { const r = row(); r.append(mk("span", "", `ขาย ${mktLabel(l.give.id)} ×${l.give.qty} → ต้องการ ${mktLabel(l.want.id)} ×${l.want.qty}`), btn("ยกเลิก", () => mktCancel(lid), "btn danger mini")); c2.append(r); });
+  mine.forEach(([lid, l]) => { const r = row(); r.append(mk("span", "", `ขาย ${mktLabel(l.give.id)} ×${l.give.qty} → ต้องการ ${mktWantTxt(l)}`), btn("ยกเลิก", () => mktCancel(lid), "btn danger mini")); c2.append(r); });
   if (mine.length < MKT_SLOTS) {
     const haveIds = mktIdsFor().filter((id) => mktHave(id) > 0);
     if (!haveIds.includes(f.g)) f.g = haveIds[0] || "";
     if (!mktIdsFor().includes(f.w)) f.w = "scrap";
     if (!haveIds.length) c2.append(mk("span", "muted", "ไม่มีของที่ลงขายได้ในกระเป๋า"));
     else {
-      const num = (key) => { const i = mk("input"); i.type = "number"; i.min = 1; i.max = MKT_MAX; i.value = f[key]; i.style.cssText = "width:64px"; i.addEventListener("input", () => { f[key] = i.value; }); return i; };
-      const r1 = row(), r2 = row();
+      const num = (key, o = f) => { const i = mk("input"); i.type = "number"; i.min = 1; i.max = MKT_MAX; i.value = o[key]; i.style.cssText = "width:64px"; i.addEventListener("input", () => { o[key] = i.value; }); return i; };
+      const r1 = row(), r2 = row(); f.x = f.x || [];
       r1.append(mk("span", "", "ขาย"), mktSelect(haveIds, f.g, (v) => { f.g = v; renderMarket(); }), num("gq"), mk("span", "muted", `(มี ${mktHave(f.g)})`));
       r2.append(mk("span", "", "แลก"), mktSelect(mktIdsFor(), f.w, (v) => { f.w = v; }), num("wq"));
+      c2.append(r1, r2);
+      f.x.forEach((x, i) => { const rx = row(); rx.append(mk("span", "", "และ"), mktSelect(mktIdsFor(), x.id, (v) => { x.id = v; }), num("q", x), btn("✕", () => { f.x.splice(i, 1); renderMarket(); }, "btn ghost mini")); c2.append(rx); });
+      if (f.x.length < 2) c2.append(btn("➕ ขอของเพิ่มอีกอย่าง (ผู้ซื้อต้องจ่ายครบทุกอย่าง)", () => { const used = [f.g, f.w, ...f.x.map((x) => x.id)]; f.x.push({ id: mktIdsFor().find((id) => !used.includes(id)) || "water", q: 1 }); renderMarket(); }, "btn ghost mini"));
       const go = btn("ลงขาย", mktCreate, "btn primary mini"); go.disabled = !safe;
-      c2.append(r1, r2, go, mk("span", "muted", "ของที่ลงขายจะถูกเก็บไว้ในตลาด (ไม่หายตอนตาย) ยกเลิกเมื่อไรก็ได้"));
+      c2.append(go, mk("span", "muted", "ของที่ลงขายจะถูกเก็บไว้ในตลาด (ไม่หายตอนตาย) ยกเลิกเมื่อไรก็ได้"));
     }
   }
   body.append(c2);
@@ -3890,8 +3905,8 @@ function renderMarket() {
   const others = Object.entries(state.market || {}).filter(([, l]) => l.seller !== state.uid).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
   const c3 = card(`🛒 ประกาศในตลาด (${others.length})`);
   others.forEach(([lid, l]) => {
-    const r = row(), enough = mktHave(l.want.id) >= l.want.qty;
-    const t = mk("span", enough ? "" : "muted", `${l.sellerName}: ${mktLabel(l.give.id)} ×${l.give.qty} ← ${mktLabel(l.want.id)} ×${l.want.qty}`);
+    const r = row(), enough = mktWants(l).every((w) => mktHave(w.id) >= w.qty);
+    const t = mk("span", enough ? "" : "muted", `${l.sellerName}: ${mktLabel(l.give.id)} ×${l.give.qty} ← ${mktWantTxt(l)}`);
     const b = btn("ซื้อ", () => mktBuy(lid), "btn primary mini"); b.disabled = !safe || !enough;
     if (!enough) b.title = "ของไม่พอ";
     r.append(t, b); c3.append(r);
