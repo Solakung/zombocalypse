@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0810";
+const APP_VERSION = "2026-10-05.0822";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1065,10 +1065,11 @@ async function enterZone(z, initial = false, moved = false) {
       onChildRemoved(chatQ, (s) => { document.querySelector(`[data-key="${s.key}"]`)?.remove(); }),
       onValue(ref(db, "zonePlayers/" + z), renderPlayers),
       onValue(ref(db, "zoneItems/" + z), (s) => { state.ground = s.val() || {}; renderGround(); }),
+      signListen(z),
       onValue(ref(db, "worldBossHits/" + z), (s) => { state.wbHits = s.val() || {}; renderWB(); }),
       onValue(ref(db, `worldBossClaims/${z}/${state.uid}`), (s) => { state.wbClaim = s.val(); renderWB(); })
     );
-    renderWB();
+    signStyle(); renderWB();
     if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${travelCost(z)} พลังงาน)`}`, "info");
   } catch (e) { toast(errMsg(e)); }
 }
@@ -2170,7 +2171,7 @@ function renderWB() {
   // ผู้ร่วมตีที่ยังไม่รับรางวัล → รับให้อัตโนมัติ 1 ครั้งต่อบอส (ถ้าพลาดยังกดปุ่มเองได้)
   if (dead && mine && !claimed && !state.wbBusy && state.wbAutoClaimed !== b.startedAt) { state.wbAutoClaimed = b.startedAt; setTimeout(wbClaim, 300); }
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
-  { const art = $("wb-art"), id = WB_ART[b.name]; if (art) { art.classList.add("hidden"); if (id) { const src = `img/wb/${id}.webp`; imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } } }
+  { const art = $("wb-art"), id = WB_ART[b.name]; if (art) art.classList.add("hidden"); box.classList.remove("has-art"); box.style.removeProperty("--wbart"); if (id) { const src = `img/wb/${id}.webp`; imgProbe(src, (ok) => { if (ok && box.isConnected) { box.style.setProperty("--wbart", `url(${src})`); box.classList.add("has-art"); } }); } }   // รูปบอสเป็นพื้นหลังกล่อง (เหมือนแบนเนอร์โซน) ไม่ดันปุ่มต่อสู้
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
   $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}${fxChanceText("wboss")}`;
   $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
@@ -6380,8 +6381,13 @@ function evtOf(day, i) {
   const type = rdHash("evt", day, i) % 2 ? "air" : "horde", zone = zl[rdHash("evz", day, i) % zl.length];
   return { key: `e${day}_${i}`, type, zone, start, end: start + Math.max(5, Math.min(180, T("evt_dur", 30))) * 60000 };
 }
-function evtList(now = serverNow()) { const d = coopDay(now), out = []; for (const dd of [d - 1, d, d + 1]) for (let i = 0; i < EVT_PER_DAY; i++) out.push(evtOf(dd, i)); return out; }
-const evtActive = (now = serverNow()) => (T("evt_on", 1) ? evtList(now).filter((e) => now >= e.start && now < e.end) : []);
+function evtList(now = serverNow()) {
+  const d = coopDay(now), out = [];
+  if (T("evt_on", 1)) for (const dd of [d - 1, d, d + 1]) for (let i = 0; i < EVT_PER_DAY; i++) out.push(evtOf(dd, i));
+  for (const [k, f] of Object.entries(state.evtForce || {})) if (f && typeof f.start === "number" && typeof f.end === "number" && EVT_TYPES[f.type] && ZONES[f.zone] && f.zone !== "safe") out.push({ key: "x" + k, type: f.type, zone: f.zone, start: f.start, end: f.end });   // เจ้าของสั่งเอง: ทำงานแม้ปิดตารางอัตโนมัติ
+  return out;
+}
+const evtActive = (now = serverNow()) => evtList(now).filter((e) => now >= e.start && now < e.end);
 const evtHere = (zone = state.zone, now = serverNow()) => evtActive(now).find((e) => e.zone === zone) || null;
 function evtTable(t, isZ) {
   const e = evtHere(); if (!e) return t;
@@ -6391,7 +6397,7 @@ function evtTable(t, isZ) {
 }
 function evtSearchHook() { const e = evtHere(); if (e) { achBump("evt", 1); stat("evt"); } }
 function evtTick() {
-  if (!state.profile || !state.ach?.loaded || !T("evt_on", 1)) return;
+  if (!state.profile || !state.ach?.loaded) return;
   const now = serverNow(), say = (k, text) => { if (LS.get(lsKey("evt_" + k), 0)) return; LS.set(lsKey("evt_" + k), 1); radioPush(`📻 [วิทยุฉุกเฉิน] ${text}`, now, true); };
   evtList(now).forEach((e) => {
     const T = EVT_TYPES[e.type], zn = ZONES[e.zone]?.name || e.zone;
@@ -6402,13 +6408,101 @@ function evtTick() {
 }
 function evtWorldRows(box) {
   box.append(mk("div", "hub-day", "⚡ เหตุการณ์ใหญ่"));
-  if (!T("evt_on", 1)) return box.append(mk("div", "muted", "เหตุการณ์ใหญ่ปิดอยู่ชั่วคราว"));
+  if (!T("evt_on", 1) && !evtActive(serverNow()).length) return box.append(mk("div", "muted", "เหตุการณ์ใหญ่ปิดอยู่ชั่วคราว"));
   const now = serverNow(), act = evtActive(now), nxt = evtList(now).filter((e) => e.start > now).sort((a, b) => a.start - b.start)[0];
   if (!act.length && !nxt) return;
   act.forEach((e) => { const T = EVT_TYPES[e.type], row = mk("div", "world-row evt-live"); row.append(mk("div", "", `${T.icon} ${T.name} • ${ZONES[e.zone]?.name || e.zone}`), mk("div", "muted", `${T.tip} • เหลือ ~${Math.max(1, Math.ceil((e.end - now) / 60000))} นาที${state.zone === e.zone ? " • คุณอยู่ที่นี่!" : ""}`)); box.append(row); });
   if (!act.length && nxt) { const m = Math.ceil((nxt.start - now) / 60000), row = mk("div", "world-row"); row.append(mk("div", "muted", `ยังไม่มีเหตุการณ์ตอนนี้ — รอบถัดไปในอีก ${m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`} (ไม่บอกล่วงหน้าว่าที่ไหน ฟังวิทยุไว้)`)); box.append(row); }
 }
 
+
+/* =========================================================
+   33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
+   ผู้เล่นฝากข้อความสั้นๆ (≤60 ตัว) ไว้ที่โซนที่ตัวเองยืนอยู่ ได้คนละ 1 ป้ายต่อโซน (เขียนใหม่ทับได้ทุก 60 วิ) • คนที่อยู่โซนนั้นเห็น ป้ายอายุ 24 ชม.
+   ========================================================= */
+const SIGN_LIFE = 24 * 3600000, SIGN_CD = 60000, SIGN_MAX = 60;
+const signBad = (t) => /(http|www\.)/i.test(t);
+function signFresh() { const now = serverNow(); return Object.entries(state.signs || {}).filter(([, g]) => g && typeof g.t === "string" && typeof g.ts === "number" && now - g.ts < SIGN_LIFE).sort((a, b) => b[1].ts - a[1].ts); }
+function signListen(z) {
+  state.signs = {}; state.signZone = z; let first = true;
+  return onValue(ref(db, "sign/" + z), (snap) => {
+    if (state.signZone !== z) return;
+    state.signs = snap.val() || {};
+    const list = signFresh();
+    if (first) { first = false; if (list.length && state.profile) logLine(`🪧 มีป้ายในโซนนี้ ${list.length} ป้าย — ล่าสุด “${list[0][1].t}” (${list[0][1].n})`, "info"); }
+    signRender();
+  }, (e) => console.warn("sign", e?.code || e));
+}
+function signRender() {
+  const head = $("zone-event"); if (!head || !state.profile) return;
+  let box = $("sign-box"); if (!box) { box = mk("div", "sign-box"); box.id = "sign-box"; head.after(box); }
+  const list = signFresh(), open = !!state.signOpen, me = state.uid, staff = ["owner", "gm"].includes(state.profile.role);
+  box.textContent = "";
+  const h = mk("div", "sign-head"); h.append(mk("span", "", `🪧 ป้ายในโซน${list.length ? ` (${list.length})` : ""}`), mk("span", "muted", open ? "▴" : "▾"));
+  h.addEventListener("click", () => { state.signOpen = !state.signOpen; signRender(); });
+  box.append(h); if (!open) return;
+  if (!list.length) box.append(mk("div", "muted sign-note", "ยังไม่มีใครฝากป้ายไว้ที่นี่"));
+  list.slice(0, 8).forEach(([uid, g]) => {
+    const r = mk("div", "sign-row"), m = Math.max(1, Math.round((serverNow() - g.ts) / 60000));
+    r.append(mk("span", "sign-t", `“${g.t}”`), mk("span", "muted", ` — ${g.n || "?"} • ${m >= 60 ? Math.floor(m / 60) + " ชม." : m + " นาที"}ก่อน`));
+    if (uid === me || staff) { const d = btn("ลบ", async () => { try { await remove(ref(db, `sign/${state.zone}/${uid}`)); } catch (e) { toast(errMsg(e)); } }, "btn ghost mini"); r.append(d); }
+    box.append(r);
+  });
+  if (state.profile.hp > 0) {
+    const mine = state.signs?.[me], cd = mine ? Math.max(0, SIGN_CD - (serverNow() - mine.ts)) : 0;
+    const f = mk("div", "sign-form"), inp = mk("input"); inp.maxLength = SIGN_MAX; inp.placeholder = mine ? "เขียนทับป้ายของคุณ…" : "ฝากข้อความถึงคนที่ผ่านมา (≤60 ตัว)"; inp.value = state.signDraft || "";
+    inp.addEventListener("input", () => { state.signDraft = inp.value; });
+    const go = btn("ปักป้าย", async () => {
+      const t = inp.value.replace(/\s+/g, " ").trim();
+      if (!t) return toast("พิมพ์ข้อความก่อน");
+      if (t.length > SIGN_MAX) return toast(`ยาวเกิน ${SIGN_MAX} ตัวอักษร`);
+      if (signBad(t)) return toast("ห้ามใส่ลิงก์");
+      const left = mine ? Math.max(0, SIGN_CD - (serverNow() - mine.ts)) : 0; if (left > 0) return toast(`รออีก ${Math.ceil(left / 1000)} วิ ถึงจะเขียนใหม่ได้`);
+      go.disabled = true;
+      try { await set(ref(db, `sign/${state.zone}/${me}`), { t, n: state.profile.username, ts: serverTimestamp() }); state.signDraft = ""; toast("🪧 ปักป้ายแล้ว"); }
+      catch (e) { toast(errMsg(e)); } finally { go.disabled = false; }
+    }, "btn primary mini");
+    f.append(inp, go); box.append(f);
+    if (cd > 0) box.append(mk("div", "muted sign-note", `เพิ่งปักป้าย — เขียนทับได้ในอีก ${Math.ceil(cd / 1000)} วิ`));
+  }
+}
+function signStyle() {
+  if ($("sign-style")) return;
+  const st = document.createElement("style"); st.id = "sign-style";
+  st.textContent = ".sign-box{margin:4px 0;padding:4px 8px;border:1px dashed var(--hazard,#d9a441);border-radius:8px;background:rgba(0,0,0,.18);flex-basis:100%;max-height:22vh;overflow:auto}"
+    + ".sign-head{display:flex;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;font-size:.9em}"
+    + ".sign-row{margin:5px 0;font-size:.88em;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline}.sign-t{font-weight:600}"
+    + ".sign-form{display:flex;gap:6px;margin:6px 0;align-items:center}.sign-form input{flex:1 1 auto;min-width:0;width:auto}.sign-form .btn,.sign-row .btn{white-space:nowrap;min-height:0;padding:3px 10px;width:auto}.sign-note{margin:4px 0;font-size:.82em}";
+  document.head.append(st);
+}
+
+/* ---- ⚡ เจ้าของสั่งอีเวนต์ทันที ---- */
+function evtForceListen() {
+  if (state.efOn || !state.uid) return; state.efOn = true; state.evtForce = {};
+  onValue(ref(db, "evtForce"), (snap) => { state.evtForce = snap.val() || {}; try { evtTick(); worldRefresh(); } catch { /* ข้าม */ } }, (e) => console.warn("evtForce", e?.code || e));
+}
+function evtForceRows(box) {
+  box.append(mk("div", "hub-day", "⚡ สั่งอีเวนต์ทันที (เจ้าของ)"));
+  box.append(mk("div", "muted", "ปล่อยแล้วทุกคนได้ยินวิทยุเอง — ใช้ตอนคนออนเยอะหรือเปิดฉากเนื้อเรื่อง ไม่ต้องรอตามตาราง"));
+  const row = mk("div", "world-row tune-row"), ctl = mk("div", "tune-ctl");
+  const ty = mk("select"); Object.entries(EVT_TYPES).forEach(([k, v]) => { const o = mk("option", "", `${v.icon} ${v.name}`); o.value = k; ty.append(o); });
+  const zn = mk("select"); Object.entries(ZONES).filter(([k]) => k !== "safe").forEach(([k, v]) => { const o = mk("option", "", `${v.icon} ${v.name}`); o.value = k; zn.append(o); });
+  const mins = mk("input"); mins.type = "number"; mins.min = 5; mins.max = 180; mins.value = Math.max(5, Math.min(180, T("evt_dur", 30))); mins.inputMode = "numeric";
+  const go = btn("🚀 ปล่อยเลย", async () => {
+    const m = Math.round(Number(mins.value)); if (!(m >= 5 && m <= 180)) return toast("ใส่เวลา 5–180 นาที");
+    const now = serverNow(), k = "f" + now.toString(36);
+    try { await set(ref(db, "evtForce/" + k), { type: ty.value, zone: zn.value, start: now, end: now + m * 60000 }); toast("ปล่อยอีเวนต์แล้ว"); } catch (e) { toast(errMsg(e)); }
+  }, "btn primary mini");
+  ctl.append(ty, zn, mins, mk("span", "muted", "นาที"), go); row.append(ctl); box.append(row);
+  const now = serverNow(), live = Object.entries(state.evtForce || {}).filter(([, f]) => f && f.end > now);
+  live.forEach(([k, f]) => {
+    const r = mk("div", "world-row"), T2 = EVT_TYPES[f.type];
+    r.append(mk("div", "", `${T2?.icon || "⚡"} ${T2?.name || f.type} • ${ZONES[f.zone]?.name || f.zone}`), mk("div", "muted", `เหลือ ~${Math.max(1, Math.ceil((f.end - now) / 60000))} นาที`));
+    r.append(btn("หยุดตอนนี้", async () => { try { await update(ref(db, "evtForce/" + k), { end: Math.max(f.start + 1, serverNow()) }); toast("หยุดแล้ว"); } catch (e) { toast(errMsg(e)); } }, "btn danger mini"));
+    box.append(r);
+  });
+  Object.entries(state.evtForce || {}).forEach(([k, f]) => { if (f && f.end < now - 86400000) remove(ref(db, "evtForce/" + k)).catch(() => {}); });
+}
 
 /* =========================================================
    32) 🎛️ ปรับตัวเลขเกมสดๆ (tune/) + 📈 แดชบอร์ดเศรษฐกิจ (เจ้าของเท่านั้น)
@@ -6426,6 +6520,7 @@ function achApplyTune() {
 }
 function tuneListen() {
   if (state.tuneOn || !state.uid) return; state.tuneOn = true; let last = null;
+  evtForceListen();
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
@@ -6447,6 +6542,7 @@ function tuneDefs() {
   return rows;
 }
 function tuneRender(box) {
+  try { evtForceRows(box); } catch (e) { console.warn("evtForceRows", e); }
   box.append(mk("div", "muted", "ปรับแล้วทุกเครื่องได้ค่าใหม่ทันที ไม่ต้องรีเฟรช • ช่องว่าง/รีเซ็ต = กลับไปใช้ค่าตั้งต้น • ผลของเป้าหมาย/ภารกิจที่เริ่มแล้วจะใช้ยอดใหม่ทันที"));
   let grp = "";
   const order = []; tuneDefs().forEach((r) => { if (!order.includes(r[5])) order.push(r[5]); });

@@ -774,3 +774,12 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 /* ---- 🎛️ ปรับตัวเลข ---- */
 .tune-row .tune-ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
 .tune-row input{width:92px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#3a3a3a);background:#0d0f13;color:inherit;font-size:15px}
+
+/* มือถือ: รูปบอสโลกเป็นพื้นหลังกล่อง + หัวห้องแชทสูงไม่เกินครึ่งจอ เลื่อนดูรายละเอียดได้ (ช่องแชท/ช่องพิมพ์ต้องไม่หาย) */
+.wb-box.has-art { background-image: linear-gradient(90deg, rgba(30,14,14,.94) 40%, rgba(30,14,14,.55)), var(--wbart); background-size: cover; background-position: center; }
+#wb-art { display: none !important; }
+@media (max-width: 900px) {
+  .chat-head { max-height: 44vh; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+  .wall-box { max-height: 24vh !important; }
+  .chat { grid-template-rows: auto minmax(120px, 1fr) auto; }
+}
