@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1318";
+const APP_VERSION = "2026-10-05.1331";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -562,11 +562,13 @@ $("prof-bio-save").addEventListener("click", async () => {
 $("bio-close").addEventListener("click", () => $("bio-modal").classList.add("hidden"));
 async function showBio(uid, name) {
   $("bio-title").textContent = `ประวัติของ ${name}`;
+  { const old = $("bio-scene"); if (old) old.remove(); }
   $("bio-text").textContent = "กำลังโหลด…";
   $("bio-modal").classList.remove("hidden");
   try { const s = await get(ref(db, "bios/" + uid)); $("bio-text").textContent = s.val() || "ยังไม่ได้เขียนประวัติ"; }
   catch { $("bio-text").textContent = "โหลดไม่สำเร็จ"; }
   achBioLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
+  baseSceneBio(uid).then((o) => { if (!o || $("bio-modal").classList.contains("hidden")) return; let h = $("bio-scene"); if (!h) { h = mk("div"); h.id = "bio-scene"; h.style.margin = "8px 0"; $("bio-text").before(h); } baseSceneFill(h, o); }).catch(() => {});
   baseDecoLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
@@ -663,6 +665,7 @@ function openGuide() {
     "อวัยวะกลายพันธุ์ 3 ช่อง (ได้จากการค้นหาและภารกิจ): 🦷 เขี้ยว = ทุบกำแพงแรงขึ้น • 🦴 หนัง = ลดดาเมจที่โดน • 👃 จมูก = เจอเนื้อเน่าบ่อยขึ้น — เปิดกระเป๋าแล้วกด “สวม”",
     `ใน Safe Zone ซอมบี้ทุบกำแพงได้ (−${SMASH_DMG} HP กำแพงต่อครั้ง เสียพลังงาน ${SMASH_STAM} คูลดาวน์ ${SMASH_CD / 1000} วิ) ถ้ากำแพงพัง จะล่าเหยื่อในค่ายได้`,
     `ทุบครบทุก ${SMASH_EVERY} ครั้งได้ 🥩+1 • คนทุบจนพังได้ 🥩+${SMASH_BREAK_BONUS} • แชมป์ทุบสูงสุดประจำสัปดาห์ (อย่างน้อย ${PRIZE_MIN} ครั้ง) รับ 🥩+${PRIZE_MEAT} ได้สัปดาห์ถัดไป`,
+    "🎮 มินิเกมก่อนค้นลึก: จำรหัสวิทยุ 📻 หรือลำดับเสียงป่า 🌲 ให้ถูกครบ = ค้นครั้งนั้นเจอของว่างเปล่าน้อยลง 40% ของหายากออกง่ายขึ้น 50% ซอมบี้น้อยลง 15% (ผิดตัวเดียวได้โบนัสครึ่งหนึ่ง) • กด ข้าม ได้ตลอด หรือปิดด้วยปุ่ม 🎮 ข้างปุ่มค้นลึก",
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
   sec("ชุดสวมใส่ (ฝ่ายมนุษย์)", [
@@ -1772,6 +1775,8 @@ async function processDeath(attempt = 0) {
 
 // ทำการค้นหา 1 ครั้ง (อ่านค่าล่าสุดจาก state ทุกครั้ง) — โยน error ออกไปให้ตัวครอบจัดการ
 async function scavengeOnce() {
+  let mgT = 0;   // มินิเกมค้นลึก (หัวข้อ 41) เล่นก่อนอ่านพลังงาน/ความหิวเพื่อให้ค่าสดเสมอ
+  { const q = state.profile; if (q && q.hp > 0 && state.deep && !state.boss && !effActive("stun") && curFood() > 0 && curWater() > 0 && curStamina() >= searchCost()) { try { mgT = await mgRun(q.faction === "zombie"); } catch { mgT = 0; } } }
   const p = state.profile;
   if (p.hp <= 0) return;
   if (state.boss) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
@@ -1787,7 +1792,7 @@ async function scavengeOnce() {
   {
     const isZombie = p.faction === "zombie";
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
-    if (state.deep && !starving) table = deepTable(table, isZombie);
+    if (state.deep && !starving) { table = deepTable(table, isZombie); try { table = mgTable(table, mgT, isZombie); } catch { /* ข้าม */ } }
     table = evtTable(table, isZombie);   // เหตุการณ์ใหญ่ประจำโซน (เครื่องบินทิ้งเสบียง/ฝูงบุก)
     table = gearTable(table);   // เครื่องราง/หน้ากาก/จมูกกลายพันธุ์ ปรับน้ำหนักตาราง   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
     let found = rollDrop(table);
@@ -1850,7 +1855,7 @@ $("btn-scavenge").addEventListener("click", async () => {
   } catch (e) {
     console.error("scavenge denied", e?.code, { payload: state.lastPayload, profile: state.profile, inv: state.inv, stamina: curStamina(), offset: state.offset });
     toast(errMsg(e));
-  } finally { state.busy = false; }
+  } finally { state.busy = false; state.mgKeep = null; }
 });
 
 // เจอซอมบี้ตอนค้นหา: ทอย d6 + โบนัสอาวุธ (ทอยได้ 1 คือพลาดหนักเสมอ)
@@ -4698,7 +4703,7 @@ function deepInit() {
   if (state.deepOn) return; state.deepOn = true; state.deep = false;
   const b = btn("🔦 โหมดค้น: ปกติ", () => { state.deep = !state.deep; deepSync(); }, "btn ghost mini"); b.id = "btn-deep";
   b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50% (ซอมบี้: เนื้อเน่าออกง่ายขึ้น ×2)";
-  $("btn-scavenge").after(b); deepSync(); dailyNews();
+  $("btn-scavenge").after(b); deepSync(); dailyNews(); try { mgBtnInit(); } catch { /* ข้าม */ }
 }
 
 
@@ -5966,6 +5971,7 @@ const ACH_FAM = [
   ["bcol", "🏠", "world", "", "เก็บผลผลิตจากที่พัก", "ชิ้น", [10, 50, 200, 600], ["เจ้าของบ้านมือใหม่", "ชาวสวนแห่งค่าย", "ผู้พึ่งตนเองได้", "เศรษฐีที่พักพิง"]],
   ["bup", "🔨", "world", "", "อัปเกรดที่พัก", "ครั้ง", [1, 2, 3], ["ต่อเติมบ้าน", "ขยายชานบ้าน", "คฤหาสน์แห่งค่าย"]],
   ["sea", "🏅", "world", "", "เหรียญเป้าหมายฤดูกาล", "เหรียญ", [1, 3, 6, 12], ["เหรียญแรก", "นักสู้ตลอดฤดู", "ขวัญใจทุกฤดูกาล", "ตำนานแห่งปีปฏิทิน"]],
+  ["mgp", "🎮", "explore", "", "ผ่านมินิเกมค้นลึกแบบถูกครบ", "ครั้ง", [5, 25, 80, 200], ["หูไว", "จดจำแม่น", "นักถอดรหัส", "ไม่มีสัญญาณไหนรอดหู"]],
   ["book", "📖", "world", "", "บันทึกลงสมุดสะสม", "รายการ", [10, 25, 45, 70], ["นักจดบันทึก", "นักสะสมตัวยง", "ผู้รอบรู้เมืองร้าง", "สารานุกรมเดินได้"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
   ["zwar", "⚔️", "world", "", "สะสมแต้มศึกชิงโซน", "แต้ม", [50, 300, 1000, 3000], ["ทหารแนวหน้า", "นักรบชิงโซน", "ผู้คุมสมรภูมิ", "ขุนศึกแห่งเมืองร้าง"]],
@@ -7306,6 +7312,7 @@ function renderBase() {
   if (!baseOn()) return body.append(mk("div", "muted", "ที่พักปิดอยู่ชั่วคราว"));
   const can = baseCan(), fac = state.profile?.faction === "zombie";
   body.append(mk("div", "muted", `${fac ? "รังของคุณ" : "ที่พักของคุณในค่าย"} — วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ ผลผลิตสะสมได้จำกัด (เต็มแล้วหยุดผลิต) ${can ? "" : "• ตอนนี้ไม่ได้อยู่ Safe Zone จึงดูได้อย่างเดียว"}`));
+  { const sc = mk("div"); sc.id = "base-scene"; body.append(sc); try { baseSceneFill(sc, baseSceneOwn()); } catch (e) { console.warn("scene", e); } }
   const slots = baseSlots(); let total = 0;
   for (let i = 1; i <= 5; i++) {
     const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
@@ -7649,6 +7656,236 @@ async function baseDecoLine(uid) {
 }
 
 /* =========================================================
+   41) 🎮 มินิเกมตอนค้นลึก — 📻 รหัสวิทยุ / 🌲 เสียงในป่า (ฝั่ง client ล้วน ไม่ใช้ rules)
+   - กดค้นลึก → เล่นมินิเกมจำลำดับสั้นๆ (ข้ามได้) → ผลทำให้ตารางของที่ค้นดีขึ้นเล็กน้อยเฉพาะครั้งนั้น
+   - ได้ครบ = ว่างเปล่า −40% / ของหายาก +50% / ซอมบี้ −15% • พลาดตัวเดียว = ว่างเปล่า −20% / ของหายาก +25%
+   - ปรับด้วย mg_on / mg_str ใน 🎛️ และปิดเฉพาะเครื่องด้วยปุ่ม 🎮
+   ========================================================= */
+const MG_LEN = 4;
+const MG_FOREST = [["🐦", "จิ๊บๆ"], ["🦉", "ฮู้~"], ["🐸", "อ๊บ"], ["🐺", "หอน…"], ["🦗", "หริ่งๆ"]];
+const mgOn = () => T("mg_on", 1) === 1 && !fxGet("mg_off", 0);
+function mgScore(seq, inp) { let n = 0; for (let i = 0; i < seq.length; i++) if (inp[i] === seq[i]) n++; return n; }
+function mgTier(score, len = MG_LEN) { return score >= len ? 2 : score >= len - 1 ? 1 : 0; }
+function mgTable(t, tier, isZ) {
+  if (!tier) return t;
+  const s = T("mg_str", 100) / 100; if (!(s > 0)) return t;
+  const lerp = (m) => 1 + (m - 1) * s;
+  const eM = lerp(tier === 2 ? 0.6 : 0.8), rM = lerp(tier === 2 ? 1.5 : 1.25), zM = lerp(tier === 2 ? 0.85 : 1);
+  return t.map((d) => d.id === null ? { ...d, w: d.w * eM }
+    : d.id === "zombie" ? { ...d, w: d.w * zM }
+    : (d.id === "boss" || d.id === "rotten_meat") ? d
+    : d.w <= 5 ? { ...d, w: d.w * rM } : d);
+}
+function mgBeep(i) {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    mgBeep.c = mgBeep.c || new AC(); const c = mgBeep.c, o = c.createOscillator(), g = c.createGain();
+    o.frequency.value = 300 + i * 110; g.gain.value = 0.04; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.16);
+  } catch { /* ข้าม */ }
+}
+// เล่น 1 รอบ คืนค่า tier 0/1/2 (ข้าม/หมดเวลา/ปิด = ตามที่ตอบได้ถึงตอนนั้น)
+function mgPlay(kind, isZ) {
+  return new Promise((resolve) => {
+    let m = $("mg-modal");
+    if (!m) {
+      m = mk("div", "modal hidden"); m.id = "mg-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+      m.append(mk("div", "modal-box")); document.body.append(m);
+    }
+    const box = m.firstChild; box.textContent = ""; box.style.maxWidth = "340px";
+    const radio = kind === "radio";
+    const syms = radio ? ["1", "2", "3", "4", "5", "6", "7", "8", "9"] : MG_FOREST.map((x) => x[0]);
+    const seq = Array.from({ length: MG_LEN }, () => Math.floor(Math.random() * syms.length));
+    const inp = []; let alive = true, phase = "show"; const timers = [];
+    const later = (fn, ms) => { const id = setTimeout(fn, ms); timers.push(id); };
+    const title = radio ? (isZ ? "🧠 เสียงเรียกของฝูง" : "📻 วิทยุส่งรหัสมา") : "🌲 เสียงในป่า";
+    const hint = mk("div", "muted"); hint.style.textAlign = "center";
+    const stage = mk("div"); stage.style.cssText = "font-size:54px;text-align:center;min-height:76px;line-height:76px";
+    const cap = mk("div", "muted"); cap.style.cssText = "text-align:center;min-height:20px";
+    const typed = mk("div"); typed.style.cssText = "font-size:26px;text-align:center;min-height:34px;letter-spacing:6px";
+    const bar = mk("div"); bar.style.cssText = "height:6px;border-radius:4px;background:var(--line,#333);overflow:hidden;display:none";
+    const fill = mk("div"); fill.style.cssText = "height:100%;width:100%;background:var(--accent,#7c3);transition:width .2s linear"; bar.append(fill);
+    const pad = mk("div"); pad.style.cssText = `display:grid;gap:8px;grid-template-columns:repeat(${radio ? 3 : 5},1fr)`;
+    const keys = syms.map((s, i) => { const b = btn(s, () => press(i), "btn ghost"); b.style.fontSize = radio ? "22px" : "26px"; b.disabled = true; pad.append(b); return b; });
+    const foot = mk("div"); foot.style.cssText = "display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap";
+    const skip = btn("ข้าม (ค้นแบบไม่มีโบนัส)", () => finish(true), "btn ghost mini");
+    const off = btn("🔕 ปิดมินิเกมในเครื่องนี้", () => { fxSet("mg_off", 1); try { mgBtnSync(); } catch { /* ข้าม */ } toast("ปิดมินิเกมแล้ว (เปิดใหม่ด้วยปุ่ม 🎮)"); finish(true); }, "btn ghost mini");
+    foot.append(skip, off);
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", title));
+    box.append(head, hint, stage, cap, typed, bar, pad, foot);
+    m.classList.remove("hidden");
+    function press(i) {
+      if (!alive || phase !== "input") return;
+      inp.push(i); mgBeep(i); typed.textContent = inp.map((x) => radio ? "●" : syms[x]).join(" ");
+      if (inp.length >= MG_LEN) finish(false);
+    }
+    let left = 12000, iv = null;
+    function finish(skipped) {
+      if (!alive) return; alive = false; phase = "done"; timers.forEach(clearTimeout); if (iv) clearInterval(iv);
+      keys.forEach((k) => { k.disabled = true; });
+      const sc = skipped && !inp.length ? 0 : mgScore(seq, inp), tier = skipped ? 0 : mgTier(sc);
+      stage.textContent = skipped ? "…" : tier === 2 ? "✅" : tier === 1 ? "👌" : "❌";
+      cap.textContent = skipped ? "ข้ามมินิเกม" : tier === 2 ? "ถูกครบ! โชคดีมาก" : tier === 1 ? "เกือบครบ โชคดีขึ้นเล็กน้อย" : "พลาด… ค้นแบบปกติ";
+      if (!skipped && tier === 2) { try { achBump("mgp"); } catch { /* ข้าม */ } }
+      if (!skipped) { try { logLine(`${radio ? "📻" : "🌲"} มินิเกมค้นลึก: ${tier === 2 ? "ถูกครบ ได้โบนัสเต็ม" : tier === 1 ? "เกือบครบ ได้โบนัสเล็กน้อย" : "พลาด ไม่มีโบนัส"}`, "info"); } catch { /* ข้าม */ } }
+      setTimeout(() => { m.classList.add("hidden"); resolve(tier); }, skipped ? 0 : 700);
+    }
+    hint.textContent = radio ? (isZ ? "ฟังเสียงเรียก จำตัวเลขที่ผุดขึ้นมา" : "จำตัวเลขที่วิทยุส่งมาทีละตัว") : "ฟัง/ดูเสียงที่ดังขึ้นทีละเสียง แล้วกดตามลำดับ";
+    let k = 0;
+    const step = () => {
+      if (!alive) return;
+      if (k >= seq.length) {
+        stage.textContent = "❓"; cap.textContent = "ตาคุณแล้ว กดตามลำดับ"; phase = "input"; keys.forEach((x) => { x.disabled = false; }); bar.style.display = "block";
+        iv = setInterval(() => { left -= 200; fill.style.width = Math.max(0, left / 120) + "%"; if (left <= 0) finish(false); }, 200); return;
+      }
+      const s = seq[k]; stage.textContent = syms[s]; cap.textContent = radio ? "…ปี๊บ" : MG_FOREST[s][1]; mgBeep(s); k++;
+      later(() => { stage.textContent = "·"; cap.textContent = ""; later(step, 250); }, 650);
+    };
+    later(step, 700);
+  });
+}
+async function mgRun(isZ) {
+  if (!mgOn()) return 0;
+  if (state.mgKeep != null) return state.mgKeep;   // ลองใหม่หลังโดน rules ปฏิเสธ = ใช้ผลเดิม ไม่เล่นซ้ำ
+  const t = await mgPlay(Math.random() < 0.5 ? "radio" : "forest", isZ);
+  state.mgKeep = t; return t;
+}
+function mgBtnSync() {
+  const b = $("btn-mg"); if (!b) return;
+  const on = mgOn(); b.classList.toggle("active", on); b.style.opacity = on ? "1" : "0.5"; b.hidden = T("mg_on", 1) !== 1;
+  b.title = on ? "มินิเกมก่อนค้นลึก: เปิด (กดเพื่อปิดเฉพาะเครื่องนี้)" : "มินิเกมก่อนค้นลึก: ปิด (กดเพื่อเปิด)";
+}
+function mgBtnInit() {
+  if ($("btn-mg") || !$("btn-deep")) return;
+  const b = btn("🎮", () => { fxSet("mg_off", fxGet("mg_off", 0) ? 0 : 1); mgBtnSync(); toast(mgOn() ? "เปิดมินิเกมตอนค้นลึกแล้ว" : "ปิดมินิเกมตอนค้นลึกในเครื่องนี้แล้ว"); }, "btn ghost mini");
+  b.id = "btn-mg"; $("btn-deep").after(b); mgBtnSync();
+}
+
+/* =========================================================
+   42) 🏡 ภาพห้องที่พัก (SVG วาดจากข้อมูลจริง) — ฝั่ง client ล้วน
+   - หน้าตาบ้านเปลี่ยนตามขั้น: เพิงผ้าใบ → กระท่อมไม้ → บ้านไม้ → บ้านเสริมเหล็ก (ซอมบี้: รังดิน → รังเถาวัลย์ → ถ้ำรัง → ถ้ำฝูง)
+   - ของตกแต่งที่ซื้อแล้วโผล่ในตำแหน่งของมัน (แตะดูชื่อ) • สถานี/โต๊ะงานเป็นของในฉาก มีประกายเมื่อมีของรอเก็บ
+   - หน้าต่างเปลี่ยนตามเวลาจริง (กลางวัน/พลบค่ำ/กลางคืน+ดาว) • สีผนัง/พรมต่างกันตามผู้เล่น (hash ของ uid)
+   - คนอื่นเห็นห้องของเราได้ในหน้าประวัติ (จากของตกแต่งที่ rules อ่านได้อยู่แล้ว)
+   ========================================================= */
+const SCN_POS = {   // ตำแหน่งของตกแต่ง [x, y, ขนาด, เหนือพื้นหรือไม่]
+  d0: [296, 168, 30], d1: [150, 124, 18], d2: [104, 176, 24], d3: [40, 68, 22], d4: [138, 48, 28], d5: [246, 176, 38],
+  d6: [176, 125, 22], d7: [78, 158, 32], d8: [200, 160, 36], d9: [88, 66, 20], d10: [150, 178, 48], d11: [172, 30, 26]
+};
+const SCN_PAL = [   // [ผนัง, เส้นผนัง, พื้น, เส้นพื้น, พรม, ผ้าม่าน]
+  ["#7a5a3c", "#6a4c31", "#8d6a45", "#76573a", "#a3433a", "#c0584b"],
+  ["#5d6f5a", "#4f6050", "#7c6a4c", "#665640", "#3f6c8c", "#4b86a8"],
+  ["#6c5a73", "#5b4a62", "#85694f", "#6e553f", "#c58a2f", "#d6a248"],
+];
+const SCN_ZPAL = [["#2f2a3a", "#262131", "#3a3128", "#2d261f", "#5a2b3f", "#7a3a52"], ["#26332f", "#1f2b28", "#38301f", "#2c2518", "#3a5a4a", "#4f7a64"]];
+function scnHash(s) { let h = 7; s = String(s || "x"); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+function scnSky() {
+  let hr = 12, moon = "🌙";
+  try { hr = new Date(serverNow() + 7 * 3600000).getUTCHours(); } catch { /* ข้าม */ }
+  try { const mp = fxMoon(serverNow()); moon = mp === "full" ? "🌕" : mp === "new" ? "🌑" : "🌙"; } catch { /* ข้าม */ }
+  if (hr >= 7 && hr < 17) return { top: "#7fc4ee", bot: "#cfeaf7", night: false, sun: true, moon };
+  if (hr >= 17 && hr < 19 || hr >= 5 && hr < 7) return { top: "#e98a52", bot: "#f6cf8a", night: false, sun: true, moon };
+  return { top: "#0d1230", bot: "#2a2f66", night: true, sun: false, moon };
+}
+// o: { lv, deco:{d0:true..}, zombie, uid, stations:[{k,u,cap,locked}], bench:[{state:'empty'|'busy'|'ready'|'locked'}] }
+function baseSceneSvg(o) {
+  const lv = Math.max(0, Math.min(3, o.lv | 0)), z = !!o.zombie, h = scnHash(o.uid);
+  const pal = z ? SCN_ZPAL[h % SCN_ZPAL.length] : SCN_PAL[h % SCN_PAL.length], sky = scnSky();
+  const deco = o.deco || {}, P = [];
+  const t = (x, y, size, ch, extra = "") => `<text x="${x}" y="${y}" font-size="${size}" text-anchor="middle" ${extra}>${ch}</text>`;
+  P.push(`<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ภาพห้องที่พัก" style="width:100%;height:auto;border-radius:12px;display:block;background:#111">`);
+  P.push(`<style>.fl{animation:scnfl 1.6s ease-in-out infinite;transform-origin:center;transform-box:fill-box}@keyframes scnfl{0%,100%{opacity:1}50%{opacity:.55}}.sp{animation:scnsp 1.4s ease-in-out infinite;transform-box:fill-box;transform-origin:center}@keyframes scnsp{0%,100%{transform:scale(.8);opacity:.7}50%{transform:scale(1.25);opacity:1}}.pu{animation:scnpu 3s ease-in-out infinite}@keyframes scnpu{0%,100%{opacity:.25}50%{opacity:.5}}.it{cursor:pointer}</style>`);
+  P.push(`<defs><linearGradient id="scnsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${sky.top}"/><stop offset="1" stop-color="${sky.bot}"/></linearGradient><radialGradient id="scnglow"><stop offset="0" stop-color="#ffd98a" stop-opacity=".85"/><stop offset="1" stop-color="#ffd98a" stop-opacity="0"/></radialGradient></defs>`);
+  // ผนัง + พื้น
+  P.push(`<rect width="320" height="200" fill="${pal[0]}"/>`);
+  if (z) { for (let i = 0; i < 9; i++) P.push(`<ellipse cx="${(i * 41 + 10) % 320}" cy="${20 + (i * 37) % 90}" rx="${22 + i % 3 * 6}" ry="${10 + i % 2 * 5}" fill="${pal[1]}" opacity=".7"/>`); }
+  else if (lv === 0) { for (let i = 0; i < 8; i++) P.push(`<path d="M${i * 44 - 8} 0 L${i * 44 + 22} 140" stroke="${pal[1]}" stroke-width="2" opacity=".7"/>`); P.push(`<rect x="238" y="96" width="26" height="22" fill="#b9a46b" opacity=".6" transform="rotate(-4 250 107)"/>`); }
+  else { for (let x = 0; x < 320; x += 20) P.push(`<line x1="${x}" y1="0" x2="${x}" y2="140" stroke="${pal[1]}" stroke-width="2"/>`); }
+  if (lv >= 2 && !z) P.push(`<rect x="0" y="12" width="320" height="8" fill="#3c2a1b"/><rect x="0" y="0" width="320" height="6" fill="#2d2014"/>`);
+  if (lv >= 3) { P.push(`<rect x="0" y="0" width="14" height="140" fill="#59606a"/><rect x="306" y="0" width="14" height="140" fill="#59606a"/>`); for (let y = 10; y < 140; y += 26) P.push(`<circle cx="7" cy="${y}" r="2.5" fill="#8a929c"/><circle cx="313" cy="${y}" r="2.5" fill="#8a929c"/>`); }
+  P.push(`<rect y="140" width="320" height="60" fill="${pal[2]}"/>`);
+  for (let y = 150; y < 200; y += 14) P.push(`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="${pal[3]}" stroke-width="2"/>`);
+  P.push(`<rect y="136" width="320" height="6" fill="${pal[3]}"/>`);
+  // หน้าต่าง
+  P.push(`<g><rect x="206" y="28" width="72" height="62" rx="${z ? 28 : 3}" fill="url(#scnsky)" stroke="#2b1d12" stroke-width="5"/>`);
+  if (sky.night) { for (let i = 0; i < 9; i++) P.push(`<circle cx="${212 + (i * 23) % 60}" cy="${34 + (i * 17) % 44}" r="1.1" fill="#fff"/>`); P.push(t(256, 56, 20, sky.moon)); }
+  else P.push(t(256, 56, 20, "☀️"));
+  if (!z) P.push(`<line x1="242" y1="28" x2="242" y2="90" stroke="#2b1d12" stroke-width="3"/><line x1="206" y1="59" x2="278" y2="59" stroke="#2b1d12" stroke-width="3"/>`);
+  if (lv >= 1 && !z) P.push(`<path d="M200 24 Q212 60 204 96 L216 96 Q222 58 214 24 Z" fill="${pal[5]}" opacity=".95"/><path d="M284 24 Q272 60 280 96 L268 96 Q262 58 270 24 Z" fill="${pal[5]}" opacity=".95"/>`);
+  P.push(`</g>`);
+  // ประตู / ทางเข้า
+  if (z) P.push(`<path d="M14 140 Q14 74 44 70 Q74 74 74 140 Z" fill="#0b0912"/><circle cx="30" cy="104" r="3" fill="#c33" class="fl"/><circle cx="40" cy="104" r="3" fill="#c33" class="fl"/>`);
+  else if (lv === 0) P.push(`<path d="M10 140 L44 66 L78 140 Z" fill="#3a3a30"/><path d="M44 66 L44 140" stroke="#222" stroke-width="2"/>`);
+  else P.push(`<rect x="12" y="68" width="52" height="72" rx="3" fill="#4a3320" stroke="#2b1d12" stroke-width="3"/><circle cx="54" cy="106" r="3" fill="#e0b84a"/>${lv >= 3 ? '<rect x="12" y="68" width="52" height="72" fill="none" stroke="#7a828c" stroke-width="3"/><line x1="12" y1="92" x2="64" y2="92" stroke="#7a828c" stroke-width="3"/><line x1="12" y1="116" x2="64" y2="116" stroke="#7a828c" stroke-width="3"/>' : ""}`);
+  // ชั้นวางของ (ติดผนัง)
+  P.push(`<rect x="26" y="76" width="96" height="5" fill="#3c2a1b"/><rect x="34" y="81" width="4" height="8" fill="#3c2a1b"/><rect x="110" y="81" width="4" height="8" fill="#3c2a1b"/>`);
+  // แสงตะเกียง/ไฟประดับ
+  if (lv === 0) P.push(`<circle cx="120" cy="40" r="28" fill="url(#scnglow)" class="pu"/>${t(120, 44, 16, "🏮", 'class="fl"')}<line x1="120" y1="0" x2="120" y2="30" stroke="#222" stroke-width="1.5"/>`);
+  if (lv >= 3) { P.push(`<path d="M16 24 Q80 44 160 24 T304 24" fill="none" stroke="#222" stroke-width="1.5"/>`); for (let i = 0; i < 9; i++) { const x = 28 + i * 33; P.push(`<circle cx="${x}" cy="${30 + (i % 2) * 6}" r="3.2" fill="${["#ffd35a", "#ff7a7a", "#7ad0ff"][i % 3]}" class="fl" style="animation-delay:${i * 0.2}s"/>`); } }
+  // พรม
+  if (lv >= 1 || z) P.push(`<ellipse cx="160" cy="180" rx="${lv >= 3 ? 112 : 84}" ry="${lv >= 3 ? 16 : 13}" fill="${pal[4]}" opacity=".92"/><ellipse cx="160" cy="180" rx="${lv >= 3 ? 96 : 70}" ry="${lv >= 3 ? 11 : 8}" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="2"/>`);
+  // เคาน์เตอร์สถานี
+  P.push(`<rect x="8" y="118" width="116" height="9" rx="2" fill="#4a3320"/><rect x="14" y="127" width="5" height="12" fill="#3a2818"/><rect x="113" y="127" width="5" height="12" fill="#3a2818"/>`);
+  // โต๊ะข้าง (ของวางบนโต๊ะ d1,d6)
+  P.push(`<rect x="134" y="128" width="58" height="6" rx="2" fill="#5a4028"/><rect x="140" y="134" width="5" height="8" fill="#3a2818"/><rect x="181" y="134" width="5" height="8" fill="#3a2818"/>`);
+  // สถานี 1..5 บนเคาน์เตอร์
+  const kinds = { w: "💧", t: z ? "🥩" : "🥫", m: "🌿" };
+  (o.stations || []).forEach((s, i) => {
+    const x = 22 + i * 22;
+    if (s.locked) { P.push(`<rect x="${x - 8}" y="104" width="16" height="14" rx="3" fill="none" stroke="#fff" stroke-opacity=".25" stroke-dasharray="3 2"/>`); return; }
+    if (!s.k) { P.push(`<rect x="${x - 8}" y="104" width="16" height="14" rx="3" fill="#000" opacity=".18"/>`); return; }
+    P.push(t(x, 117, 16, kinds[s.k] || "📦"));
+    if (s.u > 0) P.push(`<text x="${x + 8}" y="104" font-size="9" text-anchor="middle" class="sp">✨</text>`, `<text x="${x}" y="127.5" font-size="7" text-anchor="middle" fill="#fff">${s.u}/${s.cap}</text>`);
+  });
+  // โต๊ะงาน (ขวา)
+  const bs = o.bench || [];
+  if (bs.length) {
+    P.push(`<rect x="262" y="112" width="48" height="8" rx="2" fill="#4a3320"/><rect x="268" y="120" width="5" height="22" fill="#3a2818"/><rect x="299" y="120" width="5" height="22" fill="#3a2818"/>`);
+    bs.forEach((b, i) => { const x = 276 + i * 20; if (b.state === "locked") P.push(`<rect x="${x - 7}" y="98" width="14" height="14" rx="3" fill="none" stroke="#fff" stroke-opacity=".25" stroke-dasharray="3 2"/>`); else if (b.state === "busy") P.push(t(x, 111, 15, "⚙️", 'class="sp"')); else if (b.state === "ready") P.push(t(x, 111, 15, "📦"), `<text x="${x + 7}" y="98" font-size="9" text-anchor="middle" class="sp">✨</text>`); else P.push(t(x, 111, 15, "🛠️", 'opacity=".55"')); });
+  }
+  // ของตกแต่ง
+  const hasLamp = deco.d11 === true;
+  if (hasLamp) P.push(`<circle cx="172" cy="46" r="52" fill="url(#scnglow)" class="pu"/><line x1="172" y1="0" x2="172" y2="20" stroke="#222" stroke-width="1.5"/>`);
+  for (const d of DECO) {
+    const id = d[0]; if (deco[id] !== true) continue;
+    const q = SCN_POS[id]; if (!q) continue;
+    const extra = id === "d1" ? 'class="fl"' : "";
+    P.push(`<g class="it" data-n="${d[1]} ${d[2]}"><title>${d[2]}</title>${t(q[0], q[1], q[2], d[1], extra)}</g>`);
+  }
+  if (z) P.push(t(52, 170, 14, "🦴", 'opacity=".8"'), t(296, 98, 12, "🕸️", 'opacity=".7"'), t(224, 152, 13, "🍄", 'class="fl"'));
+  P.push(`</svg>`);
+  return P.join("");
+}
+function baseSceneFill(host, o) {
+  host.innerHTML = baseSceneSvg(o);
+  host.onclick = (e) => { const g = e.target.closest && e.target.closest("[data-n]"); if (g) toast(g.getAttribute("data-n")); };
+}
+function baseSceneOwn() {
+  const slots = baseSlots(), st = [];
+  for (let i = 1; i <= 5; i++) {
+    if (i > slots) { st.push({ locked: true }); continue; }
+    const rec = state.base?.["s" + i];
+    if (!rec || !BASE_P[rec.k]) { st.push({}); continue; }
+    st.push({ k: rec.k, u: baseUnits(rec), cap: BASE_CAP[rec.k] });
+  }
+  const bench = [1, 2].map((j) => {
+    if (j > benchSlots()) return { state: "locked" };
+    const rec = state.base?.["j" + j];
+    if (!rec || !BENCH[rec.r]) return { state: "empty" };
+    return { state: benchLeft(rec) <= 0 ? "ready" : "busy" };
+  });
+  return { lv: baseLv(), deco: decoOwned(), zombie: state.profile?.faction === "zombie", uid: state.uid, stations: st, bench };
+}
+// ห้องของคนอื่น (หน้าประวัติ): ขั้นบ้านประมาณจากจำนวนของตกแต่ง
+async function baseSceneBio(uid) {
+  try {
+    const v = (await get(ref(db, `base/${uid}/deco`))).val() || {}; const n = Object.values(v).filter((x) => x === true).length;
+    if (!n) return null;
+    let fac = "human"; try { fac = (await get(ref(db, `users/${uid}/faction`))).val() || "human"; } catch { /* ข้าม */ }
+    return { lv: n >= 9 ? 3 : n >= 6 ? 2 : n >= 3 ? 1 : 0, deco: v, zombie: fac === "zombie", uid, stations: [], bench: [] };
+  } catch { return null; }
+}
+
+/* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
    ผู้เล่นฝากข้อความสั้นๆ (≤60 ตัว) ไว้ที่โซนที่ตัวเองยืนอยู่ ได้คนละ 1 ป้ายต่อโซน (เขียนใหม่ทับได้ทุก 60 วิ) • คนที่อยู่โซนนั้นเห็น ป้ายอายุ 24 ชม.
    ========================================================= */
@@ -7946,6 +8183,8 @@ function tuneDefs() {
     rows.push(["zw_on", "ศึกชิงโซน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
     rows.push(["zw_str", "ความแรงของโบนัสโซนที่ยึดได้ (% • 100 = เดิม, 0 = แค่ธง)", 100, 0, 200, g]);
     rows.push(["zw_min", "แต้มรวมขั้นต่ำของโซนในสัปดาห์นั้นถึงจะนับว่ามีผู้ยึด", 30, 1, 5000, g]); }
+  rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
+  rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
     rows.push(["ds_on", "สรุปจบวัน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
