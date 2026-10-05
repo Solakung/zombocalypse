@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1003";
+const APP_VERSION = "2026-10-05.1024";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1695,7 +1695,7 @@ async function useItem(slot) {
   if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรถึงเพดาน/ขีดต่ำสุดแล้ว");
   if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
 
-  if (it.id === "custom_food" || usedEat) u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่ากินสล็อตไหน
+  u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่าใช้สล็อตไหน (rules ตรวจผลไอเทมจากชื่อสล็อตนี้ทุกชนิด)
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
@@ -3452,7 +3452,7 @@ $("adm-q-post").addEventListener("click", async () => {
   let reward;
   if (itemId === "skill") reward = { id: "skill", qty: 1, ...R.skill };
   else if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
-  else if (isFood) reward = { id: "custom_food", qty, ...foodFields(customData) };
+  else if (isFood) return toast("รางวัลอาหารสร้างเองไม่รองรับแล้ว ให้มอบด้วยมือ");
   else if (isGear) reward = { id: "custom_gear", qty: 1, ...gearFields(customData) };
   else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
   else reward = { id: itemId, qty };
