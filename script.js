@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1334";
+const APP_VERSION = "2026-10-05.1414";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4159,14 +4159,25 @@ async function gachaPull() {
   await gachaClaim({ f: fac, slot });
 }
 // รับของตามตั๋ว: เติมของเข้ากระเป๋า + ลบตั๋ว + ลบช่องออกจากกอง ในคำสั่งเดียว (rules บังคับให้ของตรงกับช่องและจำนวนไม่เกิน)
-async function gachaClaim(ticket) {
+// อ่านจำนวนของจากเซิร์ฟเวอร์ตรงๆ (REST) — กันค่าในแคชของแท็บนี้ล้าหลัง (เช่น เปิดหลายแท็บ/เครื่อง) ซึ่งทำให้ rules ปฏิเสธการรับของ
+async function gachaServerQty(id) {
+  try {
+    const tok = await auth.currentUser.getIdToken();
+    const r = await fetch(`${firebaseConfig.databaseURL}/inventory/${state.uid}/${id}/qty.json?auth=${encodeURIComponent(tok)}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const v = await r.json(); return typeof v === "number" ? v : 0;
+  } catch { return null; }
+}
+async function gachaClaim(ticket, fresh) {
   const t = ticket || state.gaTicket, uid = state.uid; if (!t || state.gaBusy) return;
-  state.gaBusy = true;
+  state.gaBusy = true; let again = false;
   try {
     const prize = (await get(ref(db, `gachaPool/${t.f}/${t.slot}`))).val();
     const u = { [`gachaTickets/${uid}`]: null };
     if (prize) {
-      const have = (await get(ref(db, `inventory/${uid}/${prize.id}/qty`))).val() || 0, after = Math.min(99, have + prize.qty);
+      let have = (await get(ref(db, `inventory/${uid}/${prize.id}/qty`))).val() || 0;
+      if (fresh) { const sv = await gachaServerQty(prize.id); if (sv !== null) { if (sv !== have) console.warn("gachaClaim: แคชล้าหลัง", { cache: have, server: sv }); have = sv; } }
+      const after = Math.min(99, have + prize.qty);
       u[`inventory/${uid}/${prize.id}`] = { id: prize.id, qty: after };
       u[`gachaPool/${t.f}/${t.slot}`] = null;
     }
@@ -4183,9 +4194,11 @@ async function gachaClaim(ticket) {
     state.gaFail = code;
     toast(`รับของไม่สำเร็จ (${code}) — กด “รับของที่ค้างอยู่” อีกครั้ง`);
     try { logLine(`🎰 รับของกาชาไม่สำเร็จ: ${code} (ตั๋ว ${t.f}/${String(t.slot).slice(0, 4)}…) — แจ้งเจ้าของเกมพร้อมข้อความนี้ได้`, "system"); } catch { /* ข้าม */ }
-    if (!state.gaRetried && gachaIsPerm(e)) { state.gaRetried = true; setTimeout(() => { if (state.gaTicket && !state.gaBusy) gachaClaim(); }, 4000); }
+    if (!fresh && gachaIsPerm(e)) again = true;   // ลองใหม่ทันที 1 ครั้งโดยอ่านค่าจริงจากเซิร์ฟเวอร์
+    else if (!state.gaRetried && gachaIsPerm(e)) { state.gaRetried = true; setTimeout(() => { if (state.gaTicket && !state.gaBusy) gachaClaim(null, true); }, 4000); }
   }
   finally { state.gaBusy = false; gachaRefresh(); }
+  if (again) return gachaClaim(t, true);
 }
 
 /* ---------- แอนิเมชันกาชา: เลื่อนแถบไอเทมแล้วหยุดที่ของที่ได้ (เหมือนเปิดกล่อง) ---------- */
