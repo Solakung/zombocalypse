@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1136";
+const APP_VERSION = "2026-10-05.1200";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -5956,6 +5956,8 @@ const ACH_FAM = [
   ["duo", "🤝", "world", "", "ทำภารกิจเคียงข้างสำเร็จ", "ครั้ง", [1, 5, 20, 60], ["มีเพื่อนร่วมทาง", "คู่หูต่างโซน", "คู่หูตลอดกาล", "พี่น้องร่วมสมรภูมิ"]],
   ["heal", "🩹", "world", "", "ใช้ยา/ของรักษา", "ครั้ง", [10, 50, 200, 600], ["ผู้ช่วยหมอ", "หมอประจำหมู่", "หมอสนามตัวจริง", "เทพแห่งการรักษา"]],
   ["camp", "🏕️", "world", "", "สมทบโปรเจกต์ค่าย/รัง", "แต้ม", [50, 300, 1200, 4000], ["ผู้ร่วมสร้างค่าย", "แรงงานขยัน", "สถาปนิกค่าย", "ผู้สร้างบ้านให้ทุกคน"]],
+  ["bcol", "🏠", "world", "", "เก็บผลผลิตจากที่พัก", "ชิ้น", [10, 50, 200, 600], ["เจ้าของบ้านมือใหม่", "ชาวสวนแห่งค่าย", "ผู้พึ่งตนเองได้", "เศรษฐีที่พักพิง"]],
+  ["bup", "🔨", "world", "", "อัปเกรดที่พัก", "ครั้ง", [1, 2, 3], ["ต่อเติมบ้าน", "ขยายชานบ้าน", "คฤหาสน์แห่งค่าย"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
   ["zwar", "⚔️", "world", "", "สะสมแต้มศึกชิงโซน", "แต้ม", [50, 300, 1000, 3000], ["ทหารแนวหน้า", "นักรบชิงโซน", "ผู้คุมสมรภูมิ", "ขุนศึกแห่งเมืองร้าง"]],
   ["wwin", "🚩", "world", "", "ฝั่งเราชนะศึกชิงโซนประจำสัปดาห์", "สัปดาห์", [1, 4, 12], ["ชัยชนะแรก", "ผู้ยึดโซนตัวยง", "ราชันศึกชิงโซน"]]
@@ -7015,6 +7017,7 @@ function mktApplyFilter(list) {
 
 function fxInit() {
   if (state.fxOn || !state.uid) return; state.fxOn = true;
+  try { baseInit(); } catch (e) { console.warn("baseInit", e); }
   fxTick(); setInterval(fxTick, 10000); setInterval(duoTick, 15000);
   setInterval(() => { try { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world" && !hm.querySelector("input:focus,select:focus")) worldRefresh(); } catch { /* ข้าม */ } }, 20000);
 }
@@ -7181,6 +7184,148 @@ function fxWorldRows2(box) {
   }, false);
 }
 const fac2 = (h, z) => (coopFac() === "zombie" ? z : h);
+
+/* =========================================================
+   38) 🏠 ที่พัก — สถานีตั้งเวลาในค่าย (ต้องใช้ rules v32: base/{uid}, baseTx/{uid})
+   - วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ (คิดจากเวลาที่ผ่านไป ไม่ต้องมีโค้ดฝั่งเซิร์ฟเวอร์)
+   - ผลผลิต "ของพื้นฐาน" เท่านั้น และมีเพดานสะสม (รอเก็บได้ไม่เกิน cap) → เป็นตัวช่วยออกไปค้นหาได้นานขึ้น ไม่ใช่เครื่องผลิตของเด็ด
+   - อัปเกรดเพิ่มช่อง (เริ่ม 2 ช่อง สูงสุด 5) ต้องใช้ของที่หาจากข้างนอก (มนุษย์: เศษวัสดุ • ซอมบี้: เนื้อเน่า)
+   - rules ตรวจทั้งหมด: เวลาที่ผ่านไปจริง, เพดาน, ชนิดของที่ได้, ค่าอัปเกรด, ต้องอยู่ Safe Zone และมีชีวิต
+   ========================================================= */
+const BASE_P = { w: 7200000, m: 10800000, t: 14400000 }, BASE_CAP = { w: 4, m: 3, t: 3 };
+const BASE_UP = [15, 40, 90], BASE_MIN_GAP = 1800;
+function baseKind(k) {
+  const z = state.profile?.faction === "zombie";
+  return {
+    w: { icon: "💧", name: "ตะแกรงรองน้ำฝน", item: "water", tip: "รองน้ำฝนสะสมไว้ให้" },
+    t: z ? { icon: "🪤", name: "หลุมดักซาก", item: "rotten_meat", tip: "ดักซากสัตว์ให้" } : { icon: "🪤", name: "กับดักสัตว์", item: "canned_food", tip: "ดักสัตว์ป่าแล้วทำเป็นอาหารกระป๋องให้" },
+    m: { icon: "🌱", name: "แปลงมอส", item: "moss", tip: "มอสสมานแผลโตเองในที่ร่ม" }
+  }[k];
+}
+const baseLv = () => Math.max(0, Math.min(3, state.base?.lv || 0));
+const baseSlots = () => 2 + baseLv();
+const baseUpItem = () => (state.profile?.faction === "zombie" ? "rotten_meat" : "scrap");
+const baseOn = () => T("base_on", 1) === 1;
+function baseUnits(rec, now = serverNow()) {
+  if (!rec || !BASE_P[rec.k] || typeof rec.t !== "number") return 0;
+  return Math.max(0, Math.min(BASE_CAP[rec.k], Math.floor((now - rec.t) / BASE_P[rec.k])));
+}
+const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); return n; };
+const baseHm = (ms) => { const m = Math.max(1, Math.ceil(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`; };
+let baseLastTx = 0;
+function baseInit() {
+  if (state.baseOn || !state.uid) return; state.baseOn = true; state.base = {};
+  const b = btn("🏠 ที่พัก", openBase, "btn ghost mini"); b.id = "btn-base"; const pr = $("btn-profile"); if (pr) pr.before(b);
+  onValue(ref(db, "base/" + state.uid), (s) => { state.base = s.val() || {}; baseBadge(); baseAgain(); }, (e) => console.warn("base", e?.code || e));
+  setInterval(() => { baseBadge(); baseAgain(); baseNotice(); }, 20000); setTimeout(baseNotice, 8000);
+}
+function baseBadge() { const b = $("btn-base"); if (!b) return; const n = baseOn() ? baseReady() : 0; b.textContent = n > 0 ? `🏠 ที่พัก (${n})` : "🏠 ที่พัก"; b.classList.toggle("hidden", !baseOn()); }
+function baseNotice() {   // เตือนเบา ๆ ครั้งละไม่เกินชั่วโมงละหน เมื่อมีผลผลิตรอเก็บ
+  if (!baseOn() || !state.profile) return; const n = baseReady(), last = fxGet("base_note", 0);
+  if (n > 0 && serverNow() - last > 3600000) { fxSet("base_note", serverNow()); try { logLine(`🏠 ที่พักมีผลผลิตรอเก็บ ${n} ชิ้น — แวะที่ Safe Zone แล้วกดเก็บได้เลย`, "info"); } catch { /* ข้าม */ } }
+}
+function baseAgain() { const m = $("base-modal"); if (!m || m.classList.contains("hidden")) return; renderBase(); }
+function openBase() {
+  if (!$("base-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "base-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🏠 ที่พักของคุณ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "base-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  renderBase(); $("base-modal").classList.remove("hidden");
+}
+function baseErr(e) { return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่ได้ในตอนนี้ (ต้องอยู่ Safe Zone และมีชีวิต • หรือเวลายังไม่ถึง) ลองใหม่อีกครั้ง" : errMsg(e); }
+function baseCan() { return baseOn() && state.zone === "safe" && state.profile?.hp > 0; }
+async function basePlace(i, k) {
+  if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะวางสถานีได้"); state.busy = true;
+  try { await update(ref(db), { [`base/${state.uid}/s${i}`]: { k, t: serverTimestamp() } }); toast(`${baseKind(k).icon} วาง${baseKind(k).name}แล้ว`); }
+  catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+async function baseDismantle(i) {
+  const rec = state.base?.["s" + i]; if (!rec || state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะรื้อได้");
+  const u = baseUnits(rec); if (!confirm(`รื้อ${baseKind(rec.k).name}?${u > 0 ? ` (ผลผลิตที่รอเก็บ ${u} ชิ้นจะหายไป — เก็บก่อนดีกว่า)` : ""}`)) return;
+  state.busy = true;
+  try { await update(ref(db), { [`base/${state.uid}/s${i}`]: null }); toast("รื้อสถานีแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+async function baseCollectOne(i, retry = true) {
+  const rec = state.base?.["s" + i]; if (!rec) return 0;
+  const K = rec.k, P = BASE_P[K], cap = BASE_CAP[K], info = baseKind(K), el = serverNow() - rec.t - 1500, raw = Math.floor(el / P);
+  if (!(raw >= 1)) return 0;
+  const u = Math.min(cap, raw), newT = raw >= cap ? serverTimestamp() : rec.t + u * P;
+  const have = (await get(ref(db, `inventory/${state.uid}/${info.item}`))).val();   // อ่านจำนวนล่าสุดจริง (ช่องชนิดเดียวกันเก็บต่อกันได้ไม่พลาด)
+  const up = { [`baseTx/${state.uid}`]: { ts: serverTimestamp(), s: "s" + i }, [`base/${state.uid}/s${i}/t`]: newT };
+  if (have && have.id === info.item && have.qty > 0) up[`inventory/${state.uid}/${info.item}/qty`] = have.qty + u; else up[`inventory/${state.uid}/${info.item}`] = { id: info.item, qty: u };
+  try { await update(ref(db), up); achBump("bcol", u); return u; }
+  catch (e) {
+    if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) { await new Promise((r) => setTimeout(r, 2500)); return baseCollectOne(i, false); }   // นาฬิกาเหลื่อมเล็กน้อย → ลองใหม่ 1 ครั้ง
+    throw e;
+  }
+}
+async function baseCollect(only) {
+  if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะเก็บผลผลิตได้");
+  state.busy = true; const got = {};
+  try {
+    for (let i = 1; i <= baseSlots(); i++) {
+      if (only && only !== i) continue; if (!baseUnits(state.base?.["s" + i])) continue;
+      const wait = BASE_MIN_GAP - (Date.now() - baseLastTx); if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+      baseLastTx = Date.now();
+      const k = state.base["s" + i].k, n = await baseCollectOne(i); if (n) { const it = baseKind(k).item; got[it] = (got[it] || 0) + n; }
+      await new Promise((r) => setTimeout(r, 400));   // ให้ข้อมูลกระเป๋า/ที่พักอัปเดตก่อนช่องถัดไป
+    }
+    const txt = Object.entries(got).map(([id, n]) => `${ITEMS[id].icon} ${ITEMS[id].name} ×${n}`).join(" ");
+    if (txt) { toast(`🏠 เก็บผลผลิต: ${txt}`); logLine(`🏠 เก็บผลผลิตจากที่พัก: ${txt}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } } else toast("ยังไม่มีผลผลิตให้เก็บ");
+  } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+async function baseUpgrade() {
+  const lv = baseLv(), it = baseUpItem(), cost = BASE_UP[lv], have = state.inv[it];
+  if (lv >= 3 || !cost) return; if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะอัปเกรดได้");
+  if (!have || have.id !== it || have.qty < cost) return toast(`ต้องมี ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost}`);
+  state.busy = true;
+  try {
+    await update(ref(db), { [`base/${state.uid}/lv`]: lv + 1, ...(have.qty === cost ? { [`inventory/${state.uid}/${it}`]: null } : { [`inventory/${state.uid}/${it}/qty`]: have.qty - cost }) });
+    achBump("bup"); toast(`🏠 อัปเกรดที่พักแล้ว ได้ช่องเพิ่ม (รวม ${baseSlots() + 1} ช่อง)`);
+  } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+function renderBase() {
+  const body = $("base-body"); if (!body) return; body.innerHTML = "";
+  if (!baseOn()) return body.append(mk("div", "muted", "ที่พักปิดอยู่ชั่วคราว"));
+  const can = baseCan(), fac = state.profile?.faction === "zombie";
+  body.append(mk("div", "muted", `${fac ? "รังของคุณ" : "ที่พักของคุณในค่าย"} — วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ ผลผลิตสะสมได้จำกัด (เต็มแล้วหยุดผลิต) ${can ? "" : "• ตอนนี้ไม่ได้อยู่ Safe Zone จึงดูได้อย่างเดียว"}`));
+  const slots = baseSlots(); let total = 0;
+  for (let i = 1; i <= 5; i++) {
+    const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+    if (i > slots) { c.append(mk("span", "muted", `🔒 ช่องที่ ${i} — ปลดล็อกด้วยการอัปเกรดที่พัก`)); body.append(c); continue; }
+    const rec = state.base?.["s" + i];
+    if (!rec || !BASE_P[rec.k]) {
+      c.append(mk("b", "", `ช่องที่ ${i} (ว่าง)`));
+      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap";
+      ["w", "t", "m"].forEach((k) => { const kd = baseKind(k), b = btn(`${kd.icon} ${kd.name}`, () => basePlace(i, k), "btn ghost mini"); b.disabled = !can; b.title = `${kd.tip} • ได้ ${ITEMS[kd.item].name} ทุก ~${baseHm(BASE_P[k])} (เก็บสะสมได้สูงสุด ${BASE_CAP[k]})`; row.append(b); });
+      c.append(row, mk("span", "muted", "วางแล้วเริ่มผลิตทันที • รื้อ/เปลี่ยนชนิดทีหลังได้"));
+    } else {
+      const kd = baseKind(rec.k), P = BASE_P[rec.k], cap = BASE_CAP[rec.k], u = baseUnits(rec), el = serverNow() - rec.t; total += u;
+      c.append(mk("b", "", `${kd.icon} ${kd.name} (ช่อง ${i})`));
+      c.append(worldBar(u >= cap ? 1 : (el % P) / P, u >= cap ? `เต็มแล้ว ${cap}/${cap}` : `ชิ้นถัดไปอีก ~${baseHm(P - (el % P))}`));
+      const row = mk("div"); row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px";
+      row.append(mk("span", u ? "" : "muted", `${ITEMS[kd.item].icon} ${ITEMS[kd.item].name} รอเก็บ ${u}/${cap}`));
+      const bs = mk("div"); bs.style.cssText = "display:flex;gap:6px";
+      const cb = btn("เก็บ", () => baseCollect(i), "btn primary mini"); cb.disabled = !can || !u;
+      const db2 = btn("รื้อ", () => baseDismantle(i), "btn ghost mini"); db2.disabled = !can;
+      bs.append(cb, db2); row.append(bs); c.append(row);
+    }
+    body.append(c);
+  }
+  if (total > 0) { const ab = btn(`เก็บทั้งหมด (${total} ชิ้น)`, () => baseCollect(), "btn primary"); ab.disabled = !can; body.append(ab); }
+  const lv = baseLv(), it = baseUpItem();
+  const c2 = mk("div"); c2.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+  if (lv >= 3) c2.append(mk("b", "", "🏠 ที่พักอัปเกรดสูงสุดแล้ว (5 ช่อง)"));
+  else {
+    const cost = BASE_UP[lv], have = state.inv[it]?.id === it ? state.inv[it].qty : 0;
+    c2.append(mk("b", "", `🔨 อัปเกรดที่พัก (ขั้น ${lv}/3)`), mk("span", "muted", `เพิ่ม 1 ช่อง ใช้ ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost} (คุณมี ${have}) — ต้องออกไปหาข้างนอก`));
+    const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
+  }
+  body.append(c2);
+}
 
 /* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
@@ -7480,6 +7625,7 @@ function tuneDefs() {
     rows.push(["zw_on", "ศึกชิงโซน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
     rows.push(["zw_str", "ความแรงของโบนัสโซนที่ยึดได้ (% • 100 = เดิม, 0 = แค่ธง)", 100, 0, 200, g]);
     rows.push(["zw_min", "แต้มรวมขั้นต่ำของโซนในสัปดาห์นั้นถึงจะนับว่ามีผู้ยึด", 30, 1, 5000, g]); }
+  rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
