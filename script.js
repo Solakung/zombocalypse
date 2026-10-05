@@ -7,6 +7,7 @@ import {
   getDatabase, ref, get, set, update, push, remove, onValue, onChildAdded, onChildRemoved,
   onDisconnect, query, orderByKey, limitToLast, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
+import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
 
 /* =========================================================
    1) ตั้งค่า Firebase
@@ -25,13 +26,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
+const fns = getFunctions(app, "asia-southeast1");   // Cloud Functions: ระบบที่ย้ายตรรกะตรวจสอบจาก rules ไปไว้ฝั่งเซิร์ฟเวอร์ (ตอนนี้: ที่พัก 🏠)
+const baseCall = (data) => httpsCallable(fns, "baseAct")(data).then((r) => r.data);
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1100";
+const APP_VERSION = "2026-10-06.1200";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -7446,7 +7449,7 @@ function fxWorldRows2(box) {
 const fac2 = (h, z) => (coopFac() === "zombie" ? z : h);
 
 /* =========================================================
-   38) 🏠 ที่พัก — สถานีตั้งเวลาในค่าย (ต้องใช้ rules v32: base/{uid}, baseTx/{uid})
+   38) 🏠 ที่พัก — สถานีตั้งเวลาในค่าย (เขียนข้อมูลผ่าน Cloud Function baseAct — functions/base.js — rules ปิดการเขียน base/{uid} จากฝั่งเกมแล้ว)
    - วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ (คิดจากเวลาที่ผ่านไป ไม่ต้องมีโค้ดฝั่งเซิร์ฟเวอร์)
    - ผลผลิต "ของพื้นฐาน" เท่านั้น และมีเพดานสะสม (รอเก็บได้ไม่เกิน cap) → เป็นตัวช่วยออกไปค้นหาได้นานขึ้น ไม่ใช่เครื่องผลิตของเด็ด
    - อัปเกรดเพิ่มช่อง (เริ่ม 2 ช่อง สูงสุด 5) ต้องใช้ของที่หาจากข้างนอก (มนุษย์: เศษวัสดุ • ซอมบี้: เนื้อเน่า)
@@ -7497,30 +7500,30 @@ function openBase() {
   }
   renderBase(); $("base-modal").classList.remove("hidden");
 }
-function baseErr(e) { return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่ได้ในตอนนี้ (ต้องอยู่ Safe Zone และมีชีวิต • หรือเวลายังไม่ถึง) ลองใหม่อีกครั้ง" : errMsg(e); }
+function baseErr(e) {
+  const c = String(e?.code || "");
+  if (c.startsWith("functions/")) return /internal|unavailable|deadline|unknown/.test(c) ? "เซิร์ฟเวอร์ไม่ตอบสนอง ลองใหม่อีกครั้ง" : (e.message || errMsg(e));   // ข้อความไทยมาจากฟังก์ชัน (functions/base.js)
+  return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่ได้ในตอนนี้ (ต้องอยู่ Safe Zone และมีชีวิต • หรือเวลายังไม่ถึง) ลองใหม่อีกครั้ง" : errMsg(e);
+}
 function baseCan() { return baseOn() && state.zone === "safe" && state.profile?.hp > 0; }
 async function basePlace(i, k) {
   if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะวางสถานีได้"); state.busy = true;
-  try { await update(ref(db), { [`base/${state.uid}/s${i}`]: { k, t: serverTimestamp() } }); toast(`${baseKind(k).icon} วาง${baseKind(k).name}แล้ว`); }
+  try { await baseCall({ a: "place", i, k }); toast(`${baseKind(k).icon} วาง${baseKind(k).name}แล้ว`); }
   catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
 async function baseDismantle(i) {
   const rec = state.base?.["s" + i]; if (!rec || state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะรื้อได้");
   const u = baseUnits(rec); if (!confirm(`รื้อ${baseKind(rec.k).name}?${u > 0 ? ` (ผลผลิตที่รอเก็บ ${u} ชิ้นจะหายไป — เก็บก่อนดีกว่า)` : ""}`)) return;
   state.busy = true;
-  try { await update(ref(db), { [`base/${state.uid}/s${i}`]: null }); toast("รื้อสถานีแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+  try { await baseCall({ a: "dismantle", i }); toast("รื้อสถานีแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
 async function baseCollectOne(i, retry = true) {
   const rec = state.base?.["s" + i]; if (!rec) return 0;
-  const K = rec.k, P = BASE_P[K], cap = BASE_CAP[K], info = baseKind(K), el = serverNow() - rec.t - 1500, raw = Math.floor(el / P);
+  const K = rec.k, P = BASE_P[K], el = serverNow() - rec.t - 1500, raw = Math.floor(el / P);
   if (!(raw >= 1)) return 0;
-  const u = Math.min(cap, raw), newT = raw >= cap ? serverTimestamp() : rec.t + u * P;
-  const have = (await get(ref(db, `inventory/${state.uid}/${info.item}`))).val();   // อ่านจำนวนล่าสุดจริง (ช่องชนิดเดียวกันเก็บต่อกันได้ไม่พลาด)
-  const up = { [`baseTx/${state.uid}`]: { ts: serverTimestamp(), s: "s" + i }, [`base/${state.uid}/s${i}/t`]: newT };
-  if (have && have.id === info.item && have.qty > 0) up[`inventory/${state.uid}/${info.item}/qty`] = have.qty + u; else up[`inventory/${state.uid}/${info.item}`] = { id: info.item, qty: u };
-  try { await update(ref(db), up); achBump("bcol", u); return u; }
+  try { const r = await baseCall({ a: "collect", i }); const u = r?.n || 0; if (u) achBump("bcol", u); return u; }
   catch (e) {
-    if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) { await new Promise((r) => setTimeout(r, 2500)); return baseCollectOne(i, false); }   // นาฬิกาเหลื่อมเล็กน้อย → ลองใหม่ 1 ครั้ง
+    if (retry && String(e?.code || e).includes("failed-precondition")) { await new Promise((r) => setTimeout(r, 2500)); return baseCollectOne(i, false); }   // จังหวะเปลี่ยนสถานะเหลื่อมเล็กน้อย → ลองใหม่ 1 ครั้ง
     throw e;
   }
 }
@@ -7545,7 +7548,7 @@ async function baseUpgrade() {
   if (!have || have.id !== it || have.qty < cost) return toast(`ต้องมี ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost}`);
   state.busy = true;
   try {
-    await update(ref(db), { [`base/${state.uid}/lv`]: lv + 1, ...(have.qty === cost ? { [`inventory/${state.uid}/${it}`]: null } : { [`inventory/${state.uid}/${it}/qty`]: have.qty - cost }) });
+    await baseCall({ a: "upgrade" });
     achBump("bup"); toast(`🏠 อัปเกรดที่พักแล้ว ได้ช่องเพิ่ม (รวม ${baseSlots() + 1} ช่อง)`);
   } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
@@ -7818,22 +7821,19 @@ async function benchStart(j, r) {
   try {
     const have = await benchHave(R.in[0]);
     if (!have || have.id !== R.in[0] || have.qty < R.in[1]) { toast(`ต้องมี ${ITEMS[R.in[0]].icon} ${ITEMS[R.in[0]].name} ×${R.in[1]}`); return; }
-    await update(ref(db), { [`base/${state.uid}/j${j}`]: { r: String(r), t: serverTimestamp() }, ...(have.qty === R.in[1] ? { [`inventory/${state.uid}/${R.in[0]}`]: null } : { [`inventory/${state.uid}/${R.in[0]}/qty`]: have.qty - R.in[1] }) });
+    await baseCall({ a: "benchStart", j, r: String(r) });
     toast(`🛠️ เริ่ม${R.name}`);
   } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
 async function benchCancel(j) {
   const rec = state.base?.["j" + j]; if (!rec || state.busy || !baseCan()) return;
   if (!confirm("ยกเลิกงานนี้? วัตถุดิบที่ใส่ไปแล้วจะไม่คืน")) return; state.busy = true;
-  try { await update(ref(db), { [`base/${state.uid}/j${j}`]: null }); toast("ยกเลิกงานแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+  try { await baseCall({ a: "benchCancel", j }); toast("ยกเลิกงานแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
 async function benchCollectOne(j, retry = true) {
   const rec = state.base?.["j" + j], R = rec && BENCH[rec.r]; if (!R || benchLeft(rec) > -1500) return false;
-  const [oid, q] = R.out, have = await benchHave(oid);
-  const up = { [`baseTx/${state.uid}`]: { ts: serverTimestamp(), s: "j" + j }, [`base/${state.uid}/j${j}`]: null };
-  if (have && have.id === oid && have.qty > 0) up[`inventory/${state.uid}/${oid}/qty`] = have.qty + q; else up[`inventory/${state.uid}/${oid}`] = { id: oid, qty: q };
-  try { await update(ref(db), up); achBump("bcol", q); return true; }
-  catch (e) { if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) { await new Promise((r) => setTimeout(r, 2500)); return benchCollectOne(j, false); } throw e; }
+  try { const r = await baseCall({ a: "benchCollect", j }); achBump("bcol", r?.n || R.out[1]); return true; }
+  catch (e) { if (retry && String(e?.code || e).includes("failed-precondition")) { await new Promise((r) => setTimeout(r, 2500)); return benchCollectOne(j, false); } throw e; }
 }
 async function benchCollect(j) {
   if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะรับงานได้"); state.busy = true;
@@ -7881,7 +7881,7 @@ async function decoBuy(d) {
   try {
     const have = await benchHave(it);
     if (!have || have.id !== it || have.qty < cost) { toast(`ต้องมี ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost}`); return; }
-    await update(ref(db), { [`base/${state.uid}/deco/${d}`]: true, ...(have.qty === cost ? { [`inventory/${state.uid}/${it}`]: null } : { [`inventory/${state.uid}/${it}/qty`]: have.qty - cost }) });
+    await baseCall({ a: "deco", d });
     toast(`${row[1]} ตกแต่งที่พักด้วย${row[2]}แล้ว`); try { sfx("boss"); } catch { /* ข้าม */ }
   } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
