@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1720";
+const APP_VERSION = "2026-10-05.1815";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1369,8 +1369,11 @@ function renderInv() {
   const ul = $("inv-list"); if (!ul) return;
   ul.innerHTML = "";
   wallRender();
-  Object.entries(state.inv).forEach(([slot, it]) => {
+  try { invToolsInit(); } catch { /* ข้าม */ }
+  state.invLastCat = null;
+  invList().forEach(([slot, it, cat]) => {
     const def = defOf(it); if (!def) return;
+    invGroupHdr(ul, cat);
     const li = mk("li");
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
@@ -1411,9 +1414,9 @@ function renderInv() {
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
     }
-    ul.append(li);
+    ul.append(li); try { invInfoHook(li, it); } catch { /* ข้าม */ }
   });
-  if (!ul.children.length) ul.append(mk("li", "empty", "กระเป๋าว่างเปล่า"));
+  if (!ul.children.length) ul.append(mk("li", "empty", invFiltering() ? "ไม่พบไอเทมที่ตรงกับตัวกรอง" : "กระเป๋าว่างเปล่า"));
   renderCraft(); gearBar(); gearAutoFix();
 }
 
@@ -1422,22 +1425,27 @@ function renderCraft() {
   const human = state.profile.faction === "human";
   sec.classList.toggle("hidden", !human); if (!human) return;
   const ul = $("craft-list"); ul.innerHTML = "";
-  Object.entries(RECIPES).forEach(([id, r]) => {
+  const canOf = (r) => state.zone === "safe" && Object.entries(r.need).every(([m, n]) => (state.inv[m]?.qty || 0) >= n);
+  Object.entries(RECIPES).sort((a, b) => (canOf(b[1]) ? 1 : 0) - (canOf(a[1]) ? 1 : 0)).forEach(([id, r]) => {
     const out = ITEMS[r.out];
     const needTxt = Object.entries(r.need).map(([m, n]) => `${ITEMS[m].icon} ${state.inv[m]?.qty || 0}/${n}`).join(" ");
     const can = state.zone === "safe" && Object.entries(r.need).every(([m, n]) => (state.inv[m]?.qty || 0) >= n);
-    const li = mk("li"); li.append(mk("span", "", `${out.icon} ${out.name} ← ${needTxt}`));
+    const li = mk("li"); const nm = mk("span", "", `${out.icon} ${out.name} ← ${needTxt}`); nm.style.cursor = "pointer"; nm.title = "แตะเพื่อดูข้อมูลไอเทม"; nm.addEventListener("click", () => { try { itemInfoOpen(r.out); } catch { /* ข้าม */ } }); li.append(nm);
     const b = btn("ประกอบ", () => craft(id), "btn primary mini"); b.disabled = !can;
-    li.append(b); ul.append(li);
+    li.append(b);
+    const mx = can ? craftMax(id) : 0;
+    if (mx >= 2) { const g = mk("span", "row-btns"); if (mx >= 5) g.append(btn("×5", () => craftMany(id, 5), "btn ghost mini")); g.append(btn(`สูงสุด ×${Math.min(mx, 20)}`, () => craftMany(id, 20), "btn ghost mini")); li.append(g); }
+    ul.append(li);
   });
   $("craft-hint").textContent = state.zone === "safe" ? "" : "คราฟต์ได้เฉพาะใน Safe Zone";
 }
 
 async function craft(id) {
-  const r = RECIPES[id]; if (!r || state.busy) return;
-  if (state.profile.faction !== "human") return toast("เฉพาะมนุษย์เท่านั้นที่คราฟต์ได้");
-  if (state.zone !== "safe") return toast("ต้องคราฟต์ที่ Safe Zone");
-  for (const [m, n] of Object.entries(r.need)) if ((state.inv[m]?.qty || 0) < n) return toast("วัตถุดิบไม่พอ");
+  const r = RECIPES[id]; if (!r || state.busy) return false;
+  if (state.profile.faction !== "human") { toast("เฉพาะมนุษย์เท่านั้นที่คราฟต์ได้"); return false; }
+  if (state.zone !== "safe") { toast("ต้องคราฟต์ที่ Safe Zone"); return false; }
+  for (const [m, n] of Object.entries(r.need)) if ((state.inv[m]?.qty || 0) < n) { toast("วัตถุดิบไม่พอ"); return false; }
+  let okc = false;
   state.busy = true;
   const u = {};
   for (const [m, n] of Object.entries(r.need)) {
@@ -1445,9 +1453,10 @@ async function craft(id) {
     u[`inventory/${state.uid}/${m}` + (left > 0 ? "/qty" : "")] = left > 0 ? left : null;
   }
   invAddUpdate(u, r.out, r.qty);
-  try { await update(ref(db), u); questBump("craft"); if (id === "fish_grill" || id === "fish_stew") achBump("cook"); toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+  try { await update(ref(db), u); questBump("craft"); if (id === "fish_grill" || id === "fish_stew") achBump("cook"); okc = true; if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); } }
   catch (e) { toast(errMsg(e)); }
   finally { state.busy = false; }
+  return okc;
 }
 
 // ซ่อมอาวุธด้วย scrap (เบต้า) — มนุษย์ใน Safe Zone เท่านั้น / ความทนสูงสุดลดลง 10% ทุกครั้ง
@@ -2155,6 +2164,7 @@ async function bossRound(action) {
       const it = state.inv[action]; if (!it || !(it.qty > 0)) return;
       const heal = ITEMS[action].heal;
       if (it.qty > 1) u[`inventory/${uid}/${action}/qty`] = it.qty - 1; else u[`inventory/${uid}/${action}`] = null;
+      u[`users/${uid}/eatSlot`] = action;   // rules ตรวจผลไอเทมจากชื่อสล็อตนี้ (ขาดแล้วเขียน hp ไม่ผ่าน → "ระบบไม่อนุญาต")
       hp = Math.min(maxHp(), hp + heal);
       line = `${ITEMS[action].icon} ใช้${ITEMS[action].name} +${heal} HP`;
     } else if (action === "flee") {
@@ -2170,7 +2180,7 @@ async function bossRound(action) {
       if (!killed && pc && Math.random() * 100 < pc && !(state.bossBleed && state.bossBleed.id === bs.ts && state.bossBleed.n > 0)) { state.bossBleed = { id: bs.ts, n: BOSS_BLEED_N }; line += ` • 🩸 ${w0.def.name}ทำให้${b.name}เลือดไหล!`; }
     }
     if (strike) { const s = strikeWith(b, skillUsed), cut = gearCut(s.total); hp = Math.max(0, hp - cut); line += ` • ${s.text}${cut < s.total ? ` (🛡️ ชุดลดเหลือ −${cut})` : ""}`; }
-    if (strike) line += monFx(u, bs.boss, p.hp - hp, hp);
+    if (strike && !u[`users/${uid}/eatSlot`]) line += monFx(u, bs.boss, p.hp - hp, hp);   // รอบที่ใช้ยา: ยังโดนตี แต่ไม่ติดสถานะใหม่ (rules ไม่ให้เขียนสถานะพร้อมใช้ไอเทม)
     if (hp !== p.hp) u[`users/${uid}/hp`] = hp;
     if (hp === 0) { delete u[`bossFights/${uid}/hp`]; u[`bossFights/${uid}`] = null; }   // ล้มลง → จบการสู้ (processDeath จัดการต่อ)
     await update(ref(db), u);
@@ -5245,7 +5255,7 @@ function renderSettings() {
     r.append(t, cb); body.append(r);
   };
   row("🔊 เสียงและสั่นเตือน", "ตอนบอสโลกเกิด โดนตีแรง และ HP ต่ำ", SFX.on, (v) => { SFX.on = v; LS.set("zc_sfx", v); const s = $("btn-sfx"); if (s) s.title = v ? "ตั้งค่า (เสียงเปิดอยู่)" : "ตั้งค่า (เสียงปิดอยู่)"; if (v) sfx("low"); });
-  row("🔔 แจ้งเตือนบนอุปกรณ์", "เด้งเมื่อพลังงานเต็ม เดินทาง/บอสโซนพร้อม บอสโลกเกิด หรือโดนตี — เฉพาะตอนเกมถูกพับอยู่เบื้องหลัง (ต้องไม่ปิดแท็บ/แอป)", NT.on, toggleNotif);
+  row("🔔 แจ้งเตือนบนอุปกรณ์", "เด้งเมื่อพลังงานเต็ม เดินทาง/บอสโซนพร้อม สำรวจ/สัตว์เลี้ยง/โต๊ะคราฟต์เสร็จ บอสโลกเกิด หรือโดนตี — เฉพาะตอนเกมถูกพับอยู่เบื้องหลัง (ต้องไม่ปิดแท็บ/แอป)", NT.on, toggleNotif);
   row("💬 ซ่อนข้อความบรรยากาศ", "ปิดข้อความสั้น ๆ ที่โผล่ตอนค้นหา", LS.get("zc_noamb", false), (v) => { LS.set("zc_noamb", v); });
   row("✨ เอฟเฟกต์ภาพ", "ขอบจอตามสถานะ ตัวเลขดาเมจลอย ลูกเต๋า (ปิดถ้าเครื่องช้า)", !LS.get("zc_fxoff", false), (v) => { LS.set("zc_fxoff", !v); try { fxStatus(); } catch { /* */ } });
   row("🗺️ แสดงโซนเป็นแผนที่", "ปิด = แสดงเป็นรายการแบบเดิม", zmapOn(), (v) => { LS.set("zc_zmap", v ? "map" : "list"); zmapApply(); });
@@ -5255,6 +5265,7 @@ function renderSettings() {
   else if (isIOS()) ins.append(mk("small", "muted", "iPhone/iPad: กดปุ่มแชร์ (สี่เหลี่ยมมีลูกศรขึ้น) ใน Safari แล้วเลือก \"เพิ่มลงหน้าจอโฮม\""));
   else ins.append(mk("small", "muted", "เปิดเมนู ⋮ ของเบราว์เซอร์ → \"ติดตั้งแอป\" หรือ \"เพิ่มลงหน้าจอหลัก\""));
   body.append(ins);
+  try { kSettingsExtra(body); } catch { /* ข้าม */ }
 }
 function notifyOS(title, bodyText, tag) {
   try {
@@ -5272,6 +5283,7 @@ function notifyTick() {
   if (!trav && nf.trav) notifyOS("🧭 เดินทางได้แล้ว", "พักจากการเดินทางครบแล้ว", "trav");
   if (!bos && nf.bos) notifyOS("👹 บอสประจำโซนกลับมาเจอได้แล้ว", "ค้นหาต่อได้เลย", "bos");
   nf.full = full; nf.trav = trav; nf.bos = bos;
+  try { kNotifyTick(); } catch { /* ข้าม */ }
 }
 if (HAS_DOM) setInterval(() => { try { notifyTick(); } catch { /* */ } }, 15000);
 
@@ -6412,6 +6424,7 @@ function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.con
 /* ---- UI: แท็บ 🌍 โลก ---- */
 function worldBar(frac, text) { const bar = mk("div", "ach-bar"), i = mk("i"); i.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + "%"; bar.append(i, mk("span", "", text)); return bar; }
 function worldRender(box) {
+  try { kWorldRows(box); } catch (e) { console.warn("kWorld", e); }
   const C = state.coop; if (!C) { box.append(mk("div", "muted", "กำลังโหลด…")); return; }
   const fac = coopFac(), wk = qpKey("weekly");
   box.append(mk("div", "hub-day", `🌍 เป้าหมายประจำสัปดาห์ • เหลือ ${qpFmt(qpResetIn("weekly"))}`));
@@ -8477,12 +8490,14 @@ function kInit() {
   }
   const sc = $("btn-scavenge"); if (sc) { const fb = btn("🎣 ตกปลา (−10 พลังงาน)", fishOpen, "btn ghost wide"); fb.id = "btn-fish"; fb.classList.add("hidden"); sc.after(fb); }
   setInterval(kTopTick, 5000); kTopTick();
+  try { kInit2(); } catch (e) { console.warn("kInit2", e); }
 }
 function kTopTick() {
   const sk = $("btn-sk"), ob = $("btn-onb"), fb = $("btn-fish");
   if (sk) { let on = false, n = 0; try { on = skOn(); n = on ? skFreeAll() : 0; } catch { /* ข้าม */ } sk.classList.toggle("hidden", !on); sk.classList.toggle("btn-dot", n > 0); sk.title = n > 0 ? `มีแต้มทักษะว่าง ${n} แต้ม` : "ต้นไม้ทักษะ"; }
   if (ob) { const show = onbOn() && !!state.onb && onbLeft() > 0, rd = onbReady(); ob.classList.toggle("hidden", !show); ob.classList.toggle("btn-dot", rd > 0); ob.textContent = `🧭 เริ่มต้น ${ONB_STEPS.length - onbLeft()}/${ONB_STEPS.length}`; }
   if (fb) fb.classList.toggle("hidden", !fishCan());
+  try { kTick2(); } catch { /* ข้าม */ }
 }
 function kZoneHook() { try { kTopTick(); } catch { /* ข้าม */ } }
 
@@ -8605,6 +8620,278 @@ async function fishResolve(run, pos) {
     else again(pos == null ? "🐟 ปลาหลุดเบ็ดไปแล้ว… (เสีย 10 พลังงาน)" : "ดึงไม่ตรงจังหวะ ปลาหนีไป (เสีย 10 พลังงาน)");
   } catch (e) { again(errMsg(e)); }
   finally { state.busy = false; try { kTopTick(); } catch { /* ข้าม */ } }
+}
+
+/* =========================================================
+   48) 🧰 Release L — ระบบเสริมฝั่งเกมล้วน (ไม่แตะ rules)
+   1 กรอง/จัดกลุ่มกระเป๋า • 2 การ์ดข้อมูลไอเทม • 3 คราฟต์เป็นชุด • 4 ตัวจับเวลารวม • 5 แจ้งเตือนของพร้อมรับ • 6 ตัวเลขบนแท็บ
+   7 โซนแนะนำ • 8 พรีวิวเดินทาง • 9 ป้ายบอกสิ่งที่ควรทำต่อ • 10 กรองบันทึกเหตุการณ์ • 11 ขนาดตัวอักษร/โหมดกะทัดรัด • 12 ปุ่มลัดคีย์บอร์ด
+   ทุกอย่างอ่านข้อมูลที่เกมมีอยู่แล้ว (ไม่มีการเขียนฐานข้อมูลเพิ่ม ยกเว้นคราฟต์เป็นชุดที่เรียกคราฟต์เดิมทีละชิ้น)
+   ========================================================= */
+// ---- 1) กรอง/จัดกลุ่มกระเป๋า ----
+const INV_CATS = { w: "🗡️ อาวุธ", g: "🛡️ เกียร์", m: "💊 ยา/พลังงาน", f: "🍖 อาหาร/น้ำ", x: "🧱 วัสดุ/อื่น ๆ" };
+const INV_ORDER = ["w", "g", "m", "f", "x"];
+function invCat(it, def) {
+  if (!def) return "x";
+  if (def.type === "weapon") return "w";
+  if (def.type === "gear") return "g";
+  if (def.type === "consumable" || it.id === "custom_food") return (def.food > 0 || def.water > 0) ? "f" : (def.heal || def.stamina || FX_CURES[it.id] || def.type === "consumable") ? "m" : "x";
+  return "x";
+}
+function invList() {
+  const q = String(state.invQ || "").trim().toLowerCase(), cat = state.invCat || "";
+  return Object.entries(state.inv || {}).map(([slot, it]) => ({ slot, it, def: defOf(it) })).filter((r) => r.def)
+    .map((r) => ({ ...r, cat: invCat(r.it, r.def) }))
+    .filter((r) => (!cat || r.cat === cat) && (!q || String(r.def.name || "").toLowerCase().includes(q) || String(r.it.id || "").toLowerCase().includes(q)))
+    .sort((a, b) => INV_ORDER.indexOf(a.cat) - INV_ORDER.indexOf(b.cat) || (state.profile?.equipped === b.slot) - (state.profile?.equipped === a.slot) || String(a.def.name).localeCompare(String(b.def.name), "th"))
+    .map((r) => [r.slot, r.it, r.cat]);
+}
+function invGroupHdr(ul, cat) {
+  if (state.invLastCat === cat) return; state.invLastCat = cat;
+  const h = mk("li", "inv-h", INV_CATS[cat] || ""); h.style.cssText = "list-style:none;font-size:12px;color:var(--muted);padding:6px 2px 0;border:0;background:none"; ul.append(h);
+}
+function invFiltering() { return !!(String(state.invQ || "").trim() || state.invCat); }
+function invToolsInit() {
+  const ul = $("inv-list"); if (!ul || $("inv-tools")) return;
+  const box = mk("div"); box.id = "inv-tools"; box.style.cssText = "display:grid;gap:6px;margin:4px 0 8px";
+  const inp = mk("input"); inp.type = "search"; inp.placeholder = "🔎 ค้นหาไอเทมในกระเป๋า…"; inp.id = "inv-q"; inp.style.cssText = "padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--text);font-size:14px";
+  inp.addEventListener("input", () => { state.invQ = inp.value; renderInv(); });
+  const chips = mk("div"); chips.style.cssText = "display:flex;flex-wrap:wrap;gap:6px"; chips.id = "inv-chips";
+  [["", "ทั้งหมด"], ...INV_ORDER.map((c) => [c, INV_CATS[c].split(" ")[0]])].forEach(([c, l]) => { const b = btn(l, () => { state.invCat = c; invChipsSync(); renderInv(); }, "btn ghost mini"); b.dataset.c = c; b.title = c ? INV_CATS[c] : "ทุกหมวด"; chips.append(b); });
+  box.append(inp, chips); ul.before(box); invChipsSync();
+}
+function invChipsSync() { document.querySelectorAll("#inv-chips button").forEach((b) => b.classList.toggle("on", (b.dataset.c || "") === (state.invCat || ""))); }
+
+// ---- 2) การ์ดข้อมูลไอเทม ----
+const ITEM_NOTE = {
+  fish: "ตกได้ที่ท่าเรือ (ปุ่ม 🎣 ตกปลา) — เอาไปคราฟต์ปลาย่าง/ซุปปลา", golden_fish: "ตกได้ที่ท่าเรือเมื่อดึงเบ็ดได้เป๊ะ ๆ (หายาก) — สมทบโปรเจกต์ค่ายได้แต้มสูง",
+  lab_core: "ดรอปจากบอสศูนย์วิจัย — ส่งให้ห้องวิจัยของค่าย (ที่พัก) เพื่อรับผลวิจัยชั่วคราว", lab_blade: "ดรอปจากบอสศูนย์วิจัย (หายาก)", lab_sample: "ส่งให้ห้องวิจัยของค่ายเพื่อรับผลวิจัยชั่วคราว หรือเอาไปคราฟต์ซีรั่มทดลอง",
+  exp_serum: "ฟื้น 60 HP และรักษาเลือดไหล/พิษทุกระดับ", fish_grill: "กินแล้วได้บัฟ “อิ่มปลาย่าง” 20 นาที (ไม่เจออะไรน้อยลง 7%)", fish_stew: "กินแล้วได้บัฟ “อุ่นท้องซุปปลา” 30 นาที (ลดดาเมจที่โดน 5%)",
+  scrap: "วัสดุหลักของการคราฟต์ซ่อมอาวุธและกำแพง", chem: "วัสดุคราฟต์ยาและเกราะ", rotten_meat: "อาหารของซอมบี้ (ซอมบี้เท่านั้นที่กินได้)"
+};
+function itemSources(id) {
+  const out = [], zs = Object.keys(ZONES).filter((z) => z !== "safe");
+  const hz = zs.filter((z) => (ZONES[z].drops || []).some((d) => d.id === id) || GEAR_DROPS[z]?.[id]), zz = zs.filter((z) => MUT_DROPS[z]?.[id] || (id === "rotten_meat" && ZOMBIE_EXTRA[z]));
+  if (ZONES.safe.drops?.some((d) => d.id === id)) out.push("🏕️ ค้นหาใน Safe Zone");
+  if (hz.length) out.push("ค้นหาที่: " + hz.map((z) => `${ZONES[z].icon}${ZONES[z].name}`).join(", "));
+  if (zz.length && !hz.length) out.push("ซอมบี้ค้นหาที่: " + zz.map((z) => `${ZONES[z].icon}${ZONES[z].name}`).join(", "));
+  const bs = Object.entries(BOSSES).filter(([, b]) => (b.loot || []).some((d) => d.id === id) || (b.bonus || []).some((d) => d.id === id)).map(([z, b]) => `${b.icon} ${b.name}`);
+  if (bs.length) out.push("บอสโซนที่ดรอป: " + bs.join(", "));
+  const ex = Object.entries(EXP_H).filter(([, v]) => v[0] === id).map(([z]) => ZONES[z]?.name).filter(Boolean); if (ex.length) out.push("ทีมสำรวจ (มนุษย์) จาก: " + ex.join(", "));
+  if (id === "rotten_meat") out.push("ทีมสำรวจ/สัตว์เลี้ยง/สถานีที่พัก (ซอมบี้)");
+  const pk = Object.values(PET_K).filter((d) => d.id === id); if (pk.length) out.push("สัตว์เลี้ยงหาให้: " + pk.map((d) => `${d.icon}${d.name}`).join(", "));
+  const bn = Object.values(BENCH).filter((b) => b.out[0] === id); if (bn.length) out.push("โต๊ะงานที่พัก: " + bn.map((b) => b.name).join(", "));
+  const cr = Object.values(RECIPES).filter((r) => r.out === id); cr.forEach((r) => out.push("ประกอบจาก: " + Object.entries(r.need).map(([m, n]) => `${ITEMS[m].icon}${ITEMS[m].name}×${n}`).join(" + ")));
+  return out;
+}
+function itemUses(id) {
+  const out = [], rc = Object.entries(RECIPES).filter(([, r]) => r.need[id]).map(([, r]) => `${ITEMS[r.out].icon}${ITEMS[r.out].name}`); if (rc.length) out.push("ใช้ประกอบ: " + rc.join(", "));
+  const bn = Object.values(BENCH).filter((b) => b.in[0] === id).map((b) => b.name); if (bn.length) out.push("ใส่โต๊ะงาน: " + bn.join(", "));
+  const pj = PROJ_ITEMS[state.profile?.faction === "zombie" ? "zombie" : "human"]?.[id]; if (pj) out.push(`สมทบโปรเจกต์ค่าย ${pj} แต้มต่อชิ้น`);
+  if (typeof GIFT_IDS !== "undefined" && GIFT_IDS.includes?.(id)) out.push("ฝากเป็นของขวัญให้เพื่อนได้ (เยี่ยมบ้านเพื่อน)");
+  return out;
+}
+function itemInfoOpen(id) {
+  const def = ITEMS[id]; if (!def) return;
+  if (!$("iteminfo-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "iteminfo-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "420px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "ข้อมูลไอเทม"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "iteminfo-body"; body.style.cssText = "display:grid;gap:8px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m); m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+  }
+  const body = $("iteminfo-body"); body.textContent = "";
+  const T2 = { weapon: "อาวุธ", gear: "เกียร์/ของสวมใส่", consumable: "ของใช้", material: "วัสดุ", stat: "ยาปรับสเตตัส" };
+  body.append(mk("b", "", `${def.icon} ${def.name}`), mk("div", "muted", `${T2[def.type] || def.type} • คุณมี ×${state.inv?.[id]?.qty || (Object.values(state.inv || {}).filter((x) => x.id === id).length) || 0}`));
+  const fx = effectText(def); if (fx) body.append(mk("div", "", `ผล: ${fx}`));
+  if (def.type === "weapon") body.append(mk("div", "", `ดาเมจ ${def.dmg} • ความทน ${def.maxDur}${WPN_PROC[id] ? ` • ${WPN_PROC[id]}% ทำให้บอสเลือดไหล` : ""}`));
+  if (def.type === "gear") body.append(mk("div", "", `ช่อง: ${GEAR_SLOTS[def.slot] || def.slot}${GEAR_FX[id] ? ` • ${GEAR_FX[id]}` : ""}${def.zombieOnly ? " • เฉพาะซอมบี้" : ""}`));
+  if (ITEM_NOTE[id]) body.append(mk("div", "", "📝 " + ITEM_NOTE[id]));
+  const src = itemSources(id), use = itemUses(id);
+  if (src.length) { body.append(mk("b", "", "หาได้จาก")); src.forEach((s) => body.append(mk("div", "muted", "• " + s))); }
+  if (use.length) { body.append(mk("b", "", "ใช้ทำอะไรได้")); use.forEach((s) => body.append(mk("div", "muted", "• " + s))); }
+  if (!src.length && !use.length && !ITEM_NOTE[id] && !fx) body.append(mk("div", "muted", "ยังไม่มีข้อมูลเพิ่มเติมของไอเทมนี้"));
+  $("iteminfo-modal").classList.remove("hidden");
+}
+function invInfoHook(li, it) {
+  if (!it || !ITEMS[it.id]) return; const sp = li.querySelector("span"); if (!sp) return;
+  sp.style.cursor = "pointer"; sp.title = "แตะเพื่อดูข้อมูลไอเทม"; sp.addEventListener("click", () => itemInfoOpen(it.id));
+}
+
+// ---- 3) คราฟต์เป็นชุด ----
+const craftMax = (id) => { const r = RECIPES[id]; return r ? Math.min(...Object.entries(r.need).map(([m, n]) => Math.floor((state.inv[m]?.qty || 0) / n))) : 0; };
+async function craftMany(id, n) {
+  if (state.busy) return; const r = RECIPES[id]; if (!r) return;
+  n = Math.min(n, craftMax(id), 20); if (n < 1) return toast("วัตถุดิบไม่พอ");
+  let done = 0; state.craftQuiet = true;
+  try { for (let i = 0; i < n; i++) { if (craftMax(id) < 1) break; const ok = await craft(id); if (!ok) break; done++; await new Promise((res) => setTimeout(res, 150)); } }
+  finally { state.craftQuiet = false; }
+  if (done) { toast(`🛠️ ประกอบ ${ITEMS[r.out].name} ×${done} สำเร็จ`); try { logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name} ×${done}`, "info"); } catch { /* ข้าม */ } }
+}
+
+// ---- 4) ตัวจับเวลารวม + 7) โซนแนะนำ (แสดงในแท็บ โลก) ----
+function kFmt(ms) { return baseHm(Math.max(0, ms)); }
+function kTimers() {
+  const rows = [], now = serverNow(), add = (icon, text, left, ready) => rows.push({ icon, text, left, ready });
+  try { if (state.exp?.t) add("🧭", "ทีมสำรวจ", expLeft(), expLeft() <= 0); else if (baseLv() >= 1 && expOn()) add("🧭", "ทีมสำรวจ: ว่าง (ส่งได้เลย)", 0, false); } catch { /* ข้าม */ }
+  try { if (petOn() && state.pet) { const pk = PET_K[state.pet.k]; if (petOut()) add(pk?.icon || "🐾", `${pk?.name || "สัตว์เลี้ยง"} ออกไปหาของ`, petLeft(), petLeft() <= 0); else add(pk?.icon || "🐾", `${pk?.name || "สัตว์เลี้ยง"}: อยู่ที่ค่าย (ส่งออกไปได้)`, 0, false); } } catch { /* ข้าม */ }
+  try { for (let j = 1; j <= benchSlots(); j++) { const rec = state.base?.["j" + j]; if (rec && BENCH[rec.r]) { const l = benchLeft(rec); add("🛠️", `โต๊ะงาน ${j}: ${BENCH[rec.r].name}`, l, l <= 0); } } } catch { /* ข้าม */ }
+  try { let u = 0; for (let i = 1; i <= baseSlots(); i++) u += baseUnits(state.base?.["s" + i]); if (u > 0) add("🏠", `สถานีที่พักมีผลผลิตรอเก็บ ${u} ชิ้น`, 0, true); } catch { /* ข้าม */ }
+  try { const l = labBuffLeft(); if (l > 0) add("🧫", "ผลวิจัย (ของหายาก +8%)", l, false); } catch { /* ข้าม */ }
+  try { const m = mealRec(); if (m) add("🍽️", `${MEALS[m.id].name} (${MEALS[m.id].tip})`, m.until - now, false); } catch { /* ข้าม */ }
+  try { const d = duoBuffLeft(); if (d > 0) add("🤝", "โชคเคียงข้าง", d, false); } catch { /* ข้าม */ }
+  try { const c = travelCooldownLeft(); if (c > 0) add("🧭", "พักเดินทาง", c, false); const b = bossCooldownLeft(); if (b > 0) add("👹", "บอสโซนกลับมาเจอได้ใน", b, false); } catch { /* ข้าม */ }
+  try { evtActive(now).forEach((e) => add(EVT_TYPES[e.type].icon, `${EVT_TYPES[e.type].name} • ${ZONES[e.zone]?.name || e.zone}`, e.end - now, false)); } catch { /* ข้าม */ }
+  try { const w = wxNow(now); add(WX[w.type].icon, `สภาพอากาศ: ${WX[w.type].name}`, w.end - now, false); } catch { /* ข้าม */ }
+  try { add("📜", "ภารกิจรายวันรีเซ็ตใน", qpResetIn("daily"), false); } catch { /* ข้าม */ }
+  return rows;
+}
+function kTimersRows(box) {
+  fxSection(box, "ktimers", "⏱️ ตัวจับเวลารวม", (b) => {
+    const rows = kTimers(); if (!rows.length) return b.append(mk("div", "muted", "ยังไม่มีอะไรที่นับเวลาอยู่"));
+    rows.forEach((r) => { const row = mk("div", "world-row" + (r.ready ? " evt-live" : "")); row.append(mk("div", "", `${r.icon} ${r.text}`), mk("div", "muted", r.ready ? "✅ พร้อมรับ" : r.left > 0 ? `เหลือ ~${kFmt(r.left)}` : "—")); b.append(row); });
+  }, true);
+}
+function zrecVal(id, fac) {
+  const D = ITEMS[id]; if (!D || id === "boss") return 0; const food = curFood(), water = curWater(), hp = state.profile?.hp || 0, low = (v) => v < 50;
+  if (id === "rotten_meat") return fac === "zombie" ? (low(food) ? 3 : 1.2) : 0;
+  if (FX_FOOD.has(id)) return fac === "human" ? (low(food) ? 3 : 1.2) : 0.3;
+  if (id === "water" || id === "water_jug") return fac === "human" ? (low(water) ? 3 : 1.2) : 0.6;
+  if (D.heal > 0) return hp < maxHp() * 0.7 ? 2.6 : 1.4;
+  if (D.type === "gear") return (state.inv?.[id]?.qty || 0) ? 0.8 : 2.2;
+  if (id === "chem" || id === "scrap") return fac === "human" ? 1.1 : 0.2;
+  return 1.1;
+}
+function zrecScore(z, fac) {
+  const t = fac === "zombie" ? zombieDrops(z) : humanDrops(z), tot = t.reduce((s, d) => s + d.w, 0) || 1; let u = 0; const part = {};
+  for (const d of t) { if (d.id === "zombie") { if (fac === "human") u -= (d.w / tot) * 5; continue; } if (!d.id) continue; const v = zrecVal(d.id, fac), c = (d.w / tot) * v; u += c; if (c > 0) part[d.id] = (part[d.id] || 0) + c; }
+  let s = u * 10 - (z === state.zone ? 0 : travelCost(z) * 0.12) - ZONES[z].danger * 0.15, tag = "";
+  try { const e = evtHere(z); if (e) { const T2 = EVT_TYPES[e.type]; tag = `${T2.icon} ${T2.name}`; s += e.type === "air" ? 2.5 : e.type === "blackout" ? 1.5 : fac === "zombie" ? 2 : -2; } } catch { /* ข้าม */ }
+  const top = Object.entries(part).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([id]) => `${ITEMS[id].icon}${ITEMS[id].name}`);
+  return { z, s, top, tag };
+}
+function zrecList() {
+  const p = state.profile; if (!p) return []; const fac = p.faction === "zombie" ? "zombie" : "human";
+  return Object.keys(ZONES).filter((z) => z !== "safe").map((z) => zrecScore(z, fac)).sort((a, b) => b.s - a.s);
+}
+function kRecRows(box) {
+  fxSection(box, "krec", "🧭 โซนแนะนำตอนนี้", (b) => {
+    const L = zrecList().slice(0, 3); if (!L.length) return;
+    L.forEach((r, i) => {
+      const row = mk("div", "world-row" + (i === 0 ? " evt-live" : "")), z = ZONES[r.z];
+      row.append(mk("div", "", `${i === 0 ? "⭐ " : ""}${z.icon} ${z.name}${r.z === state.zone ? " (คุณอยู่ที่นี่)" : ""}`), mk("div", "muted", `เหมาะกับ ${r.top.join(", ") || "ของทั่วไป"}${r.tag ? ` • ${r.tag}` : ""} • ⚠ ${z.danger}/10 • ⚡ ${r.z === state.zone ? 0 : travelCost(r.z)}`));
+      if (r.z !== state.zone) row.append(btn("ไปเลย", () => { try { $("hub-modal")?.classList.add("hidden"); } catch { /* ข้าม */ } enterZone(r.z); try { setTab("chat"); } catch { /* ข้าม */ } }, "btn ghost mini"));
+      b.append(row);
+    });
+    b.append(mk("div", "muted", "คำแนะนำคร่าว ๆ จากของที่หาได้ตอนนี้ สภาพอากาศ เหตุการณ์ และความหิว/HP ของคุณ — ตัดสินใจเองได้เสมอ"));
+  }, true);
+}
+function kWorldRows(box) { try { kRecRows(box); } catch (e) { console.warn("krec", e); } try { kTimersRows(box); } catch (e) { console.warn("ktimers", e); } }
+
+// ---- 5) แจ้งเตือนของพร้อมรับ (เด้งเมื่อปิดหน้าเกมอยู่) ----
+function kNotifyTick() {
+  const p = state.profile; if (!p || !state.uid) return;
+  const cur = { exp: !!(typeof expReady === "function" && expReady()), pet: !!(typeof petReady === "function" && petReady()), bench: (typeof benchDone === "function" ? benchDone() : 0) > 0 };
+  const prev = state.nf2 || (state.nf2 = { ...cur });
+  if (cur.exp && !prev.exp) notifyOS("🧭 ทีมสำรวจกลับมาแล้ว", "กลับ Safe Zone ไปรับของได้เลย", "exp");
+  if (cur.pet && !prev.pet) notifyOS("🐾 สัตว์เลี้ยงกลับมาแล้ว", "แวะที่พักไปรับของที่มันหามาได้", "pet");
+  if (cur.bench && !prev.bench) notifyOS("🛠️ โต๊ะงานเสร็จแล้ว", "แวะที่พักไปรับของที่ทำเสร็จได้", "bench");
+  state.nf2 = cur;
+}
+
+// ---- 6) ตัวเลขบนแท็บเบราว์เซอร์ ----
+let kTitle0 = null;
+function kTitleTick() {
+  if (kTitle0 === null) kTitle0 = document.title.replace(/^\(\d+\)\s*/, "");
+  let n = 0; try { n += baseReady(); } catch { /* ข้าม */ } try { n += qpClaimable(); } catch { /* ข้าม */ } try { n += onbReady(); } catch { /* ข้าม */ }
+  const t = n > 0 ? `(${n}) ${kTitle0}` : kTitle0; if (document.title !== t) document.title = t;
+}
+
+// ---- 8) พรีวิวเดินทางบนปุ่มโซน + ดาวโซนแนะนำ ----
+function zonePreview() {
+  const best = (() => { try { return zrecList()[0]?.z; } catch { return null; } })();
+  document.querySelectorAll(".zone-btn").forEach((b) => {
+    const z = b.dataset.zone; if (!z || !ZONES[z]) return;
+    let c = b.querySelector(".zp"); if (!c) { c = mk("span", "zp"); c.style.cssText = "display:block;font-size:10px;opacity:.85;line-height:1.2"; b.append(c); }
+    let ev = ""; try { const e = evtHere(z); if (e) ev = " " + EVT_TYPES[e.type].icon; } catch { /* ข้าม */ }
+    const txt = z === state.zone ? "📍" : `⚡${travelCost(z)}${ev}${z === best ? " ⭐" : ""}`; if (c.textContent !== txt) c.textContent = txt;
+    b.title = `${ZONES[z].name} • อันตราย ${ZONES[z].danger}/10${z === state.zone ? "" : ` • เดินทางเสีย ${travelCost(z)} พลังงาน`}${z === best ? " • ⭐ แนะนำตอนนี้" : ""}`;
+  });
+}
+
+// ---- 9) ป้ายบอกสิ่งที่ควรทำต่อ ----
+function kHintText() {
+  const p = state.profile; if (!p || p.hp <= 0) return "";
+  const inv = state.inv || {}, has = (id) => inv[id]?.qty > 0, safe = state.zone === "safe";
+  try { const q = qpClaimable(); if (q > 0) return `📜 มีรางวัลภารกิจรอรับ ${q} รายการ (ปุ่ม “ภารกิจ”)`; } catch { /* ข้าม */ }
+  try { if (onbReady() > 0) return "🧭 มีรางวัลภารกิจวันแรกรอรับ (ปุ่ม “เริ่มต้น”)"; } catch { /* ข้าม */ }
+  try { const n = baseReady(); if (n > 0) return safe ? `🏠 ที่พักมีของรอรับ ${n} รายการ (ปุ่ม “ที่พัก”)` : `🏠 ที่พักมีของรอรับ ${n} รายการ — กลับ Safe Zone ไปรับ`; } catch { /* ข้าม */ }
+  if (p.hp < maxHp() * 0.4) { const m = ["trauma_kit", "medkit", "exp_serum", "bandage", "fish_stew", "soup", "moss"].find(has); if (m) return `💊 HP ต่ำ — ใช้ ${ITEMS[m].icon} ${ITEMS[m].name} ได้เลย`; }
+  if (curFood() < 30) { const m = (p.faction === "zombie" ? ["rotten_meat"] : ["fish_stew", "fish_grill", "army_meal", "canned_food", "soup", "bread", "fruit"]).find(has); if (m) return `🍖 หิวแล้ว — กิน ${ITEMS[m].icon} ${ITEMS[m].name}`; }
+  if (curWater() < 30) { const m = ["water_jug", "water", "soup", "fish_stew"].find(has); if (m) return `💧 กระหายน้ำ — ดื่ม ${ITEMS[m].icon} ${ITEMS[m].name}`; }
+  if (p.faction === "human" && safe && has("fish") && (craftMax("fish_grill") > 0 || craftMax("fish_stew") > 0)) return "🍲 คุณมีปลา — ประกอบปลาย่าง/ซุปปลาที่ Safe Zone ได้";
+  try { if (has("lab_sample") || has("lab_core")) if (labBuffLeft() <= 0) return "🧫 มีตัวอย่างวิจัย — ส่งให้ห้องวิจัยที่ค่าย (ที่พัก) รับบัฟชั่วคราว"; } catch { /* ข้าม */ }
+  try { if (skOn() && skFreeAll() > 0) return `🌳 มีแต้มทักษะว่าง ${skFreeAll()} แต้ม (ปุ่ม “ทักษะ”)`; } catch { /* ข้าม */ }
+  if (curStamina() >= maxStamina()) { const r = (() => { try { return zrecList()[0]; } catch { return null; } })(); return r && r.z !== state.zone ? `⚡ พลังงานเต็ม — ${ZONES[r.z].icon} ${ZONES[r.z].name} น่าไปตอนนี้ (เหมาะกับ ${r.top.join(", ") || "ของทั่วไป"})` : "⚡ พลังงานเต็ม — ค้นหาได้เลย"; }
+  return "";
+}
+function kHintTick() {
+  let el = $("k-hint"); const sc = $("btn-scavenge");
+  if (!el) { if (!sc) return; el = mk("div", "muted"); el.id = "k-hint"; el.style.cssText = "font-size:13px;padding:6px 10px;border:1px dashed var(--line);border-radius:8px;margin:0 0 8px"; sc.before(el); }
+  const t = kHintText(); el.textContent = t ? "💡 " + t : ""; el.classList.toggle("hidden", !t);
+}
+
+// ---- 10) กรองบันทึกเหตุการณ์ ----
+function logFilterInit() {
+  const log = $("chat-log"); if (!log || $("log-filter")) return;
+  if (!$("kl-style")) { const st = document.createElement("style"); st.id = "kl-style"; st.textContent = '#chat-log[data-f="chat"] .msg.info,#chat-log[data-f="chat"] .msg.system,#chat-log[data-f="chat"] .msg.combat,#chat-log[data-f="chat"] .msg.ambient{display:none}#chat-log[data-f="combat"] .msg:not(.combat){display:none}#chat-log[data-f="log"] .msg:not(.info):not(.system):not(.ambient){display:none}'; document.head.append(st); }
+  const bar = mk("div"); bar.id = "log-filter"; bar.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px";
+  [["", "ทั้งหมด"], ["chat", "💬 แชท"], ["combat", "⚔️ ต่อสู้"], ["log", "📦 เหตุการณ์"]].forEach(([f, l]) => { const b = btn(l, () => { log.dataset.f = f; LS.set("zc_logf", f); bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", (x.dataset.f || "") === f)); log.scrollTop = log.scrollHeight; }, "btn ghost mini"); b.dataset.f = f; bar.append(b); });
+  log.before(bar); const f0 = LS.get("zc_logf", ""); log.dataset.f = f0 || ""; bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", (x.dataset.f || "") === (f0 || "")));
+}
+
+// ---- 11) ขนาดตัวอักษร / โหมดกะทัดรัด ----
+function viewApply() {
+  const z = LS.get("zc_zoom", 100), c = LS.get("zc_compact", false) === true;
+  try { document.documentElement.style.zoom = z && z !== 100 ? String(z / 100) : ""; } catch { /* ข้าม */ }
+  document.body.classList.toggle("compact", c);
+  if (!$("kc-style")) { const st = document.createElement("style"); st.id = "kc-style"; st.textContent = "body.compact .bubble{padding:4px 9px}body.compact .msg{margin:2px 0}body.compact .list li{padding:5px 8px}body.compact .world-row{padding:5px 8px}body.compact .panel{padding:10px}"; document.head.append(st); }
+}
+function kSettingsExtra(body) {
+  const box = mk("div", "set-install"); box.append(mk("b", "", "🔠 การแสดงผล"));
+  const sel = mk("select"); sel.style.cssText = "padding:6px 8px;border-radius:8px;background:var(--panel-2);color:var(--text);border:1px solid var(--line)";
+  [[100, "ขนาดปกติ"], [112, "ใหญ่"], [125, "ใหญ่มาก"], [90, "เล็ก"]].forEach(([v, l]) => { const o = mk("option", "", l); o.value = v; if (v === LS.get("zc_zoom", 100)) o.selected = true; sel.append(o); });
+  sel.addEventListener("change", () => { LS.set("zc_zoom", +sel.value); viewApply(); });
+  const cb = mk("input"); cb.type = "checkbox"; cb.checked = LS.get("zc_compact", false) === true; cb.addEventListener("change", () => { LS.set("zc_compact", cb.checked); viewApply(); });
+  const l2 = mk("label"); l2.style.cssText = "display:flex;gap:8px;align-items:center"; l2.append(cb, mk("span", "", "โหมดกะทัดรัด (ลดระยะห่าง เห็นข้อความต่อหน้าจอมากขึ้น)"));
+  box.append(sel, l2, mk("small", "muted", "⌨️ ปุ่มลัด (คอมพิวเตอร์): S ค้นหา • F ตกปลา • 1–4 ไอเทมโปรด • Q สลับอาวุธ • B กระเป๋า • M แผนที่ • C แชท"));
+  body.append(box);
+}
+
+// ---- 12) ปุ่มลัดคีย์บอร์ด ----
+function kKeysInit() {
+  if (state.kKeys) return; state.kKeys = true;
+  document.addEventListener("keydown", (e) => {
+    const tg = e.target; if (e.ctrlKey || e.metaKey || e.altKey || (tg && /^(INPUT|TEXTAREA|SELECT)$/.test(tg.tagName || "")) || !state.profile) return;
+    if (document.querySelector(".modal:not(.hidden)")) return;
+    const k = e.key.toLowerCase();
+    if (k === "s") { const b = $("btn-scavenge"); if (b && !b.disabled) { e.preventDefault(); b.click(); } }
+    else if (k === "f") { if (fishCan()) { e.preventDefault(); fishOpen(); } }
+    else if (k >= "1" && k <= "4") { const hs = document.querySelectorAll("#hotbar .hot"); const h = hs[+k - 1]; if (h) { e.preventDefault(); h.click(); } }
+    else if (k === "b") { setTab("bag"); } else if (k === "m") { setTab("map"); } else if (k === "c") { setTab("chat"); }
+  });
+}
+
+function kInit2() {
+  try { invToolsInit(); } catch (e) { console.warn("inv tools", e); }
+  try { logFilterInit(); } catch (e) { console.warn("log filter", e); }
+  try { viewApply(); } catch (e) { console.warn("view", e); }
+  try { kKeysInit(); } catch (e) { console.warn("keys", e); }
+}
+function kTick2() {
+  try { kHintTick(); } catch { /* ข้าม */ }
+  try { kTitleTick(); } catch { /* ข้าม */ }
+  try { zonePreview(); } catch { /* ข้าม */ }
 }
 
 /* =========================================================
