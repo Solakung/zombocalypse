@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1331";
+const APP_VERSION = "2026-10-05.1334";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4171,13 +4171,20 @@ async function gachaClaim(ticket) {
       u[`gachaPool/${t.f}/${t.slot}`] = null;
     }
     await update(ref(db), u);
-    state.gaTicket = null;
+    state.gaTicket = null; state.gaRetried = false; state.gaFail = "";
     if (prize) {
       state.gaLast = { id: prize.id, qty: prize.qty };
       questBump("gacha");
       gachaSpinAnim(prize);   // แอนิเมชันหมุนแบบเปิดกล่อง (ของเข้ากระเป๋าไปแล้ว ตัวนี้เป็นแค่ภาพ) — จบแล้วค่อยขึ้นข้อความ
     } else toast("ช่องนี้ว่างแล้ว (แอดมินล้างตู้) — ตั๋วถูกยกเลิก");
-  } catch (e) { console.error("gachaClaim", e?.code || e); toast("รับของไม่สำเร็จ — กด “รับของที่ค้างอยู่” อีกครั้ง"); }
+  } catch (e) {
+    const code = String(e?.code || e?.message || e).replace(/^.*?:\s*/, "").slice(0, 40);
+    console.error("gachaClaim", e?.code || e, { ticket: t, uid });
+    state.gaFail = code;
+    toast(`รับของไม่สำเร็จ (${code}) — กด “รับของที่ค้างอยู่” อีกครั้ง`);
+    try { logLine(`🎰 รับของกาชาไม่สำเร็จ: ${code} (ตั๋ว ${t.f}/${String(t.slot).slice(0, 4)}…) — แจ้งเจ้าของเกมพร้อมข้อความนี้ได้`, "system"); } catch { /* ข้าม */ }
+    if (!state.gaRetried && gachaIsPerm(e)) { state.gaRetried = true; setTimeout(() => { if (state.gaTicket && !state.gaBusy) gachaClaim(); }, 4000); }
+  }
   finally { state.gaBusy = false; gachaRefresh(); }
 }
 
