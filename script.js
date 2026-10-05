@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1101";
+const APP_VERSION = "2026-10-05.1136";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -358,8 +358,8 @@ const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
 const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
-const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z)));
-function effectiveDrops(z) { return wxNzDrops(z, effectiveDrops0(z)); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
+const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z) + fxDmod(z)));
+function effectiveDrops(z) { return fxDrops(z, wxNzDrops(z, effectiveDrops0(z))); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
 function effectiveDrops0(z) {
   if (z === "safe" && wallBroken()) return [...ZONES.safe.drops, { id: "zombie", w: WALL_BREACH_Z }];   // กำแพงพัง → ซอมบี้บุก Safe Zone
   const e = zoneEv(z), n = nightMod(z);
@@ -406,7 +406,7 @@ function renderZoneDanger(z) {
       ? `🌙 กลางคืน — อีกประมาณ ${phaseMinsLeft()} นาทีจะสว่าง${z === "safe" ? "" : ` • อันตราย +${NIGHT_MOD.dmod} ซอมบี้ชุกขึ้น`}`
       : `☀️ กลางวัน — อีกประมาณ ${phaseMinsLeft()} นาทีจะมืด`;
   }
-  try { wxRender(z); } catch { /* ข้าม */ }
+  try { wxRender(z); fxRender(z); } catch { /* ข้าม */ }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
     if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}${state.profile?.faction === "zombie" && d.ev.type === "horde" ? " • 🥩 ซากเพียบ" : ""}`;
@@ -503,6 +503,7 @@ function equippedWeapon() {
 }
 
 function wearUpdates(u, w) {
+  try { if (careerWearSkip(w)) return; } catch { /* ข้าม */ }   // อาชีพนักล่า: บางครั้งตีแล้วไม่เสียความทน
   if (w.it.dur > 999) return;   // อาวุธค่าสูงเกินเพดาน rules (dur ≤ 999) → ไม่หักความทน ไม่งั้นอัปเดตโดนปฏิเสธ
   const left = w.it.dur - 1;
   if (left <= 0) {
@@ -690,7 +691,7 @@ async function effectTick() {
       if (ticks > 0) {
         if (t === "hot") { if (hp < maxHp()) { hp = Math.min(maxHp(), hp + v); u[base + "/tick"] = serverTimestamp(); } }
         else {
-          hp = Math.max(1, hp - v * ticks);
+          hp = Math.max(1, hp - fxCutDmg(v * ticks));
           if (t === "poison") stam = Math.max(0, (stam ?? curStamina()) - POISON_STAMINA * ticks);
           if (!expired) u[base + "/tick"] = serverTimestamp();
         }
@@ -1700,7 +1701,7 @@ async function useItem(slot) {
   if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
   else u[`inventory/${state.uid}/${slot}`] = null;
 
-  try { await update(ref(db), u); questBump("use"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
+  try { await update(ref(db), u); questBump("use"); if (def.heal > 0) achBump("heal"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
   catch (e) { toast(errMsg(e)); }
 }
 
@@ -1750,6 +1751,8 @@ async function processDeath(attempt = 0) {
     const deadZone = state.zone;
     if (state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
     await update(ref(db), u);
+    // ตรวจหลังฟื้น: ถ้าฐานข้อมูลยังมีเชื้อค้าง (ไม่ควรเกิด) ให้บันทึกลง console + แจ้งผู้เล่นให้รักษา/แจ้งแอดมิน (ล้างเองตอน HP>0 ไม่ได้ตาม rules)
+    if (p.infected) setTimeout(async () => { try { const hpS = (await get(ref(db, `users/${uid}`))).val(); if (hpS && hpS.infected && hpS.hp === 50) { console.warn("infection survived respawn", hpS.infected); logLine("🦠 เชื้อยังค้างหลังฟื้น — ใช้ชุดปฐมพยาบาลหรือมอสเพื่อรักษา (หรือแจ้งแอดมิน)", "system"); } } catch { /* ข้าม */ } }, 4000);
     try { if (effDanger(deadZone) >= 5) feedPost(3, deadZone); } catch { /* ข้าม */ }
     logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
     await enterZone("safe", false, true);
@@ -1784,6 +1787,7 @@ async function scavengeOnce() {
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
+    try { const sf = siteRoll(found, table, isZombie); if (sf) found = sf; } catch { /* ข้าม */ }   // คลังลับ (หัวข้อ 36)
     const u = {};
     hungerShift(u, "food", -(isZombie ? 5 : 3)); hungerShift(u, "water", -(isZombie ? 2 : 4));
 
@@ -1811,6 +1815,7 @@ async function scavengeOnce() {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
       stat("found"); logLine(`${srchLead()} เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
+      try { siteAfter(found); } catch { /* ข้าม */ }
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     } else {
       await update(ref(db), u);
@@ -1818,7 +1823,7 @@ async function scavengeOnce() {
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
-    try { evtSearchHook(); } catch { /* ข้าม */ }
+    try { evtSearchHook(); fxSearchHook(); } catch { /* ข้าม */ }
   }
 }
 
@@ -3506,13 +3511,13 @@ const INFECT_TICK = 15000, INFECT_DMG = 2, INFECT_MAX_TICKS = 40;   // HP −2 �
 // ถ้าปิดเกมไปนาน กลับมาจะหักย้อนหลัง แต่ไม่ทำให้ตายตอนไม่อยู่ (เหลืออย่างน้อย 1 HP)
 async function infectionTick() {
   const p = state.profile;
-  if (!p || p.banned || !p.infected || p.faction !== "human" || !(p.hp > 0) || state.busy || state.infBusy) return;   // ล้มลง (HP 0) แล้วเชื้อไม่ลุกลาม/ไม่เด้งข้อความซ้ำ
+  if (!p || p.banned || !p.infected || p.faction !== "human" || !(p.hp > 0) || state.dying || state.deathTimer || state.busy || state.infBusy) return;   // ล้มลง (HP 0) แล้วเชื้อไม่ลุกลาม/ไม่เด้งข้อความซ้ำ
   const ticks = Math.min(INFECT_MAX_TICKS, Math.floor((serverNow() - Math.max(p.infected, p.infectTs || 0)) / INFECT_TICK));
   if (ticks < 1) return;
   state.infBusy = true;
   try {
     const away = ticks > 2;
-    let left = p.hp - ticks * INFECT_DMG;
+    let left = p.hp - fxCutDmg(ticks * INFECT_DMG);
     if (away) left = Math.max(1, left);
     if (left > 0) {
       await update(ref(db), { [`users/${state.uid}/hp`]: left, [`users/${state.uid}/infectTs`]: serverTimestamp() });
@@ -3802,10 +3807,10 @@ function listenMarket() {
   const b = btn("🏪 ตลาด", openMarket, "btn ghost mini"); b.id = "btn-market"; $("btn-profile").before(b);
   const again = () => {
     const m = $("mkt-modal"); if (!m || m.classList.contains("hidden")) return;
-    if (document.activeElement?.tagName === "INPUT" && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์จำนวน
+    if (/^(INPUT|SELECT)$/.test(document.activeElement?.tagName || "") && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์/เลือก
     renderMarket();
   };
-  onValue(ref(db, "market/" + state.profile.faction), (s) => { state.market = s.val() || {}; again(); }, (e) => console.error("market", e));
+  onValue(ref(db, "market/" + state.profile.faction), (s) => { state.market = s.val() || {}; try { mktListingsSeen(state.market); } catch { /* ข้าม */ } again(); }, (e) => console.error("market", e));
   onValue(ref(db, "marketPayouts/" + state.uid), (s) => { state.mktPay = s.val() || {}; updateMarketBadge(); again(); }, (e) => console.error("marketPayouts", e));
   onValue(ref(db, "inventory/" + state.uid), again);   // ลงทะเบียนหลัง listenInventory จึงเห็น state.inv ล่าสุดเสมอ
   setInterval(again, 5000);                              // อัปเดตสถานะ Safe Zone ของปุ่ม
@@ -3956,7 +3961,9 @@ function renderMarket() {
   }
   body.append(c2);
 
-  const others = Object.entries(state.market || {}).filter(([, l]) => l.seller !== state.uid).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  const others0 = Object.entries(state.market || {}).filter(([, l]) => l.seller !== state.uid).sort((a, b) => (b[1].ts || 0) - (a[1].ts || 0));
+  try { body.append(mktFilterCard(card, row)); } catch (e) { console.warn("mkt filter", e); }
+  let others = others0; try { others = mktApplyFilter(others0); } catch { /* ข้าม */ }
   const c3 = card(`🛒 ประกาศในตลาด (${others.length})`);
   others.forEach(([lid, l]) => {
     const r = row(), enough = mktWants(l).every((w) => mktHave(w.id) >= w.qty);
@@ -4012,7 +4019,7 @@ function bmSubscribe() {
 }
 function bmRefresh() {
   const m = $("mkt-modal"); if (!m || m.classList.contains("hidden")) return;
-  if (document.activeElement?.tagName === "INPUT" && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์จำนวนในตลาดผู้เล่น
+  if (/^(INPUT|SELECT)$/.test(document.activeElement?.tagName || "") && m.contains(document.activeElement)) return;   // ไม่รีเฟรชทับตอนกำลังพิมพ์/เลือกในตลาดผู้เล่น
   renderMarket();
 }
 // ไม่มีเซิร์ฟเวอร์ → ผู้เล่นที่ออนไลน์คนใดคนหนึ่งเป็นคนเขียนรอบใหม่ (rules บังคับให้เขียนได้เฉพาะรอบปัจจุบันและเลขรอบต้องเพิ่มขึ้น)
@@ -5942,7 +5949,16 @@ const ACH_FAM = [
   ["mxstrk", "🔥", "social", "", "เข้าเล่นติดต่อกัน", "วัน", [3, 7, 14, 30], ["สามวันติด", "หนึ่งสัปดาห์เต็ม", "สองสัปดาห์ไม่ขาด", "หนึ่งเดือนไม่ขาด"]],
   ["goalok", "🌍", "world", "", "ร่วมทำเป้าหมายประจำสัปดาห์ให้สำเร็จ", "ข้อ", [1, 3, 8], ["ส่วนหนึ่งของส่วนรวม", "คนของส่วนรวม", "เสาหลักของค่าย"]],
   ["gmok", "📻", "world", "", "ร่วมภารกิจกลุ่มจากวิทยุให้สำเร็จ", "ครั้ง", [1, 5, 15, 40], ["รับสายวิทยุแล้ว", "หน่วยกู้ภัยวิทยุ", "ทีมเวิร์กตัวจริง", "ฮีโร่ประจำคลื่น"]],
-  ["mvpday", "🌟", "world", "", "ได้เป็นผู้รอดเด่นประจำวัน", "ครั้ง", [1, 3, 10, 25], ["ดาวเด่นของวัน", "ขวัญใจวิทยุ", "คนดังประจำค่าย", "ตำนานผู้รอดเด่น"]]
+  ["mvpday", "🌟", "world", "", "ได้เป็นผู้รอดเด่นประจำวัน", "ครั้ง", [1, 3, 10, 25], ["ดาวเด่นของวัน", "ขวัญใจวิทยุ", "คนดังประจำค่าย", "ตำนานผู้รอดเด่น"]],
+  ["fest", "🎆", "world", "", "ค้นหาระหว่างเทศกาล", "ครั้ง", [5, 25, 100], ["นักเที่ยวเทศกาล", "คอเทศกาลตัวยง", "ตำนานงานเมือง"]],
+  ["festn", "🗓️", "world", "", "ได้ร่วมเทศกาลที่ต่างกัน", "งาน", [2, 4, 8], ["เริ่มสนุกกับปฏิทิน", "ตามเทศกาลครบ", "ครบทุกงานของเมือง"]],
+  ["site", "🛩️", "world", "", "ค้นพบคลังลับ", "แห่ง", [1, 5, 15, 40], ["นักล่าข่าวลือ", "จมูกไวกว่าวิทยุ", "ขุดคลังลับมือฉมัง", "ตำนานนักค้นหาคลังลับ"]],
+  ["duo", "🤝", "world", "", "ทำภารกิจเคียงข้างสำเร็จ", "ครั้ง", [1, 5, 20, 60], ["มีเพื่อนร่วมทาง", "คู่หูต่างโซน", "คู่หูตลอดกาล", "พี่น้องร่วมสมรภูมิ"]],
+  ["heal", "🩹", "world", "", "ใช้ยา/ของรักษา", "ครั้ง", [10, 50, 200, 600], ["ผู้ช่วยหมอ", "หมอประจำหมู่", "หมอสนามตัวจริง", "เทพแห่งการรักษา"]],
+  ["camp", "🏕️", "world", "", "สมทบโปรเจกต์ค่าย/รัง", "แต้ม", [50, 300, 1200, 4000], ["ผู้ร่วมสร้างค่าย", "แรงงานขยัน", "สถาปนิกค่าย", "ผู้สร้างบ้านให้ทุกคน"]],
+  ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
+  ["zwar", "⚔️", "world", "", "สะสมแต้มศึกชิงโซน", "แต้ม", [50, 300, 1000, 3000], ["ทหารแนวหน้า", "นักรบชิงโซน", "ผู้คุมสมรภูมิ", "ขุนศึกแห่งเมืองร้าง"]],
+  ["wwin", "🚩", "world", "", "ฝั่งเราชนะศึกชิงโซนประจำสัปดาห์", "สัปดาห์", [1, 4, 12], ["ชัยชนะแรก", "ผู้ยึดโซนตัวยง", "ราชันศึกชิงโซน"]]
 ];
 // ระดับท้าทายเพิ่ม (ตัวนับเดิม ไม่ต้องแก้ rules): ต่อท้ายแต่ละหมวดด้วยเกณฑ์ที่สูงขึ้นมาก
 const ACH_HARD = {
@@ -6219,6 +6235,7 @@ function coopEvent(ev, n = 1) {
   if (goalOf("all", wk).ev === ev) add(goalOf("all", wk).key);
   if (goalOf(fac, wk).ev === ev) add(goalOf(fac, wk).key);
   if (misLive(now)) { const m = misOf(fac); if (m.ev === ev && (!m.zone || m.zone === state.zone)) add(m.key); }
+  try { zwarEvent(ev, n); } catch { /* ข้าม */ }   // ศึกชิงโซน (หัวข้อ 37)
 }
 async function coopFlush() {
   const C = state.coop; if (!C || C.busy || !state.profile || state.profile.banned) return;
@@ -6243,6 +6260,7 @@ const coopSum = (k) => Object.entries(state.coop?.sums?.[k] || {}).reduce((s, [u
 function coopListen() {
   const C = state.coop, wk = qpKey("weekly"), slot = coopSlot();
   const want = new Set(["w" + wk, "wh" + wk, "wz" + wk, "mh" + slot, "mz" + slot]);
+  try { zwarWant(want); } catch { /* ข้าม */ }
   Object.keys(C.subs).forEach((k) => { if (!want.has(k)) { try { C.subs[k](); } catch { /* ข้าม */ } delete C.subs[k]; delete C.sums[k]; } });
   want.forEach((k) => {
     if (C.subs[k]) return;
@@ -6307,7 +6325,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  tuneListen(); feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
+  tuneListen(); feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -6334,7 +6352,7 @@ function worldRender(box) {
     else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
     box.append(row);
   });
-  try { wxWorldRows(box); evtWorldRows(box); bountyWorldRows(box); } catch (e) { console.warn("world rows", e); }
+  try { wxWorldRows(box); evtWorldRows(box); bountyWorldRows(box); fxWorldRows(box); } catch (e) { console.warn("world rows", e); }
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
@@ -6624,6 +6642,7 @@ function wxFlavor(kind) {   // kind: "lead" | "empty" | "amb"
     if (ts !== "day") add(LEAD[ts], ts === "night" ? 3 : 2);
     if (ni.lvl >= 2) add(LEAD.loud, 3); else if (state.zone !== "safe" && ni.lvl === 0 && ni.others === 0) add(LEAD.quiet, 1);
   }
+  if (kind !== "empty") { try { add(fxPool(kind), 2); } catch { /* ข้าม */ } }
   const fresh = pool.filter((t) => t !== state["wxL" + kind]), L = fresh.length ? fresh : pool, t = L[Math.floor(Math.random() * L.length)] || "คุณค้นหา…";
   state["wxL" + kind] = t; return t;
 }
@@ -6694,6 +6713,474 @@ function wxForceRows(box) {
   });
   Object.entries(state.wxForce || {}).forEach(([k, f]) => { if (f && f.end < now - 86400000) remove(ref(db, "wxForce/" + k)).catch(() => {}); });
 }
+
+/* =========================================================
+   36) 🎆 เทศกาลตามปฏิทิน • 🛩️ คลังลับ • 🤝 ภารกิจเคียงข้าง • 🧭 เส้นทางอาชีพ • ⭐ ตลาด "ของที่ตามหา"
+   - ไม่ต้องแก้ rules: ทุกอย่างคำนวณจากเวลาเซิร์ฟเวอร์ (rdHash/ปฏิทิน/ดวงจันทร์) ทุกเครื่องเห็นตรงกัน
+     ตัวนับส่วนตัวใช้ ach/{uid}/c เดิม • ค่าปรับแต่งใช้ tune/ เดิม • ผลตอบแทนเป็น "น้ำหนักของที่เจอ/ลดความเสียหายสถานะ" ฝั่งเกม
+     (ไม่เสกไอเทมนอกทางเดิมของ rules: ของที่ได้ยังมาจากตารางค้นหาของโซนเท่านั้น)
+   - ปรับได้จากแท็บ 🎛️: fest_on, fest_str, fest_force, site_on, site_pc, site_str, duo_on, duo_min, career_on
+   ========================================================= */
+const FXM = new Map();   // เก็บในหน่วยความจำด้วย เผื่อเบราว์เซอร์บล็อก localStorage (โหมดส่วนตัว)
+const fxGet = (k, d) => { const kk = lsKey(k); return FXM.has(kk) ? FXM.get(kk) : LS.get(kk, d); };
+const fxSet = (k, v) => { const kk = lsKey(k); FXM.set(kk, v); LS.set(kk, v); };
+const FX_MOON_REF = 947182440000, FX_MOON_SYN = 29.530588853 * 86400000;   // จันทร์ดับ 6 ม.ค. 2000 18:14 UTC • คาบ 29.53 วัน
+const fxMoonAge = (t) => { let a = (t - FX_MOON_REF) % FX_MOON_SYN; if (a < 0) a += FX_MOON_SYN; return a / 86400000; };
+const fxMoon = (t) => { const a = fxMoonAge(t); return a < 0.9 || a > 28.63 ? "new" : Math.abs(a - 14.77) < 0.9 ? "full" : ""; };
+const fxDate = (t) => { const d = new Date(t + COOP_TZ); return { m: d.getUTCMonth() + 1, d: d.getUTCDate() }; };
+const FX_METEOR = [[1, 3, 4], [4, 22, 23], [5, 6, 7], [8, 12, 13], [10, 21, 22], [11, 17, 18], [12, 13, 14]];   // ฝนดาวตกจริงตามปฏิทิน (เดือน, วันเริ่ม, วันจบ)
+const FX_FOOD = new Set(["canned_food", "bread", "fruit", "army_meal", "soup", "choco_bar", "super_ration"]);
+// m: z/n/r/f/w/a/rm = ตัวคูณน้ำหนัก (ซอมบี้/ไม่เจออะไร/ของหายาก/อาหาร/น้ำ/ทุกอย่าง/เนื้อเน่า) • dm = อันตราย (บวก/ลบ) • night = มีผลเฉพาะ "กลางคืนในเกม"
+const FEST = [
+  { id: "newmoon", icon: "🌑", name: "คืนเดือนมืด", night: 1, on: (t) => fxMoon(t) === "new", m: { z: 1.15, r: 1.5, dm: 1 }, tip: "มืดสนิท อันตราย +1 ซอมบี้ชุกขึ้น แต่ของหายากโผล่มากขึ้นตอนกลางคืน", say: "คืนนี้เดือนมืดสนิท ไฟฉายแทบไม่ช่วยอะไร ใครกล้าออกไปอาจเจอของดี แต่ก็เจอของไม่ดีเช่นกัน",
+    lead: ["ความมืดสนิทจนมือตัวเองยังมองไม่เห็น คุณคลำหา…", "ไร้แสงจันทร์ คุณค้นหาด้วยสัมผัสล้วน ๆ…"], amb: ["ไม่มีแสงจันทร์สักนิด ท้องฟ้าดำเหมือนถูกกลืนไป", "ดาวเต็มฟ้าเพราะไม่มีจันทร์กวนตา แต่พื้นดินมืดสนิท"] },
+  { id: "fullmoon", icon: "🌕", name: "คืนจันทร์เต็มดวง", night: 1, on: (t) => fxMoon(t) === "full", m: { z: 0.9, n: 0.92, dm: -1 }, tip: "แสงจันทร์ช่วยมองเห็น อันตราย −1 ค้นหาง่ายขึ้นเล็กน้อยตอนกลางคืน", say: "จันทร์เต็มดวงส่องเมืองร้างสว่างกว่าปกติ ออกไปค้นหาตอนกลางคืนจะง่ายขึ้นหน่อย",
+    lead: ["แสงจันทร์ส่องทางให้คุณค้นหา…", "เงาของคุณทอดยาวใต้จันทร์เต็มดวง คุณคุ้ยหา…"], amb: ["จันทร์เต็มดวงลอยเหนือซากตึก สว่างจนเห็นเงาของเศษแก้ว", "แสงจันทร์สีเงินทาบทับถนนว่างเปล่า สวยอย่างน่าขนลุก"] },
+  { id: "meteor", icon: "🌠", name: "คืนฝนดาวตก", night: 1, on: (t) => { const d = fxDate(t); return FX_METEOR.some(([m, a, b]) => d.m === m && d.d >= a && d.d <= b); }, m: { r: 1.6 }, tip: "เศษซากจากฟ้าตกลงมาทั่วเมือง ของหายากเจอง่ายขึ้นมากตอนกลางคืน", say: "คืนนี้ฝนดาวตกพาดฟ้า! มีเสียงเศษอะไรตกลงมาไกล ๆ ใครออกค้นหาตอนมืดอาจโชคดี",
+    lead: ["ดาวตกขีดผ่านฟ้า คุณละสายตาแล้วค้นหาต่อ…", "แสงวาบบนท้องฟ้าส่องให้เห็นของบนพื้น คุณรีบคว้า…"], amb: ["ดาวตกพาดผ่านท้องฟ้าเป็นเส้นสว่าง แล้วหายไปในความมืด", "เสียงบางอย่างตกลงห่างออกไป… เศษดาวหรือเศษเมือง ไม่มีใครรู้"] },
+  { id: "songkran", icon: "💦", name: "สงกรานต์เมืองร้าง", on: (t) => { const d = fxDate(t); return d.m === 4 && d.d >= 13 && d.d <= 15; }, m: { w: 2, n: 0.9, dm: -1 }, tip: "ท่อประปาแตกทั่วเมือง น้ำเจอง่ายมาก อันตราย −1", say: "วันสงกรานต์ ท่อน้ำทั่วเมืองแตกระเบิดเหมือนสาดน้ำ ใครขาดน้ำรีบออกไปเก็บ",
+    lead: ["น้ำกระเซ็นจากท่อแตก คุณเปียกทั้งตัวแต่ยังค้นหา…", "สายน้ำพุ่งจากท่อประปา คุณหลบแล้วคุ้ยต่อ…"], amb: ["ท่อประปาแตกพ่นน้ำขึ้นฟ้าเหมือนน้ำพุ", "เสียงน้ำไหลดังไปทั้งซอย บรรยากาศแปลกเหมือนเทศกาลที่ไร้ผู้คน"] },
+  { id: "loy", icon: "🏮", name: "ลอยกระทงริมคลองร้าง", on: (t) => { const d = fxDate(t); return fxMoon(t) === "full" && (d.m === 11 || (d.m === 10 && d.d >= 26)); }, m: { w: 1.5, f: 1.2 }, tip: "ของลอยมาเกยตามริมน้ำ น้ำและอาหารเจอง่ายขึ้น", say: "คืนลอยกระทง กระทงเก่าลอยมาเกยฝั่งเต็มคลอง มีของกินของใช้ปนมาด้วย",
+    lead: ["กระทงเก่าลอยเกยฝั่ง คุณก้มค้นหา…", "แสงจากกระทงริบหรี่ริมคลอง คุณคุ้ยหา…"], amb: ["กระทงเก่าลอยเอื่อยอยู่กลางคลองมืด ๆ", "กลิ่นธูปจาง ๆ ลอยมาตามลม ทั้งที่ไม่มีใครจุด"] },
+  { id: "halloween", icon: "🎃", name: "คืนล่าผี", on: (t) => { const d = fxDate(t); return d.m === 10 && d.d === 31; }, m: { z: 1.3, r: 1.4, rm: 1.6, dm: 1 }, tip: "ซอมบี้คึกคักผิดปกติ อันตราย +1 แต่ของหายากและเนื้อเน่าก็เจอมากขึ้น", say: "คืนล่าผี ซอมบี้ทั้งเมืองคึกคักผิดปกติ ใครกล้าออกไปก็ได้ของดีติดมือกลับมา",
+    lead: ["เสียงคราง ๆ ดังรอบตัว คุณกลั้นใจค้นหา…", "ทุกเงามีดวงตา คุณรีบคุ้ยหา…"], amb: ["โคมกะลามะพร้าวลอยอยู่กลางซอย ไม่มีใครรู้ว่าใครจุด", "เสียงหัวเราะแผ่ว ๆ ดังมาจากตึกร้าง… ไม่ควรเข้าไปเช็ก"] },
+  { id: "harvest", icon: "🌾", name: "วันเก็บเกี่ยว", on: (t) => { const d = fxDate(t); return d.m === 11 && d.d >= 24 && d.d <= 26; }, m: { f: 1.8, n: 0.92 }, tip: "เสบียงที่ซ่อนไว้ถูกขุดขึ้นมา อาหารเจอง่ายขึ้นมาก", say: "วันเก็บเกี่ยว ผู้รอดชีวิตรื้อคลังที่ซ่อนไว้ออกมาตากแดด ของกินหาง่ายกว่าปกติ",
+    lead: ["กลิ่นข้าวและผลไม้ตากแห้งลอยมา คุณค้นหา…", "แปลงผักร้างยังมีของให้เก็บ คุณก้มคุ้ย…"], amb: ["รวงข้าวป่าโยกไหวในลมเหมือนเมืองนี้ยังเป็นนา", "ฝูงนกลงจิกเมล็ดพืชบนถนนร้างอย่างไม่กลัวใคร"] },
+  { id: "newyear", icon: "🎆", name: "ปีใหม่ผู้รอดชีวิต", on: (t) => { const d = fxDate(t); return (d.m === 12 && d.d === 31) || (d.m === 1 && d.d === 1); }, m: { a: 1.15, n: 0.85 }, tip: "ทุกคนแบ่งปันกัน ค้นหาเจอของง่ายขึ้นทุกโซน", say: "ปีใหม่แล้ว! เมืองนี้ยังอยู่ ผู้รอดชีวิตแบ่งปันกันมากกว่าปกติ ค้นหาแล้วคุ้มกว่าทุกวัน",
+    lead: ["เสียงพลุจากที่ไกล ๆ คุณค้นหาด้วยใจฟู…", "ปีใหม่ทั้งที คุณขอลองโชคอีกสักรอบ…"], amb: ["พลุเล็ก ๆ ลูกหนึ่งสว่างวาบไกล ๆ ก่อนเงียบไป", "มีคนตะโกนอวยพรปีใหม่จากหลังคาตึก แล้วเสียงก็ขาดหาย"] }
+];
+const festForced = () => { const i = Math.round(T("fest_force", 0)); return i >= 1 && i <= FEST.length ? FEST[i - 1] : null; };
+function festActive(t = serverNow()) {
+  const out = T("fest_on", 1) ? FEST.filter((f) => { try { return f.on(t); } catch { return false; } }) : [];
+  const fz = festForced(); if (fz && !out.includes(fz)) out.push(fz);
+  return out;
+}
+// เทศกาลที่ "มีผลตอนนี้" (เฉพาะกลางคืนในเกมสำหรับงานที่ night:1)
+const festLive = (t = serverNow()) => festActive(t).filter((f) => !f.night || isNight());
+function festNext(f, t = serverNow()) {   // วันถัดไปที่เทศกาลนี้เริ่ม (ค้นล่วงหน้า 400 วัน) • null = ไม่พบ
+  if (f.on(t)) return 0;
+  for (let k = 1; k <= 400; k++) { if (f.on(t + k * 86400000)) return k; }
+  return null;
+}
+
+/* ---- คลังลับ: ข่าวลือทางวิทยุ → ต้องออกค้นหาให้ถูกโซนในช่วงเวลา (ไม่บอกโซนตรง ๆ) ---- */
+const SITE_SLOT = 3 * 3600000, SITE_LIVE = 100 * 60000;
+const SITE_TYPES = [
+  { id: "plane", icon: "🛩️", name: "ซากเครื่องบินขนส่ง", loot: ["medkit", "trauma_kit", "serum", "army_meal", "stim_shot", "energy_drink", "bandage", "antidote"], find: "เจอกล่องเวชภัณฑ์ที่กระเด็นออกจากซากเครื่องบิน" },
+  { id: "truck", icon: "🚚", name: "รถขนเสบียงที่ถูกทิ้ง", loot: ["canned_food", "bread", "water_jug", "army_meal", "choco_bar", "water", "fruit", "soup"], find: "งัดท้ายรถขนเสบียงที่ถูกทิ้งไว้จนเจอลังอาหาร" },
+  { id: "bunker", icon: "🚪", name: "บังเกอร์ลับ", loot: ["scrap", "chem", "pistol", "knife", "crowbar", "shotgun", "stim_shot", "fire_axe"], find: "ฝาเหล็กใต้พื้นเผยบังเกอร์เล็ก ๆ ที่ยังมีของเหลือ" }
+];
+const SITE_HINT = {
+  ruins: "ตึกที่ถล่มครึ่งหนึ่ง กองเศษปูนสูงเป็นเนิน", mall: "ป้ายไฟห้างที่ยังกะพริบไม่ยอมดับ", hospital: "กลิ่นยาฆ่าเชื้อจาง ๆ ลอยมาตามลม", police: "เสียงไซเรนที่ไม่มีใครเปิด",
+  forest: "ใต้ร่มไม้ที่แสงลอดไม่ถึง", factory: "เสียงเหล็กครูดจากเครื่องจักรสนิม", port: "กลิ่นเกลือและตู้คอนเทนเนอร์ที่ซ้อนกันสูง", base: "รั้วลวดหนามของค่ายทหารเก่า", tunnel: "ความมืดและอากาศอับชื้นใต้ดิน"
+};
+function siteOf(slot) {
+  const zl = Object.keys(ZONES).filter((z) => z !== "safe");
+  if (rdHash("sx", slot) % 100 >= Math.max(0, Math.min(100, T("site_pc", 60)))) return null;
+  const type = SITE_TYPES[rdHash("st", slot) % SITE_TYPES.length], zone = zl[rdHash("sz", slot) % zl.length];
+  const start = slot * SITE_SLOT + (rdHash("ss", slot) % (SITE_SLOT - SITE_LIVE));
+  return { key: "s" + slot, slot, type, zone, start, end: start + SITE_LIVE };
+}
+function siteList(now = serverNow()) {
+  if (!T("site_on", 1)) return [];
+  const s = Math.floor(now / SITE_SLOT), out = [];
+  for (let k = s - 1; k <= s + 1; k++) { const x = siteOf(k); if (x) out.push(x); }
+  return out;
+}
+const siteLive = (now = serverNow()) => siteList(now).filter((x) => now >= x.start && now < x.end);
+const siteHere = (z = state.zone, now = serverNow()) => siteLive(now).find((x) => x.zone === z) || null;
+const siteRec = (s) => fxGet("site_" + s.key, { t: 0, f: 0 });
+// ทอยค้นพบ: คืน id ของที่เจอ (จากตารางค้นหาจริงของโซน) หรือ null ถ้ายังไม่พบ
+function siteRoll(found, table, isZombie) {
+  if (found === "zombie" || found === "boss" || state.deep) return null;
+  const s = siteHere(); if (!s) return null;
+  const rec = siteRec(s); if (rec.f) return null;
+  rec.t++;
+  const p = Math.min(0.55, 0.1 + 0.06 * rec.t) * Math.max(0, T("site_str", 100)) / 100;
+  if (Math.random() >= p) { fxSet("site_" + s.key, rec); return null; }
+  const ok = (x) => x.id && x.id !== "zombie" && x.id !== "boss" && x.w > 0 && !(isZombie && (x.id === "scrap" || x.id === "chem")) && !ITEMS[x.id]?.gmOnly;
+  let ids = table.filter((x) => ok(x) && s.type.loot.includes(x.id)).map((x) => x.id);
+  if (!ids.length) { const w = table.filter(ok).sort((a, b) => a.w - b.w); ids = w.slice(0, Math.max(1, Math.ceil(w.length / 3))).map((x) => x.id); }
+  if (!ids.length) { fxSet("site_" + s.key, rec); return null; }
+  rec.f = 1; fxSet("site_" + s.key, rec);
+  state.siteHit = { s, id: ids[Math.floor(Math.random() * ids.length)] };
+  return state.siteHit.id;
+}
+function siteAfter(found) {
+  const h = state.siteHit; state.siteHit = null; if (!h || h.id !== found) return;
+  const msg = `${h.s.type.icon} ${h.s.type.find}! คุณได้ ${ITEMS[found].icon} ${ITEMS[found].name}`;
+  logLine(`✨ ${msg}`, "system"); toast(`${h.s.type.icon} ค้นพบ${h.s.type.name}!`);
+  achBump("site"); try { sfx("boss"); } catch { /* ข้าม */ }
+}
+
+/* ---- ภารกิจเคียงข้าง: อยู่โซนนอก Safe Zone ร่วมกับเพื่อนฝั่งเดียวกันให้ครบเวลา (ต่อรอบ 2 ชม.) ---- */
+const DUO_BUFF_MS = 30 * 60000;
+const duoRec = (slot = coopSlot()) => fxGet("duo_" + slot, { s: 0, d: 0 });
+const duoTarget = () => Math.max(1, Math.round(T("duo_min", 8))) * 60;
+const duoBuffLeft = () => Math.max(0, fxGet("duo_buf", 0) - serverNow());
+function duoPartners() {
+  const p = state.profile; if (!p || !state.zone || state.zone === "safe" || !(p.hp > 0)) return 0;
+  return Object.entries(state.players || {}).filter(([id, v]) => id !== state.uid && v && v.faction === p.faction).length;
+}
+function duoTick() {
+  if (!T("duo_on", 1) || !state.profile || !state.ach?.loaded) return;
+  const now = serverNow(), last = state.duoLast || now; state.duoLast = now;
+  const dt = Math.max(0, Math.min(30, (now - last) / 1000));
+  if (!dt || !duoPartners()) return;
+  const slot = coopSlot(now), rec = duoRec(slot); if (rec.d) return;
+  rec.s += dt;
+  if (rec.s >= duoTarget()) {
+    rec.d = 1; fxSet("duo_" + slot, rec);
+    fxSet("duo_buf", now + DUO_BUFF_MS);
+    achBump("duo"); questBump("duo");
+    toast("🤝 ภารกิจเคียงข้างสำเร็จ!"); logLine(`🤝 ภารกิจเคียงข้างสำเร็จ — โชคค้นหาดีขึ้นเล็กน้อยไปอีก ${Math.round(DUO_BUFF_MS / 60000)} นาที`, "system");
+  } else fxSet("duo_" + slot, rec);
+  try { worldRefresh(); } catch { /* ข้าม */ }
+}
+
+/* ---- เส้นทางอาชีพ: คำนวณจากตัวนับ achievement เดิม ---- */
+const CAREER = {
+  explorer: { icon: "🧭", name: "นักสำรวจ", titles: ["มือสำรวจ", "นักสำรวจ", "ผู้นำทาง", "จอมสำรวจแห่งเมืองร้าง"], tip: (L) => `ตาไวกว่าใคร: ค้นหาแล้ว "ไม่เจออะไร" น้อยลง ${L * 3}%`, score: (c) => (c.srch || 0) + 4 * (c.trav || 0) + 15 * (c.zvis || 0) + 2 * (c.nsrch || 0) },
+  hunter: { icon: "🗡️", name: "นักล่า", titles: ["นักสู้", "นักล่า", "จอมล่า", "ผู้ล่าแห่งเมือง"], tip: (L, z) => z ? `สัญชาตญาณล่า: เนื้อเน่าเจอมากขึ้น ${L * 5}%` : `อาวุธทนขึ้น: มีโอกาส ${L * 7}% ที่ตีแล้วไม่เสียความทน`, score: (c) => 2 * (c.zwin || 0) + 8 * (c.boss || 0) + 3 * (c.wbhit || 0) + 4 * (c.bite || 0) + 2 * (c.smash || 0) + 10 * (c.evo || 0) + (c.wbdmg || 0) / 20 },
+  medic: { icon: "🩹", name: "หมอสนาม", titles: ["ผู้ช่วยหมอ", "หมอสนาม", "หมอใหญ่", "เทพแห่งการรักษา"], tip: (L) => `ทนสถานะดีขึ้น: เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง ${L * 8}%`, score: (c) => 0.5 * (c.use || 0) + 3 * (c.heal || 0) + 15 * (c.cure || 0) },
+  trader: { icon: "💼", name: "พ่อค้า", titles: ["ผู้ค้าปลีก", "พ่อค้า", "เจ้าพ่อตลาด", "เศรษฐีเมืองร้าง"], tip: (L) => `รู้แหล่งของ: เศษวัสดุเจอมากขึ้น ${L * 6}%`, score: (c) => 4 * (c.mkt || 0) + 2 * (c.craft || 0) + (c.gacha || 0) + (c.dclaim || 0) }
+};
+const CAREER_LV = [60, 250, 800, 2500];
+function careerOf() {
+  if (!T("career_on", 1) || !state.ach?.loaded) return null;
+  const c = state.ach.c || {}, key = state.ach.loaded ? Object.keys(CAREER).map((k) => [k, CAREER[k].score(c)]).sort((a, b) => b[1] - a[1])[0] : null;
+  if (!key || key[1] < CAREER_LV[0]) return null;
+  const L = CAREER_LV.filter((v) => key[1] >= v).length;
+  return { k: key[0], L, score: Math.round(key[1]), def: CAREER[key[0]], title: CAREER[key[0]].titles[L - 1] };
+}
+let fxCareerMemo = { t: 0, v: null };
+function careerNow() { const n = Date.now(); if (n - fxCareerMemo.t > 4000) fxCareerMemo = { t: n, v: careerOf() }; return fxCareerMemo.v; }
+function careerCheck() {
+  const c = careerOf(); if (!c) return;
+  const last = fxGet("career", ""), cur = c.k + c.L;
+  if (last !== cur) { fxSet("career", cur); if (last) { toast(`🧭 เส้นทางอาชีพ: ${c.def.icon} ${c.title}`); logLine(`🧭 คุณก้าวสู่ ${c.def.icon} ${c.title} (${c.def.name} ขั้น ${c.L}) — ${c.def.tip(c.L, state.profile?.faction === "zombie")}`, "system"); } }
+}
+const careerWearSkip = (w) => { const c = careerNow(); return !!c && c.k === "hunter" && state.profile?.faction !== "zombie" && w.it.dur > 1 && Math.random() < c.L * 0.07; };
+// สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0)); };
+const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
+
+/* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
+let fxMemo = { k: "", v: null };
+function fxMods(z) {
+  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0].join(",");
+  if (fxMemo.k === k) return fxMemo.v;
+  const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0 }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
+  festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
+  const c = careerNow();
+  if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
+  if (duoBuffLeft() > 0) m.a *= 1.1;
+  if (typeof fxCampMods === "function") fxCampMods(m, z);
+  fxMemo = { k, v: m }; return m;
+}
+function fxDrops(z, d) {
+  const m = fxMods(z);
+  if (m.z === 1 && m.n === 1 && m.r === 1 && m.f === 1 && m.w === 1 && m.a === 1 && m.rm === 1 && m.sc === 1) return d;
+  const ws = d.filter((x) => x.id && x.id !== "zombie" && x.id !== "boss" && x.w > 0).map((x) => x.w).sort((a, b) => a - b), cut = ws.length ? ws[Math.floor(ws.length * 0.4)] : 0;
+  return d.map((x) => {
+    if (x.id === null) return m.n === 1 ? x : { ...x, w: x.w * m.n };
+    if (x.id === "zombie") return m.z === 1 ? x : { ...x, w: x.w * m.z };
+    if (x.id === "boss") return x;
+    let k = m.a; if (x.w <= cut) k *= m.r; if (FX_FOOD.has(x.id)) k *= m.f; if (x.id === "water") k *= m.w; if (x.id === "scrap") k *= m.sc; if (x.id === "rotten_meat") k *= m.rm;
+    return k === 1 ? x : { ...x, w: x.w * k };
+  });
+}
+const fxDmod = (z) => (z && z !== "safe" ? fxMods(z).dm : 0);
+
+/* ---- ข้อความบรรยาย/ประกาศ ---- */
+function fxPool(kind) {   // ใช้ใน wxFlavor
+  const out = []; festLive().forEach((f) => { (kind === "amb" ? f.amb : kind === "lead" ? f.lead : null)?.forEach((t) => out.push(t)); });
+  return out;
+}
+function fxRender(zArg) {
+  const tEl = $("zone-time"); if (!tEl) return;
+  let el = $("zone-fx"); if (!el) { el = mk("p", "time-line wx"); el.id = "zone-fx"; (($("zone-weather") || tEl).after(el)); }
+  const z = zArg || state.zone, fl = festLive(), parts = fl.map((f) => `${f.icon} ${f.name}`);
+  const s = z && z !== "safe" ? siteHere(z) : null;
+  if (s && siteRec(s).t >= 2 && !siteRec(s).f) parts.push("👀 รู้สึกเหมือนมีอะไรซ่อนอยู่แถวนี้…");
+  if (duoBuffLeft() > 0) parts.push("🤝 โชคเคียงข้าง");
+  try { const fb = fxZoneBadge(z); if (fb) parts.push(fb); } catch { /* ข้าม */ }
+  el.classList.toggle("hidden", !parts.length);
+  el.textContent = parts.join(" • ");
+  el.title = fl.map((f) => `${f.name}: ${f.tip}`).join("\n");
+}
+function fxTick() {
+  if (!state.profile) return;
+  const now = serverNow(), day = coopDay(now);
+  festActive(now).forEach((f) => {
+    const k = `fx_${f.id}_${day}`; if (fxGet(k, 0)) return; fxSet(k, 1);
+    radioPush(`📻 [ประกาศเมือง] ${f.icon} ${f.name} — ${f.say}`, now, true);
+    try { logLine(`${f.icon} ${f.name} — ${f.tip}`, "system"); } catch { /* ข้าม */ }
+  });
+  siteLive(now).forEach((x) => {
+    const k = "fxs_" + x.key; if (fxGet(k, 0)) return; fxSet(k, 1);
+    radioPush(`📻 [ข่าวลือ] ${x.type.icon} ได้ยินมาว่ามี${x.type.name}ซ่อนอยู่ที่ไหนสักแห่ง ใกล้ ๆ ${SITE_HINT[x.zone] || "ที่ลับตา"} — ใครไปค้นหาถูกที่อาจโชคดี (อีก ~${Math.max(1, Math.ceil((x.end - now) / 60000))} นาที)`, now, true);
+  });
+  try { fxTick2(now); } catch (e) { console.warn("fxTick2", e); }
+  try { careerCheck(); fxRender(); if (state.zone) renderZoneDanger(state.zone); } catch { /* ข้าม */ }
+}
+// นับการค้นหาระหว่างเทศกาล (เรียกจากการค้นหาสำเร็จ)
+function fxSearchHook() {
+  const fl = festLive(); if (!fl.length) return;
+  achBump("fest"); const seen = [...fxGet("festseen", [])], n0 = seen.length;
+  fl.forEach((f) => { if (!seen.includes(f.id)) seen.push(f.id); });
+  if (seen.length !== n0) { fxSet("festseen", seen); achSet("festn", seen.length); }
+}
+
+/* ---- แผงโลก (🌍): พับ/ขยายได้ ---- */
+function fxSection(box, id, title, fn, open = true) {
+  const d = document.createElement("details"); d.className = "fx-sec"; d.open = fxGet("fxo_" + id, open ? 1 : 0) === 1;
+  const sm = document.createElement("summary"); sm.className = "hub-day"; sm.textContent = title; d.append(sm);
+  const body = mk("div", "fx-body"); d.append(body); fn(body);
+  d.addEventListener("toggle", () => fxSet("fxo_" + id, d.open ? 1 : 0));
+  box.append(d);
+}
+function fxWorldRows(box) {
+  if (!$("fx-style")) { const st = document.createElement("style"); st.id = "fx-style"; st.textContent = ".fx-sec{margin:6px 0}.fx-sec>summary{cursor:pointer;list-style:none}.fx-sec>summary::-webkit-details-marker{display:none}.fx-body{display:grid;gap:4px;margin-top:4px}.fx-chip{display:inline-block;padding:0 8px;border-radius:10px;border:1px solid var(--line,#3a3a3a);margin:2px 4px 2px 0;font-size:12px}"; document.head.append(st); }
+  fxSection(box, "fest", "🎆 เทศกาลและปฏิทินเมือง", (b) => {
+    const now = serverNow(), act = festActive(now);
+    if (!T("fest_on", 1) && !festForced()) return b.append(mk("div", "muted", "เทศกาลปิดอยู่ชั่วคราว"));
+    act.forEach((f) => { const r = mk("div", "world-row evt-live"); r.append(mk("div", "", `${f.icon} ${f.name}${f === festForced() ? " (เจ้าของสั่งเปิด)" : ""}`), mk("div", "muted", `${f.tip}${f.night && !isNight() ? " • (มีผลตอนกลางคืนในเกม)" : ""}`)); b.append(r); });
+    if (!act.length) b.append(mk("div", "muted", "ตอนนี้ยังไม่มีเทศกาล"));
+    const nx = FEST.map((f) => [f, festNext(f, now)]).filter(([f, d]) => d !== null && d > 0).sort((a, c) => a[1] - c[1]).slice(0, 3);
+    if (nx.length) b.append(mk("div", "muted", "งานถัดไป: " + nx.map(([f, d]) => `${f.icon} ${f.name} (อีก ~${d} วัน)`).join(" • ")));
+  }, true);
+  fxSection(box, "site", "🛩️ ข่าวลือคลังลับ", (b) => {
+    if (!T("site_on", 1)) return b.append(mk("div", "muted", "คลังลับปิดอยู่ชั่วคราว"));
+    const now = serverNow(), live = siteLive(now);
+    live.forEach((x) => { const rec = siteRec(x), r = mk("div", "world-row evt-live"); r.append(mk("div", "", `${x.type.icon} มี${x.type.name}ซ่อนอยู่ ใกล้ ๆ ${SITE_HINT[x.zone] || "ที่ลับตา"}`), mk("div", "muted", `${rec.f ? "คุณค้นพบแล้ว ✅" : "ออกค้นหาให้ถูกโซน แล้วอาจเจอ"} • เหลือ ~${Math.max(1, Math.ceil((x.end - now) / 60000))} นาที`)); b.append(r); });
+    if (!live.length) { const nx = siteList(now).filter((x) => x.start > now).sort((a, c) => a.start - c.start)[0]; b.append(mk("div", "muted", nx ? `ยังไม่มีข่าวลือตอนนี้ — ข่าวถัดไปอีก ~${Math.max(1, Math.ceil((nx.start - now) / 60000))} นาที` : "ยังไม่มีข่าวลือตอนนี้ — ฟังวิทยุไว้")); }
+  }, true);
+  fxSection(box, "duo", "🤝 ภารกิจเคียงข้าง", (b) => {
+    if (!T("duo_on", 1)) return b.append(mk("div", "muted", "ปิดอยู่ชั่วคราว"));
+    const rec = duoRec(), tg = duoTarget(), r = mk("div", "world-row");
+    r.append(mk("div", "", `อยู่โซนนอก Safe Zone ร่วมกับเพื่อนฝั่งเดียวกันให้ครบ ${Math.round(tg / 60)} นาที (รอบละ 2 ชม.)`), worldBar(rec.d ? 1 : rec.s / tg, rec.d ? "สำเร็จแล้ว ✅" : `${Math.floor(rec.s / 60)}:${String(Math.floor(rec.s % 60)).padStart(2, "0")} / ${Math.round(tg / 60)}:00`));
+    r.append(mk("div", "muted", duoBuffLeft() > 0 ? `🤝 โชคเคียงข้างเหลือ ~${Math.ceil(duoBuffLeft() / 60000)} นาที (ของที่เจอดีขึ้นเล็กน้อย)` : (duoPartners() ? "ตอนนี้มีเพื่อนอยู่ด้วย กำลังนับเวลา" : "ตอนนี้ยังไม่มีเพื่อนอยู่ในโซนเดียวกัน (หรืออยู่ Safe Zone)"))); b.append(r);
+  }, false);
+  fxSection(box, "career", "🧭 เส้นทางอาชีพ", (b) => {
+    if (!T("career_on", 1)) return b.append(mk("div", "muted", "ปิดอยู่ชั่วคราว"));
+    if (!state.ach?.loaded) return b.append(mk("div", "muted", "กำลังโหลด…"));
+    const c = state.ach.c || {}, cur = careerOf(), z = state.profile?.faction === "zombie";
+    if (cur) { const r = mk("div", "world-row evt-live"); r.append(mk("div", "", `${cur.def.icon} ${cur.title} (${cur.def.name} ขั้น ${cur.L}/4)`), mk("div", "muted", cur.def.tip(cur.L, z))); b.append(r); }
+    else b.append(mk("div", "muted", "ยังไม่มีเส้นทางเด่นชัด — เล่นไปเรื่อย ๆ สายที่ทำบ่อยที่สุดจะกลายเป็นอาชีพของคุณ"));
+    Object.entries(CAREER).forEach(([k, d]) => { const sc = d.score(c), L = CAREER_LV.filter((v) => sc >= v).length, nx = CAREER_LV[Math.min(3, L)]; const r = mk("div", "world-row"); r.append(mk("div", "", `${d.icon} ${d.name}${L ? ` • ขั้น ${L}` : ""}`), worldBar(L >= 4 ? 1 : sc / nx, `${Math.round(sc)}/${L >= 4 ? Math.round(sc) : nx}`)); b.append(r); });
+    b.append(mk("div", "muted", "อาชีพหลัก = สายที่แต้มสูงสุด ได้โบนัสเล็ก ๆ ตามขั้น (แต้มคำนวณจากตัวนับความสำเร็จเดิม)"));
+  }, false);
+  try { if (typeof fxWorldRows2 === "function") fxWorldRows2(box); } catch (e) { console.warn("fx rows2", e); }
+}
+
+/* ---- ตลาด: ตัวกรอง • เรียง • ของที่ตามหา (เก็บในเครื่อง) ---- */
+const mktWatch = () => fxGet("mkt_watch", []);
+function mktWatchToggle(id) { const a = [...mktWatch()], i = a.indexOf(id); if (i >= 0) a.splice(i, 1); else a.push(id); fxSet("mkt_watch", a.slice(-12)); }
+function mktListingsSeen(snap) {   // เรียกทุกครั้งที่ snapshot ตลาดเปลี่ยน: แจ้งเตือนเมื่อมีคนลงขายของที่ตามหา
+  const prev = state.mktPrevKeys, cur = new Set(Object.keys(snap || {}));
+  state.mktPrevKeys = cur; if (!prev) return;
+  const w = mktWatch(); if (!w.length) return;
+  cur.forEach((k) => {
+    if (prev.has(k)) return; const l = snap[k]; if (!l || l.seller === state.uid || !l.give) return;
+    if (w.includes(l.give.id)) { const t = `⭐ มีคนลงขาย ${mktLabel(l.give.id)} ← ${mktWantTxt(l)}`; toast(t); logLine(t, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }
+  });
+}
+function mktFilterCard(card, row) {
+  const f = (state.mktFilter = state.mktFilter || fxGet("mkt_flt", { mode: "all", id: "", sort: "new" }));
+  const save = () => { fxSet("mkt_flt", f); renderMarket(); };
+  const c = card("🔎 ตัวกรอง • ของที่ตามหา"), r1 = row();
+  const mode = mk("select"); [["all", "ทั้งหมด"], ["give", "ของที่ขาย"], ["want", "ที่เขาขอ"]].forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; mode.append(o); }); mode.value = f.mode;
+  mode.addEventListener("change", () => { f.mode = mode.value; save(); });
+  const ids = [...MKT_IDS, ...MKT_WEAP], it = mk("select"); it.style.cssText = "flex:1;min-width:0";
+  const o0 = mk("option", "", "— เลือกของ —"); o0.value = ""; it.append(o0); ids.forEach((id) => { const o = mk("option", "", mktLabel(id)); o.value = id; it.append(o); }); it.value = f.id;
+  it.addEventListener("change", () => { f.id = it.value; save(); });
+  r1.append(mode, it);
+  const r2 = row(), sort = mk("select"); [["new", "เรียง: ใหม่สุด"], ["cheap", "เรียง: จ่ายน้อยสุด"]].forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; sort.append(o); }); sort.value = f.sort;
+  sort.addEventListener("change", () => { f.sort = sort.value; save(); });
+  const w = mktWatch(), star = btn(f.id && w.includes(f.id) ? "⭐ เลิกตามหา" : "☆ ตามหาของนี้", () => { if (!f.id) return toast("เลือกของก่อน"); mktWatchToggle(f.id); save(); }, "btn ghost mini");
+  r2.append(sort, star); c.append(r1, r2);
+  if (w.length) { const ch = mk("div"); w.forEach((id) => { const b = mk("span", "fx-chip", `⭐ ${mktLabel(id)} ✕`); b.style.cursor = "pointer"; b.addEventListener("click", () => { mktWatchToggle(id); renderMarket(); }); ch.append(b); }); c.append(ch, mk("span", "muted", "มีคนลงขายของที่ตามหา จะแจ้งเตือนทันที (เฉพาะเครื่องนี้)")); }
+  return c;
+}
+function mktApplyFilter(list) {
+  const f = state.mktFilter || fxGet("mkt_flt", { mode: "all", id: "", sort: "new" });
+  let a = list;
+  if (f.id && f.mode === "give") a = a.filter(([, l]) => l.give?.id === f.id);
+  else if (f.id && f.mode === "want") a = a.filter(([, l]) => mktWants(l).some((w) => w.id === f.id));
+  else if (f.id) a = a.filter(([, l]) => l.give?.id === f.id || mktWants(l).some((w) => w.id === f.id));
+  if (f.sort === "cheap") a = a.slice().sort((x, y) => mktWants(x[1]).reduce((s, w) => s + w.qty, 0) - mktWants(y[1]).reduce((s, w) => s + w.qty, 0));
+  return a;
+}
+
+function fxInit() {
+  if (state.fxOn || !state.uid) return; state.fxOn = true;
+  fxTick(); setInterval(fxTick, 10000); setInterval(duoTick, 15000);
+  setInterval(() => { try { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world" && !hm.querySelector("input:focus,select:focus")) worldRefresh(); } catch { /* ข้าม */ } }, 20000);
+}
+
+/* =========================================================
+   37) 🏕️ โปรเจกต์ค่าย/รัง • ⚔️ ศึกชิงโซน — ใช้ตัวนับกลุ่ม coop/ เดิม (ไม่ต้องแก้ rules)
+   - โปรเจกต์: สมทบของจาก Safe Zone → หักของในกระเป๋า + เพิ่มแต้ม coop/{ph|pz}{ซีซัน*10+เลขโปรเจกต์}/{uid} ในคำสั่งเดียว (อะตอมมิก)
+     ครบเป้า = โบนัสเล็ก ๆ ถาวรตลอดซีซัน (เจ้าของขึ้นซีซันใหม่ด้วย tune proj_season เพื่อรีเซ็ต)
+   - ศึกชิงโซน: ทุกการค้นหา/ชนะซอมบี้/สู้บอส/กัดเหยื่อนอก Safe Zone ให้แต้มกับฝั่งตัวเองในโซนนั้น (coop/{zh|zz}{สัปดาห์}{โซน 1–9})
+     จบสัปดาห์ ฝั่งที่แต้มมากกว่าในโซนนั้น "ยึดโซน" ตลอดสัปดาห์ถัดไป → สมาชิกฝั่งผู้ชนะได้โบนัสเล็ก ๆ ในโซนนั้น
+   - ปรับได้จากแท็บ 🎛️: proj_on, proj_scale, proj_str, proj_season, zw_on, zw_str, zw_min
+   ========================================================= */
+const PROJ_ITEMS = { human: { scrap: 1, chem: 3, bandage: 2, canned_food: 2, water: 1, medkit: 6 }, zombie: { rotten_meat: 1, chem: 3, moss: 2, medkit: 6 } };
+const PROJ = {
+  human: [
+    { id: 1, icon: "🗼", name: "หอสังเกตการณ์", cost: 500, tip: "ตาไวขึ้น: เจอซอมบี้ตอนค้นหาน้อยลง 5%", eff: { z: 0.95 } },
+    { id: 2, icon: "🍲", name: "ครัวกลางค่าย", cost: 800, tip: "อาหารเจอง่ายขึ้น 10%", eff: { f: 1.1 } },
+    { id: 3, icon: "🩹", name: "ห้องพยาบาลสนาม", cost: 1100, tip: "เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง 5%", eff: { cut: 0.05 } },
+    { id: 4, icon: "⚙️", name: "โรงซ่อมกลาง", cost: 1500, tip: "เศษวัสดุเจอมากขึ้น 10%", eff: { sc: 1.1 } }
+  ],
+  zombie: [
+    { id: 1, icon: "👃", name: "รังดมกลิ่น", cost: 500, tip: "เนื้อเน่าเจอมากขึ้น 10%", eff: { rm: 1.1 } },
+    { id: 2, icon: "🧪", name: "บ่อบ่มเชื้อ", cost: 800, tip: "เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง 5%", eff: { cut: 0.05 } },
+    { id: 3, icon: "🌫️", name: "ม่านหมอกของรัง", cost: 1100, tip: "ค้นหาแล้ว \"ไม่เจออะไร\" น้อยลง 5%", eff: { n: 0.95 } },
+    { id: 4, icon: "🦴", name: "คลังกระดูก", cost: 1500, tip: "ของหายากเจอมากขึ้น 10%", eff: { r: 1.1 } }
+  ]
+};
+const projSeason = () => Math.max(1, Math.min(9999999, Math.round(T("proj_season", 1))));
+const projKey = (f, i) => (f === "zombie" ? "pz" : "ph") + (projSeason() * 10 + i);
+const projCost = (p) => Math.max(1, Math.round(p.cost * Math.max(1, T("proj_scale", 100)) / 100));
+const projSum = (i) => (T("proj_on", 1) ? coopSum(projKey(coopFac(), i)) : 0);
+const projDone = (p) => T("proj_on", 1) && projSum(p.id) >= projCost(p);
+const projStr = () => Math.max(0, T("proj_str", 100)) / 100;
+function fxCampCut() { const s = projStr(); return s ? PROJ[coopFac()].reduce((a, p) => a + (p.eff.cut && projDone(p) ? p.eff.cut * s : 0), 0) : 0; }
+function fxCampMods(m, z) {
+  const s = projStr(), safe = z === "safe", my = coopFac();
+  if (s) PROJ[my].forEach((p) => {
+    if (!projDone(p)) return;
+    Object.entries(p.eff).forEach(([q, v]) => { if (q === "cut" || (safe && q === "z")) return; m[q] *= Math.pow(v, s); });
+  });
+  const c = zwCtl(z), zs = Math.max(0, T("zw_str", 100)) / 100;
+  if (c && zs && c === (my === "zombie" ? "z" : "h")) { m.a *= Math.pow(1.04, zs); if (my === "zombie") m.rm *= Math.pow(1.12, zs); else m.z *= Math.pow(0.92, zs); }
+}
+const projCool = {};
+async function projDonate(i, id, qty) {
+  const C = state.coop, p = state.profile, fac = coopFac(), P = PROJ[fac].find((x) => x.id === i), pts = PROJ_ITEMS[fac][id];
+  if (!C || !p || !P || !pts) return;
+  if (!T("proj_on", 1)) return toast("โปรเจกต์ปิดอยู่ชั่วคราว");
+  if (!(p.hp > 0)) return toast("ต้องมีชีวิตอยู่ถึงจะสมทบได้");
+  if (state.zone !== "safe") return toast(`ต้องอยู่ที่ Safe Zone ถึงจะสมทบ${fac === "zombie" ? "รัง" : "ค่าย"}ได้`);
+  const key = projKey(fac, i), cost = projCost(P), sum = coopSum(key), left = cost - sum;
+  if (left <= 0) return toast("โปรเจกต์นี้เสร็จแล้ว");
+  const it = state.inv[id]; if (!it || it.id !== id || !(it.qty > 0)) return toast("ไม่มีของชิ้นนี้ในกระเป๋า");
+  if (Date.now() - (projCool[key] || 0) < 6000) return toast("รอสักครู่แล้วสมทบอีกครั้ง");
+  const q = Math.max(1, Math.min(Math.floor(qty) || 1, it.qty, Math.ceil(left / pts), Math.floor(300 / pts)));
+  if (state.busy) return; state.busy = true; projCool[key] = Date.now();
+  try {
+    if (C.mine[key] === undefined) C.mine[key] = (await get(ref(db, `coop/${key}/${state.uid}/n`))).val() || 0;
+    const n = q * pts, u = {};
+    if (q >= it.qty) u[`inventory/${state.uid}/${id}`] = null; else u[`inventory/${state.uid}/${id}/qty`] = it.qty - q;
+    u[`coop/${key}/${state.uid}`] = { n: C.mine[key] + n, name: p.username, ts: serverTimestamp() };
+    await update(ref(db), u);
+    C.mine[key] += n; achBump("camp", n);
+    toast(`${P.icon} สมทบ ${ITEMS[id].icon} ${ITEMS[id].name} ×${q} (+${n} แต้ม)`); logLine(`${P.icon} คุณสมทบ ${ITEMS[id].name} ×${q} ให้ ${P.name} (+${n} แต้ม)`, "system");
+    try { sfx("boss"); } catch { /* ข้าม */ }
+  } catch (e) { C.mine = {}; toast(errMsg(e)); }
+  finally { state.busy = false; worldRefresh(); }
+}
+
+/* ---- ศึกชิงโซน ---- */
+const ZW_W = { search: 1, zwin: 2, boss: 5, bite: 3 };
+const zwZones = () => Object.keys(ZONES).filter((z) => z !== "safe");
+const zwKey = (f, wk, idx) => (f === "zombie" ? "zz" : "zh") + wk + idx;
+const coopRaw = (k) => Object.values(state.coop?.sums?.[k] || {}).reduce((s, x) => s + (x?.n || 0), 0);
+function zwarEvent(ev, n) {
+  const C = state.coop, w = ZW_W[ev]; if (!C || !w || !T("zw_on", 1)) return;
+  const idx = zwZones().indexOf(state.zone) + 1; if (idx < 1 || !(state.profile?.hp > 0)) return;
+  const k = zwKey(coopFac(), qpKey("weekly"), idx);
+  C.pend[k] = (C.pend[k] || 0) + n * w; achBump("zwar", n * w);
+}
+function zwarWant(want) {
+  const wk = qpKey("weekly"); zwZones().forEach((z, i) => { want.add(zwKey("human", wk, i + 1)); want.add(zwKey("zombie", wk, i + 1)); });
+  if (T("proj_on", 1)) PROJ[coopFac()].forEach((p) => want.add(projKey(coopFac(), p.id)));
+}
+function zwLive(z) {   // แต้มสัปดาห์นี้ของโซน {h, z}
+  const idx = zwZones().indexOf(z) + 1, wk = qpKey("weekly"), my = coopFac();
+  const hk = zwKey("human", wk, idx), zk = zwKey("zombie", wk, idx);
+  return { h: my === "human" ? coopSum(hk) : coopRaw(hk), z: my === "zombie" ? coopSum(zk) : coopRaw(zk) };
+}
+// ผลสัปดาห์ก่อน: อ่านครั้งเดียวต่อสัปดาห์ (ผลปิดแล้วไม่เปลี่ยน) เก็บไว้ในเครื่อง
+function zwPrev() {
+  const pw = qpKey("weekly") - 1, ck = "zw_res_" + pw + "_" + Math.max(1, Math.round(T("zw_min", 30)));
+  const hit = fxGet(ck, null); if (hit) return hit;
+  if (!state.coop || state.zwLoading === pw) return null;
+  state.zwLoading = pw;
+  (async () => {
+    try {
+      const res = {}, tot = { h: 0, z: 0 }, min = Math.max(1, Math.round(T("zw_min", 30)));
+      await Promise.all(zwZones().map(async (z, i) => {
+        const sum = async (f) => { const s = await get(ref(db, "coop/" + zwKey(f, pw, i + 1))); let t = 0; const v = s.val() || {}; Object.values(v).forEach((x) => { t += x?.n || 0; }); return t; };
+        const [h, zz] = await Promise.all([sum("human"), sum("zombie")]);
+        res[z] = h + zz >= min && h !== zz ? (h > zz ? "h" : "z") : ""; if (res[z] === "h") tot.h++; if (res[z] === "z") tot.z++;
+      }));
+      fxSet(ck, { res, tot, pw }); fxMemo = { k: "", v: null }; worldRefresh(); try { renderZoneDanger(state.zone); } catch { /* ข้าม */ }
+    } catch (e) { console.warn("zwPrev", e?.code || e); state.zwLoading = null; setTimeout(() => { state.zwLoading = null; }, 60000); return; }
+  })();
+  return null;
+}
+function zwCtl(z) { if (!z || z === "safe" || !T("zw_on", 1)) return ""; const r = zwPrev(); return r?.res?.[z] || ""; }
+function fxZoneBadge(z) {
+  const c = zwCtl(z); if (!c) return "";
+  const mine = c === (coopFac() === "zombie" ? "z" : "h");
+  return `🚩 ${c === "h" ? "ธงมนุษย์" : "ธงซอมบี้"}${mine ? " (โบนัสฝั่งเรา)" : ""}`;
+}
+function fxTick2(now) {
+  if (!state.profile || !state.ach?.loaded) return;
+  const fac = coopFac();
+  PROJ[fac].forEach((p) => {
+    if (!projDone(p)) return; const k = "pj_" + projKey(fac, p.id); if (fxGet(k, 0)) return; fxSet(k, 1);
+    if (coopMine(projKey(fac, p.id)) > 0) achBump("pjd");
+    radioPush(`📻 [${fac === "zombie" ? "รัง" : "ค่าย"}] ${p.icon} ${p.name} สร้างเสร็จแล้ว! ${p.tip}`, now, true);
+    try { logLine(`${p.icon} ${p.name} สร้างเสร็จ — ${p.tip}`, "system"); toast(`${p.icon} ${p.name} เสร็จแล้ว!`); } catch { /* ข้าม */ }
+  });
+  const r = T("zw_on", 1) ? zwPrev() : null, wk = qpKey("weekly");
+  if (r && (r.tot.h || r.tot.z)) {
+    const k = "zwann_" + wk; if (!fxGet(k, 0)) {
+      fxSet(k, 1);
+      const my = fac === "zombie" ? r.tot.z : r.tot.h, ot = fac === "zombie" ? r.tot.h : r.tot.z;
+      radioPush(`📻 [ศึกชิงโซน] สรุปสัปดาห์ที่แล้ว: 🧑 มนุษย์ยึด ${r.tot.h} โซน • 🧟 ซอมบี้ยึด ${r.tot.z} โซน — ผู้ชนะได้โบนัสเล็ก ๆ ในโซนนั้นตลอดสัปดาห์นี้`, now, true);
+      if (my > ot) { achBump("wwin"); toast("🚩 ฝั่งของคุณชนะศึกชิงโซนสัปดาห์ที่แล้ว!"); }
+    }
+  }
+}
+function fxWorldRows2(box) {
+  fxSection(box, "proj", fac2("🏕️ โปรเจกต์ค่าย", "🕳️ โปรเจกต์รัง"), (b) => {
+    if (!T("proj_on", 1)) return b.append(mk("div", "muted", "โปรเจกต์ปิดอยู่ชั่วคราว"));
+    const fac = coopFac(), L = PROJ[fac], sel = (state.projSel = state.projSel || { p: 0, id: "", q: 10 });
+    L.forEach((P) => {
+      const cost = projCost(P), sum = Math.min(cost, projSum(P.id)), done = sum >= cost, r = mk("div", "world-row" + (done ? " evt-live" : ""));
+      r.append(mk("div", "", `${P.icon} ${P.name}${done ? " ✅" : ""}`), worldBar(sum / cost, `${sum}/${cost}`), mk("div", "muted", `${P.tip} • ของคุณ ${coopMine(projKey(fac, P.id))} แต้ม`)); b.append(r);
+    });
+    const open = L.filter((P) => !projDone(P)); if (!open.length) return b.append(mk("div", "muted", `ทุกโปรเจกต์เสร็จแล้วในซีซันนี้ 🎉 (เจ้าของเปิดซีซันใหม่ได้)`));
+    if (!open.find((P) => P.id === sel.p)) sel.p = open[0].id;
+    const mine = Object.entries(PROJ_ITEMS[fac]).filter(([id]) => state.inv[id]?.id === id && state.inv[id].qty > 0);
+    if (!mine.length) return b.append(mk("div", "muted", `ไม่มีของที่สมทบได้ในกระเป๋า (รับ: ${Object.keys(PROJ_ITEMS[fac]).map((id) => ITEMS[id].icon + ITEMS[id].name).join(" ")})`));
+    if (!mine.find(([id]) => id === sel.id)) sel.id = mine[0][0];
+    const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+    const sp = mk("select"); open.forEach((P) => { const o = mk("option", "", `${P.icon} ${P.name}`); o.value = P.id; sp.append(o); }); sp.value = sel.p; sp.addEventListener("change", () => { sel.p = +sp.value; });
+    const si = mk("select"); mine.forEach(([id, pts]) => { const o = mk("option", "", `${ITEMS[id].icon} ${ITEMS[id].name} ×${state.inv[id].qty} (+${pts})`); o.value = id; si.append(o); }); si.value = sel.id; si.addEventListener("change", () => { sel.id = si.value; });
+    const qi = mk("input"); qi.type = "number"; qi.min = 1; qi.max = 300; qi.value = sel.q; qi.style.cssText = "width:64px"; qi.addEventListener("input", () => { sel.q = +qi.value || 1; });
+    const go = btn("สมทบ", () => projDonate(sel.p, sel.id, +qi.value || 1), "btn primary mini");
+    go.disabled = state.zone !== "safe"; row.append(sp, si, qi, go); b.append(row);
+    b.append(mk("div", "muted", state.zone === "safe" ? "หักของจากกระเป๋าแล้วเข้าแต้มกองกลางทันที • ครบเป้าทุกคนในฝั่งได้โบนัสถาวรตลอดซีซัน" : "ต้องอยู่ที่ Safe Zone ถึงจะสมทบได้"));
+  }, true);
+  fxSection(box, "zwar", "⚔️ ศึกชิงโซน (สัปดาห์นี้)", (b) => {
+    if (!T("zw_on", 1)) return b.append(mk("div", "muted", "ศึกชิงโซนปิดอยู่ชั่วคราว"));
+    const left = qpResetIn("weekly"), d = Math.floor(left / 86400000), h = Math.floor((left % 86400000) / 3600000);
+    b.append(mk("div", "muted", `ออกค้นหา/สู้นอก Safe Zone เพื่อสะสมแต้มให้ฝั่งตัวเองในโซนนั้น • สรุปผลอีก ~${d} วัน ${h} ชม. • ผู้ชนะยึดโซนตลอดสัปดาห์ถัดไป`));
+    zwZones().forEach((z) => {
+      const v = zwLive(z), tot = v.h + v.z, c = zwCtl(z), r = mk("div", "world-row" + (state.zone === z ? " evt-live" : ""));
+      r.append(mk("div", "", `${ZONES[z].icon} ${ZONES[z].name}${c ? ` • ${c === "h" ? "🚩 มนุษย์คุมอยู่" : "🚩 ซอมบี้คุมอยู่"}` : ""}${state.zone === z ? " • คุณอยู่ที่นี่" : ""}`), worldBar(tot ? v.h / tot : 0.5, `🧑 ${v.h}  vs  🧟 ${v.z}`)); b.append(r);
+    });
+    const pr = zwPrev(); if (pr) b.append(mk("div", "muted", `สัปดาห์ก่อน: 🧑 ยึด ${pr.tot.h} โซน • 🧟 ยึด ${pr.tot.z} โซน (ฝั่งที่ยึดโซนได้ รับโบนัสเล็ก ๆ ในโซนนั้น)`)); else b.append(mk("div", "muted", "กำลังโหลดผลสัปดาห์ก่อน…"));
+  }, false);
+}
+const fac2 = (h, z) => (coopFac() === "zombie" ? z : h);
 
 /* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
@@ -6975,6 +7462,24 @@ function tuneDefs() {
     rows.push(["wx_on", "สภาพอากาศสุ่ม (1 = เปิด, 0 = ฟ้าโปร่งตลอด • สั่งอากาศเองยังใช้ได้)", 1, 0, 1, g]);
     rows.push(["wx_str", "ความแรงของผลอากาศ (% • 100 = เดิม, 0 = ไม่มีผลต่อการเล่น)", 100, 0, 200, g]);
     rows.push(["noise_str", "ความแรงของเสียงดึงซอมบี้ (% • 100 = เดิม, 0 = ปิด)", 100, 0, 300, g]); }
+  { const g = "🎆 กิจกรรมโลก (เทศกาล • คลังลับ • คู่หู • อาชีพ)";
+    rows.push(["fest_on", "เทศกาลตามปฏิทิน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["fest_str", "ความแรงของผลเทศกาล (% • 100 = เดิม, 0 = แค่บรรยากาศ)", 100, 0, 200, g]);
+    rows.push(["fest_force", "สั่งเปิดเทศกาลทันที (0 = ตามปฏิทิน • 1 เดือนมืด 2 จันทร์เต็มดวง 3 ฝนดาวตก 4 สงกรานต์ 5 ลอยกระทง 6 คืนล่าผี 7 วันเก็บเกี่ยว 8 ปีใหม่)", 0, 0, FEST.length, g]);
+    rows.push(["site_on", "คลังลับ/ซากเครื่องบิน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["site_pc", "โอกาสที่แต่ละรอบ 3 ชม. จะมีคลังลับ (%)", 60, 0, 100, g]);
+    rows.push(["site_str", "โอกาสค้นพบคลังลับต่อการค้นหา (% • 100 = เดิม)", 100, 0, 300, g]);
+    rows.push(["duo_on", "ภารกิจเคียงข้าง (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["duo_min", "ภารกิจเคียงข้าง: ต้องอยู่ร่วมกี่นาที", 8, 1, 60, g]);
+    rows.push(["career_on", "เส้นทางอาชีพ (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]); }
+  { const g = "🏕️ โปรเจกต์ค่าย & ⚔️ ศึกชิงโซน";
+    rows.push(["proj_on", "โปรเจกต์ค่าย/รัง (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["proj_scale", "ราคาโปรเจกต์ทั้งหมด (% • 100 = เดิม, 50 = ถูกลงครึ่งหนึ่ง)", 100, 1, 1000, g]);
+    rows.push(["proj_str", "ความแรงของโบนัสโปรเจกต์ (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, g]);
+    rows.push(["proj_season", "ซีซันโปรเจกต์ (เพิ่มเลข = เริ่มโปรเจกต์ใหม่ทั้งหมด แต้มเก่าเก็บไว้ไม่หาย)", 1, 1, 999, g]);
+    rows.push(["zw_on", "ศึกชิงโซน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["zw_str", "ความแรงของโบนัสโซนที่ยึดได้ (% • 100 = เดิม, 0 = แค่ธง)", 100, 0, 200, g]);
+    rows.push(["zw_min", "แต้มรวมขั้นต่ำของโซนในสัปดาห์นั้นถึงจะนับว่ามีผู้ยึด", 30, 1, 5000, g]); }
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
