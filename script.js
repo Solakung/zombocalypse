@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0822";
+const APP_VERSION = "2026-10-05.0902";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -248,6 +248,9 @@ const ITEMS = {
   soup: { name: "ซุปอุ่น", icon: "🍲", type: "consumable", heal: 10, food: 30, water: 15 },
   stim_shot: { name: "ยากระตุ้น", icon: "💊", type: "consumable", stamina: 60 },
   choco_bar: { name: "ช็อกโกแลตแท่ง", icon: "🍫", type: "consumable", food: 10, stamina: 15 },
+  // ไอเทมอัปสเตตัสประจำเกม: ใช้ผ่านหน้าต่าง 🧪 เท่านั้น (ห้ามทิ้ง/ซื้อขาย) ได้จากเควสสัปดาห์ กาชา หรือแอดมินมอบให้
+  stat_cap: { name: "แคปซูลสเตตัส", icon: "🧪", type: "stat" },
+  stat_lim: { name: "แกนทะลุขีดจำกัด", icon: "🔓", type: "stat" },
   // อาหารรองของซอมบี้: ค้นหาเจอได้เฉพาะฝั่งซอมบี้ และกินได้เฉพาะซอมบี้ (ค่าอาหารต้องตรงกับ rules)
   rotten_meat: { name: "เนื้อเน่า", icon: "🥩", type: "consumable", food: 20, zombieOnly: true },
   // ชุดสวมใส่ (มนุษย์ 2 ช่อง: เกราะ arm / อุปกรณ์เสริม acc) และอวัยวะกลายพันธุ์ (ซอมบี้ 3 ช่อง: เขี้ยว mf / หนัง mh / จมูก mn)
@@ -540,6 +543,7 @@ $("btn-profile").addEventListener("click", () => {
   $("prof-val-stats").textContent = statSummary(p.faction);
   renderBuffRow();
   $("prof-perk").textContent = FACTION_PERK[p.faction] || "";
+  try { statProfile(); } catch (e) { console.warn("statProfile", e); }
   $("prof-bio").value = "";
   get(ref(db, "bios/" + state.uid)).then((s) => { $("prof-bio").value = s.val() || ""; }).catch(() => {});
   $("profile-modal").classList.remove("hidden");
@@ -1357,7 +1361,8 @@ function renderInv() {
       
       const btnGrp = mk("div", "row-btns");
       if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)), hotPinBtn(slot));
-      btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
+      if (def.type === "stat") btnGrp.append(btn("🧪 ใช้", () => statOpen()));
+      else btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
     }
@@ -1511,6 +1516,7 @@ async function destroyItem(slot) {
 async function dropItem(slot) {
   if (state.busy) return;
   const it = state.inv[slot]; if (!it) return;
+  if (ITEMS[it.id]?.type === "stat") return toast("ไอเทมนี้ทิ้งหรือแลกเปลี่ยนไม่ได้ ใช้ได้เฉพาะเจ้าของ");
   state.busy = true;
   
   const def = defOf(it);
@@ -2151,7 +2157,7 @@ $("boss-claim").addEventListener("click", claimBossReward);
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
    ข้อมูล: worldBosses/{zone} (สถานะบอส) / worldBossHits/{zone}/{uid} (ดาเมจสะสมของแต่ละคน) / worldBossClaims/{zone}/{uid} (รับรางวัลแล้ว)
    ========================================================= */
-const WB_REWARD_IDS = [...Object.keys(ITEMS).filter((id) => (ITEMS[id].type !== "material" || id === "scrap" || id === "chem") && ITEMS[id].type !== "gear")].filter((id) => id !== "rotten_meat");
+const WB_REWARD_IDS = [...Object.keys(ITEMS).filter((id) => (ITEMS[id].type !== "material" || id === "scrap" || id === "chem") && ITEMS[id].type !== "gear" && ITEMS[id].type !== "stat")].filter((id) => id !== "rotten_meat");
 const wbOf = (z) => { const b = state.wb?.[z]; return b && typeof b.hp === "number" && typeof b.startedAt === "number" ? b : null; };
 const wbExpired = (b) => !!b && b.hp > 0 && !!b.endsAt && b.endsAt <= serverNow();
 const wbAlive = (b) => !!b && b.hp > 0 && !wbExpired(b);
@@ -4087,6 +4093,7 @@ async function gachaClaim(ticket) {
 const GA_TIERS = [["common", "ธรรมดา", "#8a93a0"], ["uncommon", "ดี", "#4aa3ff"], ["rare", "หายาก", "#a55cff"], ["legend", "ตำนาน", "#ffc247"]];
 function gachaTier(id, qty) {
   const d = ITEMS[id]; if (!d) return 0;
+  if (d.type === "stat") return 3;   // แคปซูล/แกนทะลุขีดจำกัด = รางวัลสูงสุดเสมอ
   if (d.type && d.type !== "consumable" && d.type !== "material") return 2;
   const v = ((d.heal || 0) + (d.food || 0) + (d.water || 0) + (d.stamina || 0) || 25) * Math.max(1, qty || 1);
   return v >= 200 ? 3 : v >= 120 ? 2 : v >= 60 ? 1 : 0;
@@ -5201,11 +5208,14 @@ const QP_STREAK_SEED = {
   "daily/dbty": { title: "🎯 เก็บค่าหัวสำเร็จ 1 ครั้ง", desc: "ล้มผู้เล่นที่มีค่าหัว (ปุ่ม 💰 ที่รายชื่อผู้เล่น / ดู 📊 → 🌍)", ev: "btyok", need: 1, r: { human: { id: "trauma_kit", qty: 1 }, zombie: { id: "trauma_kit", qty: 1 } } },
   "weekly/wbty3": { title: "🎯 นักล่าค่าหัว: เก็บค่าหัว 3 ครั้งในสัปดาห์นี้", ev: "btyok", need: 3, r: { human: { id: "riot_vest", qty: 1 }, zombie: { id: "mut_hide1", qty: 1 } } },
   "weekly/wbty6": { title: "🎯 ตำนานนักล่า: เก็บค่าหัว 6 ครั้งในสัปดาห์นี้", ev: "btyok", need: 6, r: { human: { id: "army_vest", qty: 1 }, zombie: { id: "mut_hide2", qty: 1 } } },
+  "weekly/wst7": { title: "🧪 เช็กอินครบ 7 วัน รับแคปซูลสเตตัส", desc: "ใช้อัปสเตตัสถาวรที่ปุ่ม 🧪 ในกระเป๋า", ev: "login", need: 7, r: { human: { id: "stat_cap", qty: 1 }, zombie: { id: "stat_cap", qty: 1 } } },
+  "weekly/wstw": { title: "🧪 ตีบอสโลก 10 ครั้ง รับแคปซูลสเตตัส", ev: "wboss", need: 10, r: { human: { id: "stat_cap", qty: 1 }, zombie: { id: "stat_cap", qty: 1 } } },
+  "weekly/wlim": { title: "🔓 ตีบอสโลก 30 ครั้ง รับแกนทะลุขีดจำกัด", desc: "ใช้ขยายเพดานสเตตัสที่เต็มแล้ว", ev: "wboss", need: 30, r: { human: { id: "stat_lim", qty: 1 }, zombie: { id: "stat_lim", qty: 1 } } },
   "weekly/wmis": { title: "ภารกิจกลุ่มสำเร็จ 4 ครั้งในสัปดาห์", ev: "gmok", need: 4, r: { human: { id: "stim_shot", qty: 2 }, zombie: { id: "stim_shot", qty: 2 } } }
 };
 async function qpSeedStreak() {
   if (state.profile?.role !== "owner") return;
-  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม + เป้าหมายร่วม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege, dmis, dbty และ weekly: wa3, wa5, wa7, wsiege, wgoal, wgoal2, wmis, wbty3, wbty6 โดยไม่แตะเควสอื่น")) return;
+  if (!confirm("เติมเควสเช็กอิน + ปิดล้อม + เป้าหมายร่วม?\nจะเพิ่ม/อัปเดต daily: dlogin, dall, dsiege, dmis, dbty และ weekly: wa3, wa5, wa7, wsiege, wgoal, wgoal2, wmis, wbty3, wbty6, wst7, wstw, wlim (🧪 แคปซูล/🔓 แกนขยายเพดาน) โดยไม่แตะเควสอื่น")) return;
   try { await update(ref(db, "config/questDefs"), QP_STREAK_SEED); toast("เติมเควสเช็กอิน/ปิดล้อม/เป้าหมายร่วมแล้ว"); }
   catch (e) { console.error("qpSeedStreak", e?.code || e); toast(errMsg(e)); }
 }
@@ -6263,6 +6273,8 @@ function feedText(e) {
   if (e.k === 2) { const L = EVO_LINES[x]; return L ? `🧬 ${n} วิวัฒนาการถึงขั้นสุดท้าย กลายเป็น ${L.icon}${L.title} — ฝูงซอมบี้ส่งเสียงคำราม` : ""; }
   if (e.k === 3) { const z = ZONES[x]; return z ? `💀 ผู้รอดชีวิตชื่อ ${n} ล้มลงที่${z.name} — ระวังตัวกันด้วย` : ""; }
   if (e.k === 5) { const d = ITEMS[x]; return d ? `🎰 ${n} หมุนตู้กาชาโชคดีสุดๆ ได้ ${d.icon || "📦"} ${d.name} ระดับตำนาน!` : ""; }
+  if (e.k === 6) return STAT_LABEL[x] ? `🔓 ${n} ทะลุขีดจำกัด ${STAT_LABEL[x]} — แกร่งขึ้นอีกขั้น!` : "";
+  if (e.k === 7) return STAT_LABEL[x] ? `☣️ ${n} ฝืนกินแคปซูลเสริม ${STAT_LABEL[x]} ทั้งที่ร่างกายรับไม่ไหว — ลุ้นกันอยู่!` : "";
   if (e.k === 4) { const d = Number(x); return d >= 7 && d <= 100 ? `🔥 ${n} อยู่รอดมาต่อเนื่อง ${d} วันแล้ว` : ""; }
   return "";
 }
@@ -6505,6 +6517,152 @@ function evtForceRows(box) {
 }
 
 /* =========================================================
+   34) 🧪 แคปซูลสเตตัส + 🔓 แกนทะลุขีดจำกัด (อัปสเตตัสถาวรจากไอเทม)
+   - ราคาขั้นบันได: แต้มจาก v → v+1 ใช้ max(1, ⌈(v−6)/2⌉) เม็ด (นับจากค่ารวมของสเตตัส) • ความคืบหน้าเก็บที่ statUp/{uid}/{สเตตัส}
+   - เพดานปกติ 17 (พละกำลัง 13) อ่านจาก tune • แกนทะลุขีดจำกัด +2 ต่อครั้ง (สูงสุด 4 ครั้ง / พละกำลัง 2 ครั้ง) ราคา 1,2,3,4 ชิ้น เก็บที่ statBrk/{uid}/{สเตตัส}={b,c}
+   - ห้ามทิ้ง/ซื้อขาย (rules กันที่ตลาดและกองของพื้น) • ราคา/เพดาน/การหักไอเทม rules บังคับ • โอเวอร์โดส (สุ่มฝั่งเครื่อง) เป็นความเสี่ยงที่ผู้เล่นเลือกเอง
+   ========================================================= */
+const STATUP_STEP = 2, TOX_HALF = 12 * 3600000;
+const statNat = (k) => Math.round(k === "str" ? T("stat_cap_str", 13) : T("stat_cap", 17));
+const statBrkMax = (k) => (k === "str" ? 2 : 4);
+const statBrkOf = (k) => state.statBrk?.[k] || { b: 0, c: 0 };
+const statCeil = (k) => statNat(k) + STATUP_STEP * (statBrkOf(k).b || 0);
+const statCapCost = (v) => (v <= 8 ? 1 : Math.ceil((v - 6) / 2));
+const statLimCost = (b) => b + 1;
+const statUpOf = (k) => (typeof state.statUp?.[k] === "number" ? state.statUp[k] : 0);
+const invQty = (id) => state.inv?.[id]?.id === id ? state.inv[id].qty || 0 : 0;
+function toxNow() {
+  const o = LS.get(lsKey("tox"), { n: 0, ts: 0 }), el = Math.max(0, serverNow() - (o.ts || 0));
+  return Math.max(0, (o.n || 0) - Math.floor(el / TOX_HALF));
+}
+function toxAdd() {
+  const o = LS.get(lsKey("tox"), { n: 0, ts: 0 }), now = serverNow(), el = Math.max(0, now - (o.ts || 0)), left = Math.max(0, (o.n || 0) - Math.floor(el / TOX_HALF));
+  LS.set(lsKey("tox"), { n: left + 1, ts: left > 0 ? now - (el % TOX_HALF) : now });   // ค่าพิษลดลง 1 ทุก 12 ชม. (เก็บเศษเวลาไว้)
+}
+function odChance() {
+  const t = toxNow(), free = Math.round(T("od_free", 2)); if (t < free) return 0;
+  return Math.min(Math.max(0, T("od_max", 70)), Math.max(0, T("od_step", 20)) * (t - free + 1));
+}
+function statupListen() {
+  if (state.suOn || !state.uid) return; state.suOn = true; state.statUp = {}; state.statBrk = {};
+  onValue(ref(db, "statUp/" + state.uid), (s) => { state.statUp = s.val() || {}; statRefresh(); }, (e) => console.warn("statUp", e?.code || e));
+  onValue(ref(db, "statBrk/" + state.uid), (s) => { state.statBrk = s.val() || {}; statRefresh(); }, (e) => console.warn("statBrk", e?.code || e));
+}
+function statRefresh() {
+  try { const m = $("statup-modal"); if (m && !m.classList.contains("hidden")) statBuild($("statup-body")); } catch { /* ข้าม */ }
+  try { if (!$("profile-modal")?.classList.contains("hidden")) statProfile(); } catch { /* ข้าม */ }
+}
+function statProfile() {
+  const p = state.profile; if (!p || !state.stats) return; statStyle();
+  let box = $("prof-statup"); if (!box) { box = mk("div", "statup-sum"); box.id = "prof-statup"; $("prof-perk").before(box); }
+  box.textContent = "";
+  box.append(mk("div", "muted", "🧪 ขีดจำกัดสเตตัส (ค่าปัจจุบัน/เพดาน)"));
+  (STAT_DEF[p.faction] || []).forEach((d) => {
+    const v = baseStat(d.k), ceil = statCeil(d.k), row = mk("div", "statup-line");
+    row.append(mk("span", "", `${d.icon} ${d.name} ${v}/${ceil}`), mk("span", "muted", v >= ceil ? (statBrkOf(d.k).b >= statBrkMax(d.k) ? " • สูงสุดแล้ว" : " • ต้องใช้ 🔓 แกนขยาย") : ` • แคปซูล ${statUpOf(d.k)}/${statCapCost(v)}`));
+    box.append(row);
+  });
+  box.append(btn("🧪 อัปสเตตัส", () => statOpen(), "btn primary mini"));
+  box.append(mk("div", "muted statup-hint", "แคปซูล/แกนขยาย ได้จากเควสสัปดาห์ กาชา หรือกิจกรรม — ห้ามทิ้งหรือซื้อขาย"));
+}
+function statOpen() {
+  if (!state.profile) return; statStyle();
+  let m = $("statup-modal");
+  if (!m) {
+    m = mk("div", "modal hidden"); m.id = "statup-modal"; m.setAttribute("role", "dialog");
+    const box = mk("div", "modal-box"), head = mk("div", "statup-head");
+    head.append(mk("h2", "", "🧪 อัปสเตตัส"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div", ""); body.id = "statup-body"; box.append(head, body); m.append(box);
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    document.body.append(m);
+  }
+  statBuild($("statup-body")); m.classList.remove("hidden");
+}
+function statBuild(body) {
+  const p = state.profile; if (!p || !body) return; body.textContent = "";
+  if (!state.stats) { body.append(mk("div", "muted", "ยังไม่ได้แจกแต้มสเตตัสเริ่มต้น")); return; }
+  const cap = invQty("stat_cap"), lim = invQty("stat_lim"), od = odChance(), tox = toxNow();
+  const info = mk("div", "statup-info"); info.append(mk("span", "", `🧪 แคปซูล ×${cap}`), mk("span", "", `🔓 แกนขยาย ×${lim}`), mk("span", od ? "danger-text" : "muted", `☣️ ค่าพิษ ${tox}${od ? ` — เม็ดต่อไปเสี่ยงโอเวอร์โดส ${od}%` : " — ปลอดภัย"}`));
+  body.append(info);
+  (STAT_DEF[p.faction] || []).forEach((d) => {
+    const k = d.k, v = baseStat(k), ceil = statCeil(k), br = statBrkOf(k), row = mk("div", "statup-row");
+    const head = mk("div", "statup-name"); head.append(mk("b", "", `${d.icon} ${d.name}`), mk("span", "", ` ${v} / ${ceil}`)); row.append(head, mk("div", "muted", d.desc));
+    const ctl = mk("div", "statup-ctl");
+    if (v < ceil) {
+      const need = statCapCost(v), c = statUpOf(k);
+      const bar = mk("div", "statup-bar"), fill = mk("i"); fill.style.width = Math.min(100, (100 * c) / need) + "%"; bar.append(fill); ctl.append(bar, mk("span", "muted", `แต้มถัดไป: ${c}/${need} เม็ด`));
+      const b = btn(od ? `🧪 ใช้ ×1 (เสี่ยง ${od}%)` : "🧪 ใช้ ×1", () => statUse(k), od ? "btn danger mini" : "btn primary mini"); b.disabled = !!state.statBusy || cap < 1 || p.hp <= 0; ctl.append(b);
+    } else if (br.b >= statBrkMax(k)) {
+      ctl.append(mk("span", "muted", "ถึงเพดานสูงสุดแล้ว"));
+    } else {
+      const need = statLimCost(br.b), c = br.c || 0;
+      const bar = mk("div", "statup-bar"), fill = mk("i"); fill.style.width = Math.min(100, (100 * c) / need) + "%"; bar.append(fill); ctl.append(bar, mk("span", "muted", `ขยายเพดาน +${STATUP_STEP}: ${c}/${need} ชิ้น`));
+      const b = btn("🔓 ใช้แกน ×1", () => limUse(k), "btn primary mini"); b.disabled = !!state.statBusy || lim < 1 || p.hp <= 0; ctl.append(b);
+    }
+    row.append(ctl); body.append(row);
+  });
+  body.append(mk("div", "muted statup-hint", `ราคาแต้มเพิ่มขึ้นตามค่าสเตตัส • กินถี่เกินไปจะสะสมค่าพิษ (ลดลง 1 ทุก 12 ชม.) เสี่ยงโอเวอร์โดส: เม็ดนั้นเสียเปล่า HP เหลือครึ่งและพลังงานหมด • ใช้ระหว่างต่อสู้ได้ แต่ความเสี่ยงอยู่ที่คุณ`));
+}
+async function statUse(k) {
+  const p = state.profile; if (!p || state.statBusy || p.hp <= 0) return;
+  const v = baseStat(k), need = statCapCost(v), c = statUpOf(k), q = invQty("stat_cap");
+  if (!(STAT_DEF[p.faction] || []).some((d) => d.k === k)) return toast("สเตตัสนี้ไม่ใช่ของฝ่ายคุณ");
+  if (q < 1) return toast("ไม่มีแคปซูลสเตตัส");
+  if (v >= statCeil(k)) return toast("ถึงเพดานแล้ว — ต้องใช้ 🔓 แกนทะลุขีดจำกัด");
+  const chance = odChance();
+  if (chance > 0 && !confirm(`⚠️ ค่าพิษสะสมสูง! เม็ดนี้เสี่ยงโอเวอร์โดส ${chance}%\nถ้าซวย: เม็ดเสียเปล่า HP เหลือครึ่ง พลังงานหมด\nจะเสี่ยงไหม?`)) return;
+  state.statBusy = true; statRefresh();
+  const uid = state.uid, u = {};
+  u[q > 1 ? `inventory/${uid}/stat_cap/qty` : `inventory/${uid}/stat_cap`] = q > 1 ? q - 1 : null;
+  const over = chance > 0 && Math.random() * 100 < chance;
+  let msg;
+  if (over) {
+    u[`users/${uid}/hp`] = Math.max(1, Math.floor((p.hp || 1) / 2));
+    u[`users/${uid}/stamina`] = 0; u[`users/${uid}/staminaTs`] = serverTimestamp();
+    msg = "💀 โอเวอร์โดส! แคปซูลเสียเปล่า HP เหลือครึ่ง พลังงานหมด";
+  } else if (c + 1 >= need) {
+    u[`stats/${uid}/${k}`] = v + 1; u[`statUp/${uid}/${k}`] = 0;
+    msg = `✨ ${STAT_LABEL[k]} เพิ่มเป็น ${v + 1}`;
+  } else {
+    u[`statUp/${uid}/${k}`] = c + 1;
+    msg = `🧪 สะสมแล้ว ${c + 1}/${need} เม็ดสำหรับแต้มถัดไปของ ${STAT_LABEL[k]}`;
+  }
+  try {
+    await update(ref(db), u); toxAdd(); toast(msg); logLine(msg, over ? "system" : "info");
+    if (over) { try { sfx("hit"); } catch { /* */ } if (chance >= 40) feedPost(7, k); }
+    else if (u[`stats/${uid}/${k}`]) { try { sfx("low"); } catch { /* */ } }
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.statBusy = false; renderBars(); statRefresh(); }
+}
+async function limUse(k) {
+  const p = state.profile; if (!p || state.statBusy || p.hp <= 0) return;
+  const v = baseStat(k), br = statBrkOf(k), q = invQty("stat_lim"), need = statLimCost(br.b);
+  if (q < 1) return toast("ไม่มีแกนทะลุขีดจำกัด");
+  if (v < statCeil(k)) return toast("ยังไม่ถึงเพดาน — ใช้แคปซูลก่อน");
+  if (br.b >= statBrkMax(k)) return toast("ขยายเพดานสูงสุดแล้ว");
+  state.statBusy = true; statRefresh();
+  const uid = state.uid, u = {}, done = (br.c || 0) + 1 >= need;
+  u[q > 1 ? `inventory/${uid}/stat_lim/qty` : `inventory/${uid}/stat_lim`] = q > 1 ? q - 1 : null;
+  u[`statBrk/${uid}/${k}`] = done ? { b: br.b + 1, c: 0 } : { b: br.b, c: (br.c || 0) + 1 };
+  try {
+    await update(ref(db), u);
+    const msg = done ? `🔓 ขยายเพดาน ${STAT_LABEL[k]} เป็น ${statNat(k) + STATUP_STEP * (br.b + 1)}!` : `🔓 สะสมแกน ${(br.c || 0) + 1}/${need} เพื่อขยายเพดาน ${STAT_LABEL[k]}`;
+    toast(msg); logLine(msg, "info"); if (done) feedPost(6, k);
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.statBusy = false; statRefresh(); }
+}
+function statStyle() {
+  if ($("statup-style")) return;
+  const st = document.createElement("style"); st.id = "statup-style";
+  st.textContent = ".statup-head{display:flex;justify-content:space-between;align-items:center;gap:8px}.statup-head h2{margin:0}"
+    + ".statup-info{display:flex;flex-wrap:wrap;gap:6px 14px;margin:8px 0;font-size:.92em}.danger-text{color:#ff7b6b;font-weight:600}"
+    + ".statup-row{border:1px solid var(--line,#444);border-radius:8px;padding:8px;margin:8px 0;background:rgba(0,0,0,.15)}.statup-name{display:flex;gap:6px;align-items:baseline}"
+    + ".statup-ctl{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;margin-top:6px}.statup-bar{flex:1 1 90px;height:8px;border-radius:6px;background:rgba(255,255,255,.1);overflow:hidden;min-width:70px}.statup-bar i{display:block;height:100%;background:var(--hazard,#d9a441)}"
+    + ".statup-hint{margin-top:8px;font-size:.82em}.statup-sum{margin:8px 0;padding:8px;border:1px dashed var(--line,#555);border-radius:8px}.statup-line{font-size:.9em;margin:2px 0}";
+  document.head.append(st);
+}
+
+/* =========================================================
    32) 🎛️ ปรับตัวเลขเกมสดๆ (tune/) + 📈 แดชบอร์ดเศรษฐกิจ (เจ้าของเท่านั้น)
    tune/{key} = ตัวเลข (เจ้าของเขียนได้คนเดียว) — ทุกเครื่องฟังสด ไม่ต้องอัปโหลดโค้ดใหม่ ไม่มีค่า = ใช้ค่าตั้งต้นในโค้ด
    ========================================================= */
@@ -6521,6 +6679,7 @@ function achApplyTune() {
 function tuneListen() {
   if (state.tuneOn || !state.uid) return; state.tuneOn = true; let last = null;
   evtForceListen();
+  statStyle(); statupListen();
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
@@ -6538,6 +6697,12 @@ function tuneDefs() {
   rows.push(["evt_on", "เหตุการณ์ใหญ่ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "⚡ เหตุการณ์ใหญ่"], ["evt_dur", "ระยะเวลาเหตุการณ์ (นาที)", 30, 5, 180, "⚡ เหตุการณ์ใหญ่"], ["evt_str", "ความแรงของผล (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 300, "⚡ เหตุการณ์ใหญ่"]);
   rows.push(["ach_mult", "ตัวคูณเกณฑ์ความสำเร็จทั้งหมด (% • 100 = เดิม, 50 = ง่ายขึ้นครึ่งหนึ่ง)", 100, 10, 1000, "🏅 ความสำเร็จ"]);
   rows.push(["gacha_cap", "เพดานหมุนกาชาต่อคนต่อวัน (0 = ไม่จำกัด)", 0, 0, 500, "🎰 กาชา"]);
+  { const g = "🧪 แคปซูลสเตตัส • โอเวอร์โดส (เพดานบังคับด้วย rules ด้วย)";
+    rows.push(["stat_cap", "เพดานสเตตัสจากแคปซูล (ค่ารวม ทุกช่องยกเว้นพละกำลัง)", 17, 8, 60, g]);
+    rows.push(["stat_cap_str", "เพดานพละกำลังจากแคปซูล (ค่ารวม)", 13, 5, 40, g]);
+    rows.push(["od_free", "ค่าพิษที่ยังกินได้ปลอดภัย (ค่าพิษ +1 ต่อเม็ด ลดลง 1 ทุก 12 ชม.)", 2, 0, 10, g]);
+    rows.push(["od_step", "โอกาสโอเวอร์โดสที่เพิ่มต่อค่าพิษที่เกิน (%)", 20, 0, 100, g]);
+    rows.push(["od_max", "โอกาสโอเวอร์โดสสูงสุด (%)", 70, 0, 100, g]); }
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
