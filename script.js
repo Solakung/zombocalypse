@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1054";
+const APP_VERSION = "2026-10-05.1101";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1020,6 +1020,7 @@ function startGame() {
   });
   setInterval(renderBars, 1000);
   setInterval(infectionTick, 5000);
+  setInterval(() => { const p = state.profile; if (p && p.hp === 0 && !state.dying && !state.deathTimer) processDeath(); }, 20000);   // ล้มแล้วยังไม่ฟื้น (เช่นลองครบ 3 ครั้งแล้วพลาด) → ลองใหม่เอง
   setInterval(effectTick, 5000);
 }
 
@@ -1755,7 +1756,7 @@ async function processDeath(attempt = 0) {
   } catch (e) {
     console.error("death", e);
     if (attempt < 2) setTimeout(() => { state.dying = false; processDeath(attempt + 1); }, 2000);
-    else toast(errMsg(e));
+    else { toast(errMsg(e)); logLine(`💀 ฟื้นไม่สำเร็จ: ${errMsg(e)} — เกมจะลองใหม่เองใน 20 วินาที`, "system"); }
   } finally { if (state.profile?.hp !== 0 || attempt >= 2) state.dying = false; }
 }
 
@@ -3544,6 +3545,21 @@ async function adminInfect(on) {
 }
 $("adm-inf-on").addEventListener("click", () => adminInfect(true));
 $("adm-inf-off").addEventListener("click", () => adminInfect(false));
+// Owner: ชุบผู้เล่นที่ล้มอยู่ (HP 0) — ฟื้นที่ Safe Zone 50 HP โดยไม่หักของ ล้างเชื้อ/สถานะ/ค่าหัว (rules ให้ Owner เขียน users/{uid} ได้อยู่แล้ว GM ทำไม่ได้)
+async function adminRevive() {
+  const id = $("adm-inf-id").value.trim(); if (!id) return toast("ใส่ Player ID ก่อน");
+  if (state.profile?.role !== "owner") return toast("ชุบได้เฉพาะ Owner");
+  try {
+    const t = await get(ref(db, "users/" + id));
+    if (!t.exists()) return toast("ไม่พบ Player ID นี้");
+    const v = t.val();
+    if (v.hp > 0) return toast(`${v.username} ยังไม่ล้ม (HP ${v.hp})`);
+    if (!confirm(`ชุบ ${v.username}?\nฟื้นที่ Safe Zone ด้วย 50 HP ไม่หักของ ล้างเชื้อและสถานะ`)) return;
+    await update(ref(db), { [`users/${id}/hp`]: 50, [`users/${id}/zone`]: "safe", [`users/${id}/lastDeath`]: null, [`users/${id}/infected`]: null, [`users/${id}/infectTs`]: null, [`effects/${id}`]: null });
+    toast(`ชุบ ${v.username} แล้ว`);
+  } catch (e) { toast(errMsg(e)); }
+}
+{ const b = document.createElement("button"); b.id = "adm-revive"; b.className = "btn primary"; b.textContent = "💉 ชุบ (Owner)"; $("adm-inf-off").after(b); b.addEventListener("click", adminRevive); }
 
 /* =========================================================
    14) วิวัฒนาการซอมบี้ (DNA) — แปะต่อท้าย script.js
