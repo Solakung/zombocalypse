@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1850";
+const APP_VERSION = "2026-10-05.1900";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -607,6 +607,11 @@ function guideExtra(sec) {
     "☠️ พิษมี 2 ระดับ: พิษอ่อนรักษาได้ด้วยมอส/ชุดปฐมพยาบาล ส่วน “พิษแรง” (จากอุโมงค์ โรงพยาบาล โรงงาน ท่าเรือ และบอส) รักษาได้เฉพาะ 💉 ยาแก้พิษ หรือ 🩺 ชุดช่วยชีวิตขั้นสูง",
     "💉 ยาแก้พิษให้ภูมิต้านพิษ 10 นาที ใช้ล่วงหน้าก่อนไปโซนอันตรายได้ — ทำเองได้ (สารเคมี 2 + เศษเหล็ก 1)",
     ...Object.entries(MON_FX).map(([src, t]) => `${nm(src)}: ${Object.entries(t).map(([k, [pc]]) => `${FX_TYPES[k].icon}${FX_TYPES[k].name} ${pc}%`).join(" • ")}`)
+  ]);
+  sec("🎲 ท้าดวลผู้เล่น (Safe Zone)", [
+    "กดปุ่ม 🎲 ที่แถบบน (ปรากฏเมื่ออยู่ Safe Zone) → ตั้งดวลโดยวางของกิน/ยา/วัสดุ 1–5 ชิ้น คนรับต้องวางของชนิดและจำนวนเท่ากัน ผู้ชนะได้ทั้งหมด เสมอได้คืน",
+    "เกม: 🎲 ทอยเต๋า (เลข 0–99 มากกว่าชนะ) • 🪙 โยนเหรียญ • ✊ เป่ายิ้งฉุบ • 🃏 21 (ได้ไพ่ 2 ใบ เลือกจั่วเพิ่ม 0–3 ใบแบบลับ ใกล้ 21 ที่สุดชนะ เกินคือแพ้ ไม่ตอบใน 5 นาที = เสมอ)",
+    "ผลถูกคำนวณโดยระบบจากเวลาเซิร์ฟเวอร์ตอนมีคนรับ ไม่มีใครเลือกผลเองได้ • ยกเลิกดวลที่ยังไม่มีคนรับได้ ได้ของคืนครบ • ของในกระเป๋าเต็ม 99 ชิ้น ส่วนที่เกินจะหาย"
   ]);
   sec("อาวุธและการสลับอาวุธ", [
     "อาวุธคม (" + Object.keys(WPN_PROC).map((id) => ITEMS[id]?.name || id).join(", ") + ") ตีบอสประจำโซนโดนมีโอกาสทำให้บอสเลือดไหล (สกิลโจมตีโดนแน่เพิ่มโอกาสเป็น 2 เท่า)",
@@ -8893,6 +8898,7 @@ function kInit2() {
   try { viewApply(); } catch (e) { console.warn("view", e); }
   try { kKeysInit(); } catch (e) { console.warn("keys", e); }
   try { mInit(); } catch (e) { console.warn("mInit", e); }
+  try { dBtnInit(); dInit(); } catch (e) { console.warn("dInit", e); }
 }
 function kTick2() {
   try { mTick(); } catch { /* ข้าม */ }
@@ -9038,6 +9044,7 @@ function mwRender() {
 }
 function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
+  try { dTick(); } catch { /* ข้าม */ }
   const b = $("btn-ck"); if (!b) return;
   const show = ckOn() && state.ck !== undefined || cbPending();
   b.classList.toggle("hidden", !show);
@@ -9050,6 +9057,225 @@ function mTick() {
     const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
     if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
   }
+}
+
+/* =========================================================
+   50) 🎲 Release N — ท้าดวลระหว่างผู้เล่น (duel/, ds/, dc/ • ต้องใช้ rules v41)
+   วางเดิมพันของกิน/วัสดุ (ชนิดเดียวกัน จำนวนเท่ากัน 1–5 ชิ้น) ที่ Safe Zone • ผู้ชนะได้ของทั้งสองฝั่ง
+   เกม: 🎲 ทอยเต๋า • 🪙 โยนเหรียญ • ✊ เป่ายิ้งฉุบ • 🃏 21 (เลือกจั่วเพิ่ม 0–3 ใบ ลับกัน)
+   ผลตัดสินโดย rules จากเวลาเซิร์ฟเวอร์ตอนที่อีกฝ่ายกดรับ (u) — ไม่มีใครเลือกผลเองได้ • ยกเลิกดวลที่ยังไม่มีคนรับได้ ของคืนเต็ม
+   ปรับได้จากแท็บ 🎛️: duel_on
+   ========================================================= */
+const DUEL_ITEMS = ["water", "canned_food", "bandage", "medkit", "scrap", "energy_drink", "bread", "fruit", "moss", "rotten_meat", "chem"];
+const DUEL_G = { d: { icon: "🎲", name: "ทอยเต๋า", how: "สุ่มเลข 0–99 คนละตัว มากกว่าชนะ" }, c: { icon: "🪙", name: "โยนเหรียญ", how: "ผู้ท้าเลือกหัว/ก้อย ผู้รับได้ด้านตรงข้าม" }, r: { icon: "✊", name: "เป่ายิ้งฉุบ", how: "เลือกลับกัน เปิดพร้อมกันตอนผู้รับตอบ" }, j: { icon: "🃏", name: "21", how: "ได้ไพ่ 2 ใบ เลือกจั่วเพิ่ม 0–3 ใบแบบลับ ใกล้ 21 ชนะ เกินแพ้" } };
+const DUEL_RPS = ["✊ ค้อน", "✋ กระดาษ", "✌️ กรรไกร"], DUEL_COIN = ["🪙 หัว", "🪙 ก้อย"];
+const duelOn = () => T("duel_on", 1) === 1;
+const dCard = (u, p) => u % p % 10 + 1;
+const dHandA = (u, h) => [dCard(u, 101), dCard(u, 103), ...[107, 109, 113].slice(0, h).map((p) => dCard(u, p))];
+const dHandB = (u, h) => [dCard(u, 127), dCard(u, 131), ...[137, 139, 149].slice(0, h).map((p) => dCard(u, p))];
+const dSum = (a) => a.reduce((x, y) => x + y, 0);
+function dCalc(d, xa, xb) {   // ต้องตรงกับสูตรใน rules ทุกตัวอักษร
+  const u = d.u, o = {};
+  if (d.g === "c") { o.ra = u % 2; o.w = o.ra === d.cs ? d.a : d.b; }
+  else if (d.g === "d") { o.ra = u % 100; o.rb = ((u - o.ra) / 100) % 100; o.w = o.ra > o.rb ? d.a : o.ra < o.rb ? d.b : "d"; }
+  else if (d.g === "r") { o.w = xa === xb ? "d" : (xa - xb + 3) % 3 === 1 ? d.a : d.b; }
+  else { o.ra = dSum(dHandA(u, xa)); o.rb = dSum(dHandB(u, xb)); const ea = o.ra > 21 ? 0 : o.ra, eb = o.rb > 21 ? 0 : o.rb; o.w = ea > eb ? d.a : ea < eb ? d.b : "d"; }
+  return o;
+}
+function dName(uid) {
+  if (uid === state.uid) return "คุณ";
+  const n = state.players?.[uid]?.name || state.dNames?.[uid]; if (n) return n;
+  state.dNames = state.dNames || {};
+  if (!state.dNames["?" + uid]) { state.dNames["?" + uid] = 1; get(ref(db, `users/${uid}/username`)).then((s) => { if (s.val()) { state.dNames[uid] = s.val(); dRender(); } }).catch(() => {}); }
+  return "ผู้เล่น";
+}
+const dMine = (d) => d && (d.a === state.uid || d.b === state.uid);
+const dMyFlag = (d) => d.a === state.uid ? d.fa : d.fb;
+function dEntitle(d) {   // จำนวนชิ้นที่ฉันมีสิทธิ์รับคืน/รับรางวัล (0 = ไม่มี/รับแล้ว)
+  if (!dMine(d) || dMyFlag(d)) return 0;
+  if (d.s === 3) return d.a === state.uid ? d.q : 0;
+  if (d.s === 2) return d.w === state.uid ? 2 * d.q : d.w === "d" ? d.q : 0;
+  return 0;
+}
+function dInit() {
+  if (state.dOn || !state.uid) return; state.dOn = true; state.duels = {}; state.dDs = {};
+  onValue(query(ref(db, "duel"), orderByKey(), limitToLast(60)), (s) => {
+    const v = s.val() || {}, old = state.duels; state.duels = { ...v };
+    try { (JSON.parse(localStorage.getItem("dl_ids_" + state.uid) || "[]")).forEach((id) => { if (!state.duels[id]) get(ref(db, "duel/" + id)).then((x) => { if (x.val()) { state.duels[id] = x.val(); dRender(); } }).catch(() => {}); }); } catch { /* ข้าม */ }
+    Object.entries(v).forEach(([id, d]) => {   // แจ้งผลครั้งแรกที่เห็น
+      if (!dMine(d) || d.s < 2 || (old[id] && old[id].s >= 2) || state.dSeen?.[id]) return;
+      (state.dSeen = state.dSeen || {})[id] = 1;
+      if (!state.dFirst) return;
+      const it = ITEMS[d.it], txt = d.s === 3 ? "ยกเลิกแล้ว" : d.w === state.uid ? `🏆 ชนะ! ได้ ${it.icon}${it.name} ×${2 * d.q}` : d.w === "d" ? "เสมอ ได้ของคืน" : `แพ้ เสีย ${it.icon}${it.name} ×${d.q}`;
+      if (d.s === 2) { toast(`🎲 ดวลกับ${dName(d.a === state.uid ? d.b : d.a)}: ${txt}`); try { logLine(`🎲 ดวล ${DUEL_G[d.g].name} กับ ${dName(d.a === state.uid ? d.b : d.a)}: ${txt}`, d.w === state.uid ? "system" : "info"); } catch { /* ข้าม */ } }
+    });
+    state.dFirst = true; dRender(); dTick();
+  }, (e) => { state.duels = {}; console.warn("duel", e?.code || e); });
+}
+function dRemember(id) { try { const k = "dl_ids_" + state.uid, l = JSON.parse(localStorage.getItem(k) || "[]"); l.push(id); localStorage.setItem(k, JSON.stringify(l.slice(-30))); } catch { /* ข้าม */ } }
+async function dRead(id) {
+  const r = {};
+  for (const p of ["a", "b"]) { try { const v = (await get(ref(db, `ds/${id}/${p}`))).val(); if (typeof v === "number") r[p] = v; } catch { /* ยังไม่มีสิทธิ์อ่าน */ } }
+  return r;
+}
+async function dSettle(id, d) {
+  if (!d || d.s !== 1 || !dMine(d)) return;
+  let xa, xb;
+  if (d.g === "r" || d.g === "j") {
+    const r = await dRead(id); xa = r.a; xb = r.b;
+    if (typeof xa !== "number" || typeof xb !== "number") {
+      if (d.g === "j" && serverNow() - d.u >= 300000 && !(xa !== undefined && xb !== undefined)) { try { await update(ref(db), { [`duel/${id}/s`]: 2, [`duel/${id}/w`]: "d" }); } catch { /* อีกฝั่งอาจทำไปแล้ว */ } }
+      return;
+    }
+  }
+  const o = dCalc(d, xa, xb), u = { [`duel/${id}/s`]: 2 };
+  Object.entries(o).forEach(([k, v]) => { u[`duel/${id}/${k}`] = v; });
+  try { await update(ref(db), u); } catch (e) { console.warn("duel settle", e?.code || e); }
+}
+async function dClaim(id, d) {
+  const k = dEntitle(d); if (!k || state.busy) return;
+  const me = state.uid, side = d.a === me ? "fa" : "fb";
+  try {
+    const have = (await get(ref(db, `inventory/${me}/${d.it}/qty`))).val() || 0;
+    await update(ref(db), { [`dc/${me}`]: { id }, [`duel/${id}/${side}`]: serverTimestamp(), [`inventory/${me}/${d.it}`]: { id: d.it, qty: Math.min(99, have + k) } });
+    if (d.s === 2 && d.w === me) toast(`🏆 รับรางวัลดวล ${ITEMS[d.it].icon}×${k}`);
+  } catch (e) { (state.dFail = state.dFail || {})[id] = Date.now() + 20000; console.warn("duel claim", e?.code || e); }
+}
+function dTick() {
+  const b = $("btn-duel"), p = state.profile;
+  if (b) {
+    const act = Object.values(state.duels || {}).some((d) => dMine(d) && (d.s <= 1 || dEntitle(d) > 0));
+    b.classList.toggle("hidden", !(duelOn() && p && p.hp > 0 && (state.zone === "safe" || act)));
+    b.classList.toggle("btn-dot", Object.values(state.duels || {}).some((d) => d.s === 0 && d.a !== state.uid && state.zone === "safe") || act);
+  }
+  if (!duelOn() || !p || Date.now() < (state.dNext || 0)) return;
+  state.dNext = Date.now() + 3000;
+  Object.entries(state.duels || {}).forEach(([id, d]) => {
+    if (!dMine(d)) return;
+    if (d.s === 1 && !(state.dBusy || {})[id]) { (state.dBusy = state.dBusy || {})[id] = 1; dSettle(id, d).finally(() => { delete state.dBusy[id]; }); }
+    else if (dEntitle(d) > 0 && Date.now() > ((state.dFail || {})[id] || 0)) { state.dFail = state.dFail || {}; state.dFail[id] = Date.now() + 8000; dClaim(id, d); }
+  });
+  if ($("dl-modal") && !$("dl-modal").classList.contains("hidden")) dRender();
+}
+function dHave(it) { return state.inv?.[it]?.qty || 0; }
+async function dCreate(g, it, q, ch) {
+  if (state.busy) return; state.busy = true;
+  try {
+    const me = state.uid, id = push(ref(db, "duel")).key, left = dHave(it) - q;
+    const u = { [`duel/${id}`]: { a: me, g, it, q, t: serverTimestamp(), u: serverTimestamp(), s: 0, ...(g === "c" ? { cs: ch } : {}) }, [`inventory/${me}/${it}`]: left > 0 ? { id: it, qty: left } : null };
+    if (g === "r") u[`ds/${id}/a`] = ch;
+    await update(ref(db), u); dRemember(id); toast("🎲 ตั้งดวลแล้ว รอคนรับ (ยกเลิกได้)");
+  } catch (e) { toast(errMsg(e)); } finally { state.busy = false; dRender(); }
+}
+async function dAccept(id, d, ch) {
+  if (state.busy) return; state.busy = true;
+  try {
+    const me = state.uid, left = dHave(d.it) - d.q;
+    const u = { [`duel/${id}/b`]: me, [`duel/${id}/s`]: 1, [`duel/${id}/u`]: serverTimestamp(), [`inventory/${me}/${d.it}`]: left > 0 ? { id: d.it, qty: left } : null };
+    if (d.g === "r") u[`ds/${id}/b`] = ch;
+    await update(ref(db), u); dRemember(id);
+    const x = (await get(ref(db, `duel/${id}`))).val(); state.duels[id] = x; state.busy = false; await dSettle(id, x);
+  } catch (e) { toast(errMsg(e)); } finally { state.busy = false; dRender(); }
+}
+async function dCancel(id, d) {
+  if (state.busy) return; state.busy = true;
+  try { await update(ref(db), { [`duel/${id}/s`]: 3 }); state.duels[id] = { ...d, s: 3 }; state.busy = false; await dClaim(id, state.duels[id]); toast("ยกเลิกดวลแล้ว ได้ของคืน"); }
+  catch (e) { toast(errMsg(e)); } finally { state.busy = false; dRender(); }
+}
+async function dCommit(id, d, n) {
+  if (state.busy) return; state.busy = true;
+  try { await update(ref(db), { [`ds/${id}/${d.a === state.uid ? "a" : "b"}`]: n }); toast("🃏 ส่งการตัดสินใจแล้ว (ลับ)"); state.dRd = state.dRd || {}; delete state.dRd[id]; }
+  catch (e) { toast(errMsg(e)); } finally { state.busy = false; dRender(); }
+}
+function dOpen() {
+  if (!$("dl-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "dl-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎲 ท้าดวล"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "dl-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("dl-modal").classList.remove("hidden"); dRender();
+}
+function dRender() {
+  const body = $("dl-body"); if (!body || $("dl-modal").classList.contains("hidden")) return;
+  if (body.contains(document.activeElement) && /SELECT|INPUT/.test(document.activeElement.tagName) && state.dFocusLock) return;
+  body.innerHTML = "";
+  const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
+  const safe = state.zone === "safe", F = state.dForm = state.dForm || { g: "d", it: "water", q: 1, ch: 0 };
+  const duels = Object.entries(state.duels || {}).sort((a, b) => (a[0] < b[0] ? 1 : -1));
+  const itxt = (d) => `${ITEMS[d.it]?.icon || ""}${ITEMS[d.it]?.name || d.it} ×${d.q}`;
+  // ---- ตั้งดวลใหม่
+  const nf = card(); nf.append(mk("div", "", "➕ ตั้งดวลใหม่"));
+  if (!safe) nf.append(mk("div", "muted", "ตั้ง/รับดวลได้เฉพาะที่ Safe Zone"));
+  else {
+    const opts = DUEL_ITEMS.filter((i) => dHave(i) > 0 && ITEMS[i]);
+    if (!opts.length) nf.append(mk("div", "muted", "ไม่มีของที่ใช้เดิมพันได้ (ของกิน/ยา/วัสดุ)"));
+    else {
+      if (!opts.includes(F.it)) F.it = opts[0];
+      F.q = Math.max(1, Math.min(F.q, 5, dHave(F.it)));
+      const row = mk("div"); row.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0";
+      const sel = (list, val, on) => { const s = mk("select"); list.forEach(([v, t]) => { const o = mk("option", "", t); o.value = v; if (String(v) === String(val)) o.selected = true; s.append(o); }); s.addEventListener("change", () => { on(s.value); dRender(); }); s.addEventListener("focus", () => { state.dFocusLock = 1; }); s.addEventListener("blur", () => { state.dFocusLock = 0; }); return s; };
+      row.append(sel(Object.entries(DUEL_G).map(([k, v]) => [k, `${v.icon} ${v.name}`]), F.g, (v) => { F.g = v; F.ch = 0; }),
+        sel(opts.map((i) => [i, `${ITEMS[i].icon} ${ITEMS[i].name} (มี ${dHave(i)})`]), F.it, (v) => { F.it = v; }),
+        sel(Array.from({ length: Math.min(5, dHave(F.it)) }, (_, i) => [i + 1, `เดิมพัน ×${i + 1}`]), F.q, (v) => { F.q = +v; }));
+      if (F.g === "c") row.append(sel(DUEL_COIN.map((t, i) => [i, "ฉันเลือก " + t]), F.ch, (v) => { F.ch = +v; }));
+      if (F.g === "r") row.append(sel(DUEL_RPS.map((t, i) => [i, "ฉันออก " + t]), F.ch, (v) => { F.ch = +v; }));
+      nf.append(row, mk("div", "muted", DUEL_G[F.g].how + " • ผู้รับต้องลงเดิมพันเท่ากัน ผู้ชนะได้ทั้งหมด • ยกเลิกได้ถ้ายังไม่มีคนรับ"));
+      nf.append(btn(`ตั้งดวล ${DUEL_G[F.g].icon}`, () => dCreate(F.g, F.it, F.q, F.ch), "btn primary mini"));
+    }
+  }
+  // ---- ดวลของฉัน
+  const mine = duels.filter(([, d]) => dMine(d) && (d.s <= 1 || dEntitle(d) > 0)).concat(duels.filter(([, d]) => dMine(d) && d.s >= 2 && dEntitle(d) === 0).slice(0, 4));
+  if (mine.length) {
+    const h = card(); h.append(mk("div", "", "📋 ดวลของฉัน"));
+    mine.forEach(([id, d]) => {
+      const c = mk("div", "muted"); c.style.cssText = "border-top:1px solid var(--line,#2a313a);padding-top:6px;margin-top:6px"; h.append(c);
+      const opp = d.b ? dName(d.a === state.uid ? d.b : d.a) : "";
+      c.append(mk("div", "", `${DUEL_G[d.g].icon} ${DUEL_G[d.g].name} • ${itxt(d)}${opp ? " • กับ " + opp : ""}`));
+      if (d.s === 0) { c.append(mk("div", "", "⏳ รอคนรับดวล…"), btn("ยกเลิก (รับของคืน)", () => dCancel(id, d), "btn ghost mini")); }
+      else if (d.s === 1) dPlaying(c, id, d);
+      else if (d.s === 3) c.append(mk("div", "", d.fa ? "ยกเลิกแล้ว • รับของคืนแล้ว" : "ยกเลิกแล้ว • กำลังรับของคืน…"));
+      else {
+        const res = d.g === "d" ? ` (${d.ra} vs ${d.rb})` : d.g === "j" ? ` (${d.ra > 21 ? d.ra + " ไหม้" : d.ra} vs ${d.rb > 21 ? d.rb + " ไหม้" : d.rb})` : d.g === "c" ? ` (ออก${DUEL_COIN[d.ra].slice(2)})` : "";
+        const t = d.w === state.uid ? `🏆 ชนะ ได้ ×${2 * d.q}` : d.w === "d" ? "🤝 เสมอ ได้คืน" : "💀 แพ้";
+        c.append(mk("div", "", t + res));
+        if (dEntitle(d) > 0) c.append(btn("รับของ", () => dClaim(id, d), "btn primary mini"));
+      }
+    });
+  }
+  // ---- ดวลที่เปิดอยู่
+  const open = duels.filter(([, d]) => d.s === 0 && d.a !== state.uid);
+  const oc = card(); oc.append(mk("div", "", `⚔️ ดวลที่เปิดรับ (${open.length})`));
+  if (!open.length) oc.append(mk("div", "muted", "ยังไม่มีใครท้า — ตั้งดวลแล้วรอเพื่อนมารับได้เลย"));
+  open.forEach(([id, d]) => {
+    const c = mk("div", "muted"); c.style.cssText = "border-top:1px solid var(--line,#2a313a);padding-top:6px;margin-top:6px"; oc.append(c);
+    c.append(mk("div", "", `${DUEL_G[d.g].icon} ${dName(d.a)} ท้า ${DUEL_G[d.g].name} • ${itxt(d)}`));
+    const can = safe && dHave(d.it) >= d.q;
+    if (d.g === "c") c.append(mk("div", "", `คุณจะได้ด้าน ${DUEL_COIN[1 - d.cs]}`));
+    if (!can) c.append(mk("div", "", safe ? `ของไม่พอ (ต้องมี ${itxt(d)})` : "ต้องอยู่ Safe Zone"));
+    else if (d.g === "r") DUEL_RPS.forEach((t, i) => c.append(btn(t, () => dAccept(id, d, i), "btn primary mini")));
+    else c.append(btn("รับดวล", () => dAccept(id, d), "btn primary mini"));
+  });
+  body.append(mk("div", "muted", "เดิมพันได้เฉพาะของกิน ยา และวัสดุ (ไม่รวมอาวุธ/เกราะ) • เก็บของได้สูงสุด 99 ชิ้น ส่วนที่เกินจะหายไป"));
+}
+function dPlaying(c, id, d) {
+  const me = state.uid, amA = d.a === me, u = d.u;
+  if (d.g === "j") {
+    const ha = dHandA(u, 0), hb = dHandB(u, 0), mh = amA ? ha : hb, oh = amA ? hb : ha;
+    c.append(mk("div", "", `ไพ่คุณ ${mh.join(" + ")} = ${dSum(mh)} • ไพ่ ${dName(amA ? d.b : d.a)} ${oh.join(" + ")} = ${dSum(oh)}`));
+    state.dRd = state.dRd || {};
+    if (state.dRd[id] === undefined) { state.dRd[id] = null; dRead(id).then((r) => { state.dRd[id] = r[amA ? "a" : "b"] ?? -1; dRender(); }); }
+    const mineC = state.dRd[id];
+    if (mineC >= 0) c.append(mk("div", "", `✅ คุณเลือกจั่วเพิ่ม ${mineC} ใบแล้ว รออีกฝั่งตัดสินใจ (ไม่ตอบใน 5 นาที = เสมอ ได้ของคืน)`));
+    else if (mineC === -1) {
+      c.append(mk("div", "", "จะจั่วเพิ่มกี่ใบ? (ลับ — เกิน 21 = ไหม้ แพ้)"));
+      [0, 1, 2, 3].forEach((n) => c.append(btn(n ? `จั่ว ${n}` : "หยุด", () => dCommit(id, d, n), "btn primary mini")));
+    }
+  } else c.append(mk("div", "", d.g === "r" ? "กำลังเปิดผล…" : "กำลังตัดสิน…"));
+}
+function dBtnInit() {
+  const pr = $("btn-profile"); if (pr && !$("btn-duel")) { const b = btn("🎲", dOpen, "btn ghost mini"); b.id = "btn-duel"; b.classList.add("hidden"); b.title = "ท้าดวลผู้เล่น"; pr.before(b); }
 }
 
 /* =========================================================
@@ -9362,6 +9588,7 @@ function tuneDefs() {
   rows.push(["fish_on", "ตกปลาที่ท่าเรือ (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
   rows.push(["ck_on", "ปฏิทินเช็กอินรายซีซัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["cb_on", "ของขวัญต้อนรับกลับหลังหาย 7 วัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
+  rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
