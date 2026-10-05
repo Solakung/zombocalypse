@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1900";
+const APP_VERSION = "2026-10-06.1100";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -271,6 +271,7 @@ const ITEMS = {
   lab_coat: { name: "เสื้อกาวน์ปลอดเชื้อ", icon: "🥼", type: "gear", slot: "arm", red: 12 },
   bio_lens: { name: "เลนส์สแกนชีวภาพ", icon: "🔬", type: "gear", slot: "acc" },
   lab_sample: { name: "ตัวอย่างวิจัย", icon: "🧫", type: "material" },
+  dna_frag: { name: "ชิ้นส่วน DNA", icon: "🧬", type: "material" },
   chem_gloves: { name: "ถุงมือกันสารเคมี", icon: "🧤", type: "gear", slot: "acc" },
   lab_blade: { name: "มีดผ่าตัดเลเซอร์", icon: "🔪", type: "weapon", dmg: 24, maxDur: 20 },
   lab_core: { name: "แกนวิจัย", icon: "💠", type: "material" },
@@ -380,7 +381,7 @@ const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max
 const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
 const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z) + fxDmod(z)));
-function effectiveDrops(z) { return fxDrops(z, wxNzDrops(z, effectiveDrops0(z))); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
+function effectiveDrops(z) { return fxDrops(z, wxNzDrops(z, hcAdd(z, effectiveDrops0(z)))); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
 function effectiveDrops0(z) {
   if (z === "safe" && wallBroken()) return [...ZONES.safe.drops, { id: "zombie", w: WALL_BREACH_Z }];   // กำแพงพัง → ซอมบี้บุก Safe Zone
   const e = zoneEv(z), n = nightMod(z);
@@ -428,6 +429,7 @@ function renderZoneDanger(z) {
       : `☀️ กลางวัน — อีกประมาณ ${phaseMinsLeft()} นาทีจะมืด`;
   }
   try { wxRender(z); fxRender(z); } catch { /* ข้าม */ }
+  try { hcRender(z); } catch { /* ข้าม */ }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
     if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}${state.profile?.faction === "zombie" && d.ev.type === "horde" ? " • 🥩 ซากเพียบ" : ""}`;
@@ -607,6 +609,12 @@ function guideExtra(sec) {
     "☠️ พิษมี 2 ระดับ: พิษอ่อนรักษาได้ด้วยมอส/ชุดปฐมพยาบาล ส่วน “พิษแรง” (จากอุโมงค์ โรงพยาบาล โรงงาน ท่าเรือ และบอส) รักษาได้เฉพาะ 💉 ยาแก้พิษ หรือ 🩺 ชุดช่วยชีวิตขั้นสูง",
     "💉 ยาแก้พิษให้ภูมิต้านพิษ 10 นาที ใช้ล่วงหน้าก่อนไปโซนอันตรายได้ — ทำเองได้ (สารเคมี 2 + เศษเหล็ก 1)",
     ...Object.entries(MON_FX).map(([src, t]) => `${nm(src)}: ${Object.entries(t).map(([k, [pc]]) => `${FX_TYPES[k].icon}${FX_TYPES[k].name} ${pc}%`).join(" • ")}`)
+  ]);
+  sec("📡 ภารกิจ HC (เมื่อเปิดใช้งาน)", [
+    "มีสัญญาณขอความช่วยเหลือจากศูนย์วิจัยร้าง: มนุษย์ต้องล้ม “ผู้เฝ้า” (บอสศูนย์วิจัย) ให้ได้ก่อน แล้วค้นหาต่อที่นั่นเรื่อยๆ จนเจอต้นสัญญาณ — ยิ่งค้นนานยิ่งเจอง่ายขึ้น",
+    "ซอมบี้ไม่ต้องสู้บอส (เป็นตัวทดลองเก่าของที่นั่น) ค้นหาที่ศูนย์วิจัยได้เลย",
+    "เจอแล้ว ธาราจะไปอยู่ที่ค่าย (การ์ด “คนในค่าย” ที่ Safe Zone) คุยได้เหมือนมิราและเคน ทำเรื่องนี้ครั้งเดียวต่อคน",
+    "🧬 ชิ้นส่วน DNA ดรอปยากที่ศูนย์วิจัยร้าง (ทั้งมนุษย์และซอมบี้) — ส่งให้ธาราผ่านปุ่ม “ส่งชิ้นส่วน DNA” ยอดรวมของทุกคนในเซิร์ฟเวอร์ ไม่หายเมื่อตาย"
   ]);
   sec("🎲 ท้าดวลผู้เล่น (Safe Zone)", [
     "กดปุ่ม 🎲 ที่แถบบน (ปรากฏเมื่ออยู่ Safe Zone) → ตั้งดวลโดยวางของกิน/ยา/วัสดุ 1–5 ชิ้น คนรับต้องวางของชนิดและจำนวนเท่ากัน ผู้ชนะได้ทั้งหมด เสมอได้คืน",
@@ -1053,7 +1061,7 @@ function startGame() {
     if (p.banned) { teardownZone(); show("banned"); return; }
     if (!state.hbStarted) { state.hbStarted = true; (async () => { try { await mArrive(p); } catch (e) { console.warn("mArrive", e?.code || e); } await resumeOffline(p); })().finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
-      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); try { kInit(); } catch (e) { console.warn("kInit", e); } achInit(); wallListen(); deepInit(); headCompactInit();
+      show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); try { presenceWatch(); } catch (e) { console.warn("presenceWatch", e); } qpListen(); try { kInit(); } catch (e) { console.warn("kInit", e); } achInit(); wallListen(); deepInit(); headCompactInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
     }
     $("me-name").textContent = p.username; $("me-faction").textContent = FACTION[p.faction].icon;
@@ -1086,9 +1094,29 @@ const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.incl
 function travelCooldownLeft() { const t = state.profile?.lastTravel; return typeof t === "number" ? Math.max(0, TRAVEL_COOLDOWN - (serverNow() - t)) : 0; }
 
 // moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
+// รายชื่อในโซน (zonePlayers) ถูกลบโดย onDisconnect ทุกครั้งที่สัญญาณหลุด (มือถือหลับ/สลับเน็ต/พับจอ) — ต้องเขียนกลับเมื่อต่อใหม่ ไม่งั้นผู้เล่นยังตี/ค้นหา/แชทได้แต่ไม่โผล่ในรายชื่อ ใครโดนตีก็ตีสวนไม่ได้
+async function presenceSet(z = state.zone) {
+  if (!z || !state.uid || !state.profile) return;
+  const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
+  await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}), ...(evoTitleKey() ? { evo4: evoTitleKey() } : {}) });
+  onDisconnect(pRef).remove();
+}
+function presenceWatch() {
+  if (state.presOn) return; state.presOn = true; state.presTry = 0;
+  const fix = async () => {
+    if (!state.zone || !state.profile || state.profile.hp === undefined || state.presBusy || state.presEntering) return;
+    const sn = state.psnap; if (!sn || sn.key !== state.zone || sn.hasChild(state.uid)) { state.presTry = 0; return; }   // รายชื่อโซนปัจจุบันโหลดแล้วและยังมีเราอยู่ → ปกติ
+    if (state.presTry >= 5) return;
+    state.presBusy = true; state.presTry++;
+    try { await presenceSet(state.zone); } catch (e) { console.warn("presence", e?.code || e); } finally { state.presBusy = false; }
+  };
+  onValue(ref(db, ".info/connected"), (s) => { if (s.val() === true) setTimeout(fix, 1500); }, () => {});
+  setInterval(fix, 20000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(fix, 1200); });
+}
 async function enterZone(z, initial = false, moved = false) {
   if (!initial && z === state.zone) return;
-  const old = state.zone;
+  const old = state.zone; state.presEntering = true;
   try {
     if (!initial) {
       if (!moved) {
@@ -1110,9 +1138,7 @@ async function enterZone(z, initial = false, moved = false) {
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
-    const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
-    await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}), ...(evoTitleKey() ? { evo4: evoTitleKey() } : {}) });
-    onDisconnect(pRef).remove();
+    await presenceSet(z);
 
     const chatQ = query(ref(db, "chats/" + z), orderByKey(), limitToLast(CHAT_LIMIT));
     state.unsubs.push(
@@ -1126,7 +1152,7 @@ async function enterZone(z, initial = false, moved = false) {
     );
     signStyle(); renderWB();
     if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${travelCost(z)} พลังงาน)`}`, "info");
-  } catch (e) { toast(errMsg(e)); }
+  } catch (e) { toast(errMsg(e)); } finally { state.presEntering = false; }
 }
 
 function logLine(text, cls = "info") {
@@ -1846,6 +1872,8 @@ async function scavengeOnce() {
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
     try { const sf = siteRoll(found, table, isZombie); if (sf) found = sf; } catch { /* ข้าม */ }   // คลังลับ (หัวข้อ 36)
+    let hcFind = false;   // ภารกิจ HC (หัวข้อ 51): มนุษย์ต้องเจอบอสก่อน → ค้นต่อจนเจอธารา / ซอมบี้ข้ามบอสได้
+    try { if (hcSearching(state.zone)) { if (!isZombie && !hcBossDone()) { if (bossCooldownLeft() === 0 && BOSSES.lab) found = "boss"; } else if (found !== "zombie" && found !== "boss") hcFind = hcFindRoll(); } } catch { /* ข้าม */ }
     const u = {};
     hungerShift(u, "food", -(isZombie ? 5 : 3)); hungerShift(u, "water", -(isZombie ? 2 : 4));
 
@@ -1860,7 +1888,9 @@ async function scavengeOnce() {
 
     state.lastPayload = u;
     ambient();
-    if (found === "zombie") {
+    if (hcFind) {
+      await hcRescue(u, isZombie);
+    } else if (found === "zombie") {
       if (isZombie) {
         await update(ref(db), u);
         logLine("🧟 ซอมบี้ตัวหนึ่งเดินผ่านมา… มันดมกลิ่นคุณแล้วเมินไป (พวกเดียวกัน)", "info");
@@ -1960,6 +1990,7 @@ async function startBoss(u) {
   $("boss-log").textContent = "";
   logLine(`${b.icon} ${b.intro}`, "combat");
   bossLog(b.intro);
+  try { if (id === "lab" && hcOn() && !hcBossDone()) logLine("📡 มันคือผู้เฝ้าทางลงชั้นล่าง… ถ้าล้มมันได้ สัญญาณขอความช่วยเหลือจะดังชัดขึ้น", "system"); } catch { /* ข้าม */ }
 }
 
 function listenBoss() { onValue(ref(db, "bossFights/" + state.uid), (s) => { state.boss = s.val(); renderBoss(); }); }
@@ -2210,7 +2241,10 @@ async function claimBossReward() {
     const main = rollDrop(b.loot); let bonus = rollDrop(b.bonus); if (bonus === main) bonus = null;
     const u = { [`bossFights/${state.uid}`]: null };
     [main, bonus].forEach((id) => id && invAddUpdate(u, id, 1));
+    let hcNew = false;
+    try { if (bs.zone === "lab" && hcOn() && hcReady() && !hcBossDone()) { hcBits(u, HC_BOSS_BIT); hcNew = true; } } catch { /* ข้าม */ }
     await update(ref(db), u);
+    if (hcNew) setTimeout(() => { logLine("📡 ผู้เฝ้าล้มแล้ว… ประตูชั้นล่างเปิดออก มีเสียงเคาะท่อเบาๆ ดังมาจากข้างใน — ค้นหาต่อที่ศูนย์วิจัยจนกว่าจะเจอต้นเสียง", "system"); toast("📡 ทางลงชั้นล่างเปิดแล้ว ค้นหาต่อเพื่อหาต้นสัญญาณ"); }, 600);
     const got = [main, bonus].filter(Boolean).map((id) => `${ITEMS[id].icon} ${ITEMS[id].name}`).join(" + ");
     logLine(`🏆 รางวัลจาก${b.name}: ${got}`, "combat"); toast(`ได้รับ ${got}`);
   } catch (e) { toast(errMsg(e)); }
@@ -4220,11 +4254,18 @@ async function gachaClaim(ticket, fresh) {
   const t = ticket || state.gaTicket, uid = state.uid; if (!t || state.gaBusy) return;
   state.gaBusy = true; let again = false;
   try {
-    const prize = (await get(ref(db, `gachaPool/${t.f}/${t.slot}`))).val();
+    let prize;
+    try { prize = (await get(ref(db, `gachaPool/${t.f}/${t.slot}`))).val(); }
+    catch (e0) {
+      // อ่านรางวัลไม่ได้ = ตั๋วใบนี้ไม่อยู่บนเซิร์ฟเวอร์แล้ว (เช่น รับสำเร็จไปแล้วจากอีกแท็บ/เครื่อง) ไม่ใช่ปัญหาสิทธิ์ของของ → เลิกวนซ้ำ
+      if (gachaIsPerm(e0)) { state.gaTicket = null; state.gaRetried = true; console.warn("gachaClaim: ตั๋วหายจากเซิร์ฟเวอร์แล้ว", t); toast("ตั๋วใบนี้ถูกใช้ไปแล้ว (อาจรับของจากอีกแท็บ/เครื่อง) — ตรวจกระเป๋าดูได้เลย"); return; }
+      throw e0;
+    }
     const u = { [`gachaTickets/${uid}`]: null };
     if (prize) {
       let have = (await get(ref(db, `inventory/${uid}/${prize.id}/qty`))).val() || 0;
-      if (fresh) { const sv = await gachaServerQty(prize.id); if (sv !== null) { if (sv !== have) console.warn("gachaClaim: แคชล้าหลัง", { cache: have, server: sv }); have = sv; } }
+      { const sv = await gachaServerQty(prize.id); if (sv !== null) { if (sv !== have) console.warn("gachaClaim: แคชล้าหลัง", { cache: have, server: sv }); have = sv; } }   // อ่านค่าจริงจากเซิร์ฟเวอร์ทุกครั้ง (rules เทียบกับจำนวนจริง ไม่ใช่แคช)
+      state.gaDbg = `${prize.id}×${prize.qty} มี ${have}`;
       const after = Math.min(99, have + prize.qty);
       u[`inventory/${uid}/${prize.id}`] = { id: prize.id, qty: after };
       u[`gachaPool/${t.f}/${t.slot}`] = null;
@@ -4241,7 +4282,7 @@ async function gachaClaim(ticket, fresh) {
     console.error("gachaClaim", e?.code || e, { ticket: t, uid });
     state.gaFail = code;
     toast(`รับของไม่สำเร็จ (${code}) — กด “รับของที่ค้างอยู่” อีกครั้ง`);
-    try { logLine(`🎰 รับของกาชาไม่สำเร็จ: ${code} (ตั๋ว ${t.f}/${String(t.slot).slice(0, 4)}…) — แจ้งเจ้าของเกมพร้อมข้อความนี้ได้`, "system"); } catch { /* ข้าม */ }
+    try { logLine(`🎰 รับของกาชาไม่สำเร็จ: ${code} (ตั๋ว ${t.f}/${String(t.slot).slice(0, 4)}… ${state.gaDbg || "?"}) — แจ้งเจ้าของเกมพร้อมข้อความนี้ได้`, "system"); } catch { /* ข้าม */ }
     if (!fresh && gachaIsPerm(e)) again = true;   // ลองใหม่ทันที 1 ครั้งโดยอ่านค่าจริงจากเซิร์ฟเวอร์
     else if (!state.gaRetried && gachaIsPerm(e)) { state.gaRetried = true; setTimeout(() => { if (state.gaTicket && !state.gaBusy) gachaClaim(null, true); }, 4000); }
   }
@@ -5325,6 +5366,7 @@ if (HAS_DOM) { initMapUi(); }
    ========================================================= */
 const NPC_IDS = ["mira", "kane"];
 const NPC_META = {
+  tara: { name: "ธารา", icon: "🧑‍🔬", title: "นักวิจัยโครงการ HC", blurb: "นักวิจัยที่รอดจากศูนย์วิจัยใต้ดิน" },
   mira: { name: "มิรา", icon: "🧑‍⚕️", title: "หมอประจำค่าย", blurb: "ประจำเต็นท์พยาบาลริมกำแพง พูดน้อย มือนิ่งเสมอ ชอบชงชามอสให้คนที่ดูไม่ไหว" },
   kane: { name: "เคน", icon: "🪖", title: "ยามเฝ้ากำแพง", blurb: "อดีตทหารช่าง เดินตรวจกำแพงทุกรอบ ห้วนๆ แต่จำได้ว่าใครกลับมาไม่ครบ" }
 };
@@ -5404,7 +5446,7 @@ function npcQuestShown(per, qid, d) {
 }
 function npcListen() {
   if (state.npcOn || !state.uid) return; state.npcOn = true; state.npc = {};
-  onValue(ref(db, "npc/" + state.uid), (s) => { state.npc = s.val() || {}; try { renderNpcBox(); qpRefresh(); } catch { /* ยังไม่พร้อม */ } }, (e) => console.error("npc", e));
+  onValue(ref(db, "npc/" + state.uid), (s) => { state.npc = s.val() || {}; state.npcReady = true; try { renderNpcBox(); qpRefresh(); hcRender(); } catch { /* ยังไม่พร้อม */ } }, (e) => console.error("npc", e));
 }
 async function npcLoad(id) {
   if (NPC_DATA[id]) return NPC_DATA[id];
@@ -5601,6 +5643,7 @@ async function npcMenu(id, greetFirst) {
   opts.append(btn(today ? "💬 คุยเล่นต่อ" : "💬 คุยกัน", () => npcDaily(id), "btn primary npc-opt"));
   if (npcChapterReady(id)) opts.append(btn(`📖 เรื่องราวของ${NPC_META[id].name} · ตอนที่ ${rec.s + 1} ✨`, () => npcChapter(id), "btn npc-opt npc-new"));
   else if (rec.s < 5 && data.chapters?.[rec.s]) opts.append(mk("div", "npc-lock", `🔒 เรื่องราวตอนที่ ${rec.s + 1} — ต้องมีหัวใจ ${rec.s + 1} ดวง`));
+  if (id === HC_ID) opts.append(btn(`🧬 ส่งชิ้นส่วน DNA (${hcTotal()}/${hcGoal()})`, () => hcDnaOpen(id), "btn npc-opt"));
   opts.append(btn("👋 ลาก่อน", async () => { const tk = npcRun.tok; const b = npcPick(data.bye); npcSetCtl(); if (b && (await npcSay(b, npcRec(id).m, tk, id))) npcClose(true); }, "btn ghost npc-opt"));
   const tip = mk("small", "muted npc-tip", today ? "วันนี้คุยแล้ว ✓" : "คุยครั้งแรกของวันได้ความสนิท + ของขวัญ");
   npcSetCtl(tip, opts);
@@ -5642,15 +5685,17 @@ function npcOpen(id) {
 function renderNpcBox() {
   const box = $("npc-box"); if (!box) return;
   const show = state.zone === "safe" && !!state.profile && state.profile.hp > 0;
-  const sig = show ? [state.uid, npcToday(), ...NPC_IDS.map((id) => { const r = npcRec(id); return `${r.p}:${r.d}:${r.s}:${r.m & NPC_INTRO_BIT}`; })].join("|") : "";
+  const ids = hcFound() ? [...NPC_IDS, HC_ID] : NPC_IDS;
+  if (show) hcListen();
+  const sig = show ? [state.uid, npcToday(), hcTotal(), ...ids.map((id) => { const r = npcRec(id); return `${r.p}:${r.d}:${r.s}:${r.m & NPC_INTRO_BIT}`; })].join("|") : "";
   box.classList.toggle("hidden", !show);
   if (!show || box.dataset.sig === sig) return;
   box.dataset.sig = sig; box.textContent = "";
   box.append(mk("h2", "", "👥 คนในค่าย"));
-  NPC_IDS.forEach((id) => {
+  ids.forEach((id) => {
     const m = NPC_META[id], r = npcRec(id), met = !!(r.m & NPC_INTRO_BIT), h = npcHeartsOf(r.p), today = r.d === npcToday();
     const card = mk("button", "npc-card"); card.type = "button"; card.dataset.npc = id;
-    const st = !met ? "ยังไม่เคยคุย — แวะไปทักทาย" : npcChapterReady(id) ? "✨ มีเรื่องเล่าตอนใหม่" : today ? "วันนี้คุยแล้ว ✓" : "🎁 วันนี้ยังไม่ได้คุย";
+    const st = !met ? "ยังไม่เคยคุย — แวะไปทักทาย" : id === HC_ID && hcTotal() < hcGoal() && !today ? `🧬 ชิ้นส่วน DNA ${hcTotal()}/${hcGoal()} • วันนี้ยังไม่ได้คุย` : npcChapterReady(id) ? "✨ มีเรื่องเล่าตอนใหม่" : today ? "วันนี้คุยแล้ว ✓" : "🎁 วันนี้ยังไม่ได้คุย";
     const tx = mk("div", "npc-ct"); tx.append(mk("b", "", `${m.name} `), mk("small", "muted", m.title), mk("div", "npc-hearts", met ? npcHeartStr(h) : "🤍🤍🤍🤍🤍"), mk("small", "npc-st", st));
     card.append(mk("div", "npc-ic", m.icon), tx, mk("span", "npc-go", "💬"));
     card.addEventListener("click", () => npcOpen(id)); box.append(card);
@@ -5659,6 +5704,112 @@ function renderNpcBox() {
 function initNpcUi() {
   if (!$("npc-box")) { const ul = $("zone-list"); if (ul) { const b = mk("div", "npc-box hidden"); b.id = "npc-box"; ul.after(b); } }
 }
+/* =========================================================
+   51) 📡 ภารกิจ HC — ตามหานักวิจัยที่ศูนย์วิจัยร้าง (ธารา) + ส่งชิ้นส่วน DNA
+   - เปิด/ปิดด้วย tune hc_on (ปิดเป็นค่าเริ่มต้น) • ประกาศเนื้อเรื่องผ่านระบบประกาศของแอดมินตามเดิม
+   - สถานะรายคนอยู่ที่ npc/{uid}/tara.m: บิต 21 = ล้มผู้เฝ้าแล้ว, บิต 22 = เจอธาราแล้ว (บิต 0-15 = แฟลกบทพูด, 20 = แนะนำตัวแล้ว)
+   - ส่งชิ้นส่วน DNA: coop/hc1/{uid} = {n,name,ts} (นับรวมทั้งเซิร์ฟเวอร์) + หักของในกระเป๋าใน update เดียวกัน (ไม่ต้องใช้ rules ใหม่นอกจาก v43 ที่เพิ่มไอเทม/NPC id)
+   ========================================================= */
+const HC_ID = "tara", HC_BOSS_BIT = 1 << 21, HC_FOUND_BIT = 1 << 22, HC_KEY = "hc1";
+const hcOn = () => T("hc_on", 0) === 1;
+const hcM = () => state.npc?.[HC_ID]?.m || 0;
+const hcBossDone = () => !!(hcM() & HC_BOSS_BIT);
+const hcFound = () => !!(hcM() & HC_FOUND_BIT);
+const hcReady = () => !!state.npcReady;
+const hcGoal = () => Math.max(1, Math.round(T("hc_goal", 300)));
+const hcSearching = (z) => z === "lab" && hcOn() && hcReady() && !hcFound();
+function hcAdd(z, t) { return z === "lab" && hcOn() ? [...t, { id: "dna_frag", w: Math.max(0, T("hc_drop", 8)) }] : t; }
+function hcBits(u, bits) { const r = npcRec(HC_ID); u[`npc/${state.uid}/${HC_ID}`] = { p: r.p, d: r.d, s: r.s, m: (r.m | bits) >>> 0, v: r.v }; }
+const HC_HINTS = {
+  4: "🔇 ได้ยินเสียงเคาะท่อเป็นจังหวะ… สามครั้ง หยุด สามครั้ง หยุด",
+  9: "📻 วิทยุในกระเป๋าจับสัญญาณได้เสี้ยววินาที: “…ใครก็ได้… ชั้นล่างสุด… ห้อง…” แล้วก็เงียบ",
+  15: "🚪 ประตูนิรภัยบานหนึ่งมีรอยขีดข่วนจากด้านใน และคราบเลือดที่แห้งกรังแล้ว… ใกล้แล้ว"
+};
+// ทอยหาเธอหนึ่งครั้งต่อการค้นที่ศูนย์วิจัย: ยิ่งไม่เจอยิ่งง่ายขึ้น (ตัวนับอยู่ในเครื่อง)
+function hcFindRoll() {
+  const k = lsKey("hct"), n = LS.get(k, 0), ch = Math.min(0.9, T("hc_find", 6) / 100 + 0.03 * n);
+  if (Math.random() < ch) return true;
+  LS.set(k, n + 1); if (HC_HINTS[n + 1]) setTimeout(() => logLine(HC_HINTS[n + 1], "system"), 500);
+  return false;
+}
+async function hcRescue(u, zom) {
+  hcBits(u, HC_FOUND_BIT); await update(ref(db), u);
+  LS.set(lsKey("hct"), 0); stat("found");
+  const L = zom ? [
+    "🧟 กลิ่นที่ไม่ใช่เหยื่อ… กลิ่นสารเคมีและกระดาษเก่า ลอยมาจากห้องสุดทางเดิน",
+    "🧑‍🔬 ผู้หญิงในเสื้อกาวน์ขาดวิ่นนั่งอยู่หลังตู้เหล็ก เธอไม่กรีดร้อง ไม่หนี แค่มองคอเสื้อของคุณ แล้วพึมพำว่า “…หมายเลข HC… ยังจำที่นี่ได้สินะ”",
+    "🏕️ เธอเก็บสมุดโน้ตแล้วเดินตามคุณกลับไปที่ค่าย — ไปคุยกับเธอได้ที่ Safe Zone การ์ด “คนในค่าย”"
+  ] : [
+    "🔦 ลึกเข้าไปหลังประตูนิรภัยที่ผู้เฝ้าเคยยืนขวาง มีห้องเล็กๆ ล็อกจากด้านใน เสียงเคาะท่อหยุดลงทันทีที่คุณเข้าใกล้",
+    "🧑‍🔬 ผู้หญิงในเสื้อกาวน์ขาดวิ่นยกมือขึ้นช้าๆ “…ฉันยังเป็นคนอยู่ อย่าเพิ่งยิง” เธอพูดเสียงแหบแห้งจนแทบไม่ได้ยิน",
+    "🏕️ คุณพาเธอออกมาจากศูนย์วิจัยได้สำเร็จ เธอตามกลับไปที่ค่าย — ไปคุยกับเธอได้ที่ Safe Zone การ์ด “คนในค่าย”"
+  ];
+  L.forEach((t, i) => setTimeout(() => logLine(t, i === 2 ? "system" : "combat"), i * 700));
+  toast("🧑‍🔬 พบนักวิจัยแล้ว! เธอกลับไปรอที่ค่าย"); try { sfx("boss"); } catch { /* ข้าม */ }
+  setTimeout(() => { try { renderNpcBox(); hcRender(); } catch { /* ข้าม */ } }, 400);
+}
+// แบนเนอร์ที่ศูนย์วิจัย + ข้อความสัญญาณครั้งแรก
+function hcRender(zArg) {
+  const z = zArg || state.zone; let box = $("hc-box");
+  if (!box) { const ref0 = $("zone-event"); if (!ref0) return; box = mk("p", "event-line hidden"); box.id = "hc-box"; ref0.after(box); }
+  const on = hcOn() && hcReady() && !!state.profile && state.profile.hp > 0;
+  if (on && !hcFound() && !LS.get(lsKey("hcsig"), 0)) { LS.set(lsKey("hcsig"), 1); logLine("📡 วิทยุจับสัญญาณขอความช่วยเหลือแบบเข้ารหัสได้ — ต้นทางมาจากศูนย์วิจัยร้าง", "system"); }
+  let tx = "";
+  if (on && z === "lab") {
+    const zom = state.profile.faction === "zombie";
+    if (!hcFound()) tx = zom ? "📡 สัญญาณขอความช่วยเหลือ… กลิ่นเก่าๆ ของที่นี่ยังจำคุณได้ ค้นหาต่อเพื่อตามหาต้นสัญญาณ" : hcBossDone() ? "📡 ผู้เฝ้าล้มแล้ว — ค้นหาต่อจนกว่าจะเจอต้นสัญญาณ (ยิ่งค้นนานยิ่งใกล้)" : "📡 สัญญาณขอความช่วยเหลือดังมาจากชั้นล่าง — ผู้เฝ้ายังขวางทางอยู่ ค้นหาจนกว่ามันจะโผล่ แล้วล้มมันให้ได้";
+    else tx = `🧬 ชิ้นส่วน DNA ดรอปที่นี่ (หายาก) — ส่งธาราที่ค่าย ${hcTotal()}/${hcGoal()}`;
+  }
+  box.classList.toggle("hidden", !tx); box.textContent = tx;
+}
+// ยอดส่งรวมทั้งเซิร์ฟเวอร์
+function hcListen() {
+  if (state.hcOn || !state.uid) return; state.hcOn = true; state.hc = { sums: {}, last: 0, mine: undefined };
+  onValue(ref(db, "coop/" + HC_KEY), (s) => { state.hc.sums = s.val() || {}; try { renderNpcBox(); hcRender(); if (state.hc.refresh) state.hc.refresh(); } catch { /* ข้าม */ } }, (e) => console.warn("hc", e?.code || e));
+}
+const hcTotal = () => Object.values(state.hc?.sums || {}).reduce((t, x) => t + (x?.n || 0), 0);
+const hcMine = () => Math.max(state.hc?.mine ?? 0, state.hc?.sums?.[state.uid]?.n || 0);
+async function hcDnaOpen(id) {
+  const tok = npcRun.tok, data = await npcLoad(id); if (!data) return;
+  hcListen(); const D = data.dna || {}; npcSetCtl();
+  if (hcTotal() >= hcGoal()) { for (const l of D.after || []) if (!(await npcSay(l, npcRec(id).m, tok, id))) return; return hcDnaPanel(id, data); }
+  const lines = state.hc.askShown ? (D.ask || []).slice(0, 1) : D.ask || []; state.hc.askShown = true;
+  for (const l of lines) if (!(await npcSay(l, npcRec(id).m, tok, id))) return;
+  hcDnaPanel(id, data);
+}
+function hcDnaPanel(id, data) {
+  const have = state.inv?.dna_frag?.qty || 0, tot = hcTotal(), goal = hcGoal(), left = Math.max(0, goal - tot);
+  const info = mk("small", "muted npc-tip", `🧬 ส่งแล้วรวม ${tot}/${goal}${left ? ` (ขาดอีก ${left})` : " — ครบแล้ว ✓"} • ของคุณ ${hcMine()} • ในกระเป๋า ${have}`);
+  const row = mk("div", "npc-menu"), b1 = btn("🧬 ส่ง 1 ชิ้น", () => hcDonate(id, data, 1), "btn npc-opt"), b2 = btn(`🧬 ส่งทั้งหมด (${Math.min(have, left || have)})`, () => hcDonate(id, data, 99), "btn primary npc-opt");
+  b1.disabled = b2.disabled = have < 1 || !left || state.zone !== "safe";
+  row.append(b1, b2, btn("← กลับ", () => npcMenu(id, false), "btn ghost npc-opt"));
+  npcSetCtl(info, row);
+  state.hc.refresh = () => { if ($("npc-modal") && !$("npc-modal").classList.contains("hidden") && npcRun.id === id && !npcRun.mode && $("npc-ctl").contains(info)) hcDnaPanel(id, data); };
+}
+async function hcDonate(id, data, want) {
+  const p = state.profile, it = state.inv?.dna_frag, H = state.hc; const tok = npcRun.tok;
+  if (!p || !H || !it || !(it.qty > 0) || p.hp <= 0) return;
+  if (!hcOn() && !hcFound()) return;
+  if (state.zone !== "safe") return toast("ต้องอยู่ที่ Safe Zone");
+  const left = hcGoal() - hcTotal(); if (left <= 0) return toast("ครบเป้าแล้ว");
+  if (Date.now() - H.last < 6000) return toast("รอสักครู่แล้วส่งอีกครั้ง");
+  const q = Math.max(1, Math.min(want, it.qty, left, 99)); if (state.busy) return; state.busy = true; H.last = Date.now();
+  try {
+    if (H.mine === undefined) H.mine = (await get(ref(db, `coop/${HC_KEY}/${state.uid}/n`))).val() || 0;
+    const before = hcTotal(), u = {}; if (q >= it.qty) u[`inventory/${state.uid}/dna_frag`] = null; else u[`inventory/${state.uid}/dna_frag/qty`] = it.qty - q;
+    u[`coop/${HC_KEY}/${state.uid}`] = { n: hcMine() + q, name: p.username, ts: serverTimestamp() };
+    await update(ref(db), u); H.mine = hcMine() + q;
+    toast(`🧬 ส่งชิ้นส่วน DNA ×${q}`); logLine(`🧬 คุณส่งชิ้นส่วน DNA ×${q} ให้ธารา`, "system"); try { sfx("boss"); achBump("camp", q); } catch { /* ข้าม */ }
+    if (npcRun.tok !== tok) return;
+    const D = data.dna || {}, done = before + q >= hcGoal(); npcSetCtl();
+    const say = async (arr) => { for (const l of arr) if (!(await npcSay(l, npcRec(id).m, tok, id))) return false; return true; };
+    if (!(await say([npcPick(D.thanks)].filter(Boolean)))) return;
+    if (done && !(await say(D.full || []))) return;
+    hcDnaPanel(id, data);
+  } catch (e) { H.mine = undefined; toast(errMsg(e)); }
+  finally { state.busy = false; }
+}
+
 /* =========================================================
    26) วิทยุฉุกเฉิน
    • ข่าวด่วนอัตโนมัติ: ทุก 20 นาที (slot ตามเวลาเซิร์ฟเวอร์ → seed เดียวกันทุกเครื่อง) สร้างจากสถานะโลกจริง
@@ -8672,6 +8823,7 @@ function invChipsSync() { document.querySelectorAll("#inv-chips button").forEach
 // ---- 2) การ์ดข้อมูลไอเทม ----
 const ITEM_NOTE = {
   fish: "ตกได้ที่ท่าเรือ (ปุ่ม 🎣 ตกปลา) — เอาไปคราฟต์ปลาย่าง/ซุปปลา", golden_fish: "ตกได้ที่ท่าเรือเมื่อดึงเบ็ดได้เป๊ะ ๆ (หายาก) — สมทบโปรเจกต์ค่ายได้แต้มสูง",
+  dna_frag: "เศษ DNA จากศูนย์วิจัยร้าง (ดรอปยาก ช่วงภารกิจ HC) — ส่งให้ธาราที่ค่ายผ่านการ์ด “คนในค่าย” ยอดรวมทั้งเซิร์ฟเวอร์",
   lab_core: "ดรอปจากบอสศูนย์วิจัย — ส่งให้ห้องวิจัยของค่าย (ที่พัก) เพื่อรับผลวิจัยชั่วคราว", lab_blade: "ดรอปจากบอสศูนย์วิจัย (หายาก)", lab_sample: "ส่งให้ห้องวิจัยของค่ายเพื่อรับผลวิจัยชั่วคราว หรือเอาไปคราฟต์ซีรั่มทดลอง",
   exp_serum: "ฟื้น 60 HP และรักษาเลือดไหล/พิษทุกระดับ", fish_grill: "กินแล้วได้บัฟ “อิ่มปลาย่าง” 20 นาที (ไม่เจออะไรน้อยลง 7%)", fish_stew: "กินแล้วได้บัฟ “อุ่นท้องซุปปลา” 30 นาที (ลดดาเมจที่โดน 5%)",
   scrap: "วัสดุหลักของการคราฟต์ซ่อมอาวุธและกำแพง", chem: "วัสดุคราฟต์ยาและเกราะ", rotten_meat: "อาหารของซอมบี้ (ซอมบี้เท่านั้นที่กินได้)"
@@ -9588,6 +9740,10 @@ function tuneDefs() {
   rows.push(["fish_on", "ตกปลาที่ท่าเรือ (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
   rows.push(["ck_on", "ปฏิทินเช็กอินรายซีซัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["cb_on", "ของขวัญต้อนรับกลับหลังหาย 7 วัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
+  rows.push(["hc_on", "📡 ภารกิจ HC: ตามหานักวิจัยที่ศูนย์วิจัยร้าง (1 = เปิด, 0 = ปิด • เปิดเมื่อพร้อมประกาศเนื้อเรื่อง • ต้องใช้ rules v43)", 0, 0, 1, "📡 ภารกิจ HC"]);
+  rows.push(["hc_drop", "น้ำหนักดรอป 🧬 ชิ้นส่วน DNA ในศูนย์วิจัย (ตารางรวม ~110 • 8 ≈ 7% ต่อการค้น)", 8, 0, 40, "📡 ภารกิจ HC"]);
+  rows.push(["hc_goal", "เป้าหมายส่งชิ้นส่วน DNA รวมทั้งเซิร์ฟเวอร์ (ชิ้น)", 300, 10, 5000, "📡 ภารกิจ HC"]);
+  rows.push(["hc_find", "โอกาสเจอธาราต่อการค้น 1 ครั้ง (%) — เพิ่มขึ้น 3% ทุกครั้งที่ไม่เจอ", 6, 1, 50, "📡 ภารกิจ HC"]);
   rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
