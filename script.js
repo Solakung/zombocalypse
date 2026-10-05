@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1200";
+const APP_VERSION = "2026-10-05.1318";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -567,6 +567,7 @@ async function showBio(uid, name) {
   try { const s = await get(ref(db, "bios/" + uid)); $("bio-text").textContent = s.val() || "ยังไม่ได้เขียนประวัติ"; }
   catch { $("bio-text").textContent = "โหลดไม่สำเร็จ"; }
   achBioLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
+  baseDecoLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
 
@@ -587,6 +588,12 @@ function guideExtra(sec) {
     "อาวุธคม (" + Object.keys(WPN_PROC).map((id) => ITEMS[id]?.name || id).join(", ") + ") ตีบอสประจำโซนโดนมีโอกาสทำให้บอสเลือดไหล (สกิลโจมตีโดนแน่เพิ่มโอกาสเป็น 2 เท่า)",
     "สีของความทนอาวุธ: เขียว = ปกติ • เหลือง = เหลือครึ่งหนึ่ง • แดง = ใกล้พัง",
     "สลับอาวุธกลางสู้ได้จากแถบใต้ชื่ออาวุธ (หรือกด Q บนคอมพิวเตอร์) — คูลดาวน์ " + SWAP_CD / 1000 + " วิ แต่ถ้าอาวุธพังจนมือเปล่า สลับได้ทันที"
+  ]);
+  sec("ที่พัก ฤดูกาล และกิจกรรมโลก", [
+    "🏠 ที่พัก (ปุ่มข้างตลาด): วางสถานีรองน้ำ/ดักสัตว์/ปลูกมอสในค่าย เก็บผลผลิตได้ตามเวลาแม้ไม่ออนไลน์ (เก็บสะสมได้จำกัด) • อัปเกรดเพิ่มช่องด้วยของที่หาข้างนอก • 🛠️ โต๊ะงานใส่วัตถุดิบแล้วรอรับของ • 🪟 ซื้อของตกแต่งให้ที่พัก คนอื่นเห็นในหน้าประวัติ",
+    "🍂 ฤดูกาล 28 วัน: แต่ละฤดูเปลี่ยนของที่เจอบ่อย มีเป้าส่วนตัว 3 ข้อ ครบแล้วได้เหรียญติดตัว • 📖 สมุดสะสมบันทึกของ/สถานที่/เทศกาล/คลังลับที่เคยพบ • 📅 สรุปวันดูได้ในแท็บ 🌍",
+    "🎆 เทศกาลตามปฏิทิน (จันทร์เต็มดวง ฝนดาวตก สงกรานต์ ฯลฯ) • 🛩️ คลังลับ: ฟังข่าวลือทางวิทยุแล้วค้นหาให้ถูกโซน • 🤝 ภารกิจเคียงข้าง: อยู่กับเพื่อนในโซนนอกค่ายครบเวลาได้โชคค้นหาดีขึ้น • 🧭 เส้นทางอาชีพคิดจากสิ่งที่คุณทำบ่อยที่สุด",
+    "🏕️ โปรเจกต์ค่าย/รัง: สมทบของใน Safe Zone ครบเป้าแล้วทั้งฝั่งได้โบนัสเล็ก ๆ • ⚔️ ศึกชิงโซน: ฝั่งที่แต้มมากกว่าในโซนนั้นยึดโซนสัปดาห์ถัดไปและได้โบนัสเล็ก ๆ • 🤝 หัวใจของมิราและเคนปลดพรเล็ก ๆ ดูได้ในแท็บ 🌍"
   ]);
   sec("สรุป อันดับ บันทึก เสียง", [
     "ปุ่ม 📊 ด้านบน: สรุปวันนี้/สัปดาห์ (นับในเครื่องนี้), อันดับ (ทุบกำแพงรายสัปดาห์ ดาเมจบอสโลก), และสมุดบันทึกเหตุการณ์ของคุณ",
@@ -5958,6 +5965,8 @@ const ACH_FAM = [
   ["camp", "🏕️", "world", "", "สมทบโปรเจกต์ค่าย/รัง", "แต้ม", [50, 300, 1200, 4000], ["ผู้ร่วมสร้างค่าย", "แรงงานขยัน", "สถาปนิกค่าย", "ผู้สร้างบ้านให้ทุกคน"]],
   ["bcol", "🏠", "world", "", "เก็บผลผลิตจากที่พัก", "ชิ้น", [10, 50, 200, 600], ["เจ้าของบ้านมือใหม่", "ชาวสวนแห่งค่าย", "ผู้พึ่งตนเองได้", "เศรษฐีที่พักพิง"]],
   ["bup", "🔨", "world", "", "อัปเกรดที่พัก", "ครั้ง", [1, 2, 3], ["ต่อเติมบ้าน", "ขยายชานบ้าน", "คฤหาสน์แห่งค่าย"]],
+  ["sea", "🏅", "world", "", "เหรียญเป้าหมายฤดูกาล", "เหรียญ", [1, 3, 6, 12], ["เหรียญแรก", "นักสู้ตลอดฤดู", "ขวัญใจทุกฤดูกาล", "ตำนานแห่งปีปฏิทิน"]],
+  ["book", "📖", "world", "", "บันทึกลงสมุดสะสม", "รายการ", [10, 25, 45, 70], ["นักจดบันทึก", "นักสะสมตัวยง", "ผู้รอบรู้เมืองร้าง", "สารานุกรมเดินได้"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
   ["zwar", "⚔️", "world", "", "สะสมแต้มศึกชิงโซน", "แต้ม", [50, 300, 1000, 3000], ["ทหารแนวหน้า", "นักรบชิงโซน", "ผู้คุมสมรภูมิ", "ขุนศึกแห่งเมืองร้าง"]],
   ["wwin", "🚩", "world", "", "ฝั่งเราชนะศึกชิงโซนประจำสัปดาห์", "สัปดาห์", [1, 4, 12], ["ชัยชนะแรก", "ผู้ยึดโซนตัวยง", "ราชันศึกชิงโซน"]]
@@ -6812,7 +6821,7 @@ function siteAfter(found) {
   const h = state.siteHit; state.siteHit = null; if (!h || h.id !== found) return;
   const msg = `${h.s.type.icon} ${h.s.type.find}! คุณได้ ${ITEMS[found].icon} ${ITEMS[found].name}`;
   logLine(`✨ ${msg}`, "system"); toast(`${h.s.type.icon} ค้นพบ${h.s.type.name}!`);
-  achBump("site"); try { sfx("boss"); } catch { /* ข้าม */ }
+  achBump("site"); try { bookNote("s", h.s.type.id); } catch { /* ข้าม */ } try { sfx("boss"); } catch { /* ข้าม */ }
 }
 
 /* ---- ภารกิจเคียงข้าง: อยู่โซนนอก Safe Zone ร่วมกับเพื่อนฝั่งเดียวกันให้ครบเวลา (ต่อรอบ 2 ชม.) ---- */
@@ -6862,9 +6871,9 @@ function careerCheck() {
   const last = fxGet("career", ""), cur = c.k + c.L;
   if (last !== cur) { fxSet("career", cur); if (last) { toast(`🧭 เส้นทางอาชีพ: ${c.def.icon} ${c.title}`); logLine(`🧭 คุณก้าวสู่ ${c.def.icon} ${c.title} (${c.def.name} ขั้น ${c.L}) — ${c.def.tip(c.L, state.profile?.faction === "zombie")}`, "system"); } }
 }
-const careerWearSkip = (w) => { const c = careerNow(); return !!c && c.k === "hunter" && state.profile?.faction !== "zombie" && w.it.dur > 1 && Math.random() < c.L * 0.07; };
+const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
@@ -6872,23 +6881,26 @@ let fxMemo = { k: "", v: null };
 function fxMods(z) {
   const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0].join(",");
   if (fxMemo.k === k) return fxMemo.v;
-  const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0 }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
+  const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0, it: {} }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
   festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
   const c = careerNow();
   if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
   if (duoBuffLeft() > 0) m.a *= 1.1;
   if (typeof fxCampMods === "function") fxCampMods(m, z);
+  if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
+  if (typeof fxNpcMods === "function") fxNpcMods(m, z);
   fxMemo = { k, v: m }; return m;
 }
 function fxDrops(z, d) {
   const m = fxMods(z);
-  if (m.z === 1 && m.n === 1 && m.r === 1 && m.f === 1 && m.w === 1 && m.a === 1 && m.rm === 1 && m.sc === 1) return d;
+  const hasIt = Object.keys(m.it || {}).length > 0;
+  if (m.z === 1 && m.n === 1 && m.r === 1 && m.f === 1 && m.w === 1 && m.a === 1 && m.rm === 1 && m.sc === 1 && !hasIt) return d;
   const ws = d.filter((x) => x.id && x.id !== "zombie" && x.id !== "boss" && x.w > 0).map((x) => x.w).sort((a, b) => a - b), cut = ws.length ? ws[Math.floor(ws.length * 0.4)] : 0;
   return d.map((x) => {
     if (x.id === null) return m.n === 1 ? x : { ...x, w: x.w * m.n };
     if (x.id === "zombie") return m.z === 1 ? x : { ...x, w: x.w * m.z };
     if (x.id === "boss") return x;
-    let k = m.a; if (x.w <= cut) k *= m.r; if (FX_FOOD.has(x.id)) k *= m.f; if (x.id === "water") k *= m.w; if (x.id === "scrap") k *= m.sc; if (x.id === "rotten_meat") k *= m.rm;
+    let k = m.a; if (x.w <= cut) k *= m.r; if (FX_FOOD.has(x.id)) k *= m.f; if (x.id === "water") k *= m.w; if (x.id === "scrap") k *= m.sc; if (x.id === "rotten_meat") k *= m.rm; if (hasIt && m.it[x.id]) k *= m.it[x.id];
     return k === 1 ? x : { ...x, w: x.w * k };
   });
 }
@@ -6924,6 +6936,7 @@ function fxTick() {
     radioPush(`📻 [ข่าวลือ] ${x.type.icon} ได้ยินมาว่ามี${x.type.name}ซ่อนอยู่ที่ไหนสักแห่ง ใกล้ ๆ ${SITE_HINT[x.zone] || "ที่ลับตา"} — ใครไปค้นหาถูกที่อาจโชคดี (อีก ~${Math.max(1, Math.ceil((x.end - now) / 60000))} นาที)`, now, true);
   });
   try { fxTick2(now); } catch (e) { console.warn("fxTick2", e); }
+  try { fxTick3(now); } catch (e) { console.warn("fxTick3", e); }
   try { careerCheck(); fxRender(); if (state.zone) renderZoneDanger(state.zone); } catch { /* ข้าม */ }
 }
 // นับการค้นหาระหว่างเทศกาล (เรียกจากการค้นหาสำเร็จ)
@@ -6974,6 +6987,7 @@ function fxWorldRows(box) {
     b.append(mk("div", "muted", "อาชีพหลัก = สายที่แต้มสูงสุด ได้โบนัสเล็ก ๆ ตามขั้น (แต้มคำนวณจากตัวนับความสำเร็จเดิม)"));
   }, false);
   try { if (typeof fxWorldRows2 === "function") fxWorldRows2(box); } catch (e) { console.warn("fx rows2", e); }
+  try { if (typeof fxWorldRows3 === "function") fxWorldRows3(box); } catch (e) { console.warn("fx rows3", e); }
 }
 
 /* ---- ตลาด: ตัวกรอง • เรียง • ของที่ตามหา (เก็บในเครื่อง) ---- */
@@ -7210,7 +7224,7 @@ function baseUnits(rec, now = serverNow()) {
   if (!rec || !BASE_P[rec.k] || typeof rec.t !== "number") return 0;
   return Math.max(0, Math.min(BASE_CAP[rec.k], Math.floor((now - rec.t) / BASE_P[rec.k])));
 }
-const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); return n; };
+const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); try { n += benchDone(); } catch { /* ข้าม */ } return n; };
 const baseHm = (ms) => { const m = Math.max(1, Math.ceil(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`; };
 let baseLastTx = 0;
 function baseInit() {
@@ -7222,7 +7236,7 @@ function baseInit() {
 function baseBadge() { const b = $("btn-base"); if (!b) return; const n = baseOn() ? baseReady() : 0; b.textContent = n > 0 ? `🏠 ที่พัก (${n})` : "🏠 ที่พัก"; b.classList.toggle("hidden", !baseOn()); }
 function baseNotice() {   // เตือนเบา ๆ ครั้งละไม่เกินชั่วโมงละหน เมื่อมีผลผลิตรอเก็บ
   if (!baseOn() || !state.profile) return; const n = baseReady(), last = fxGet("base_note", 0);
-  if (n > 0 && serverNow() - last > 3600000) { fxSet("base_note", serverNow()); try { logLine(`🏠 ที่พักมีผลผลิตรอเก็บ ${n} ชิ้น — แวะที่ Safe Zone แล้วกดเก็บได้เลย`, "info"); } catch { /* ข้าม */ } }
+  if (n > 0 && serverNow() - last > 3600000) { fxSet("base_note", serverNow()); try { logLine(`🏠 ที่พักมีผลผลิต/งานรอรับ ${n} รายการ — แวะที่ Safe Zone แล้วกดรับได้เลย`, "info"); } catch { /* ข้าม */ } }
 }
 function baseAgain() { const m = $("base-modal"); if (!m || m.classList.contains("hidden")) return; renderBase(); }
 function openBase() {
@@ -7325,6 +7339,313 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
+  try { benchRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+}
+
+/* =========================================================
+   39) 📅 สรุปจบวัน • 🍂 ฤดูกาล 28 วัน • 📖 สมุดสะสม • 🤝 พรจากมิตรภาพ NPC — ไม่ต้องแก้ rules
+   - สรุปวัน: เทียบตัวนับความสำเร็จเดิม (ach/c) กับภาพถ่ายตอนเริ่มวัน เก็บในเครื่อง
+   - ฤดูกาล: คำนวณจากวันที่ (ครบ 28 วันเปลี่ยนธีม) เป้าส่วนตัว 3 ข้อ ครบแล้วได้เหรียญ (เก็บเป็นบิตในตัวนับ seab/sea → ข้ามเครื่องไม่นับซ้ำ)
+   - สมุดสะสม: ของ/สถานที่/เทศกาล/คลังลับที่เคยพบ (เก็บในเครื่อง) จำนวนรวมบันทึกในตัวนับ book
+   - พรจากมิตรภาพ: ระดับหัวใจของมิราและเคน (ระบบ NPC เดิม) ปลดโบนัสเล็ก ๆ
+   - ปรับได้จากแท็บ 🎛️: ds_on, sea_on, sea_scale, sea_str, npc_str
+   ========================================================= */
+/* ---------- ฤดูกาล ---------- */
+const SEA_LEN = 28, SEA_EPOCH = Math.floor(Date.UTC(2026, 8, 7) / 86400000);   // เริ่มนับจากจันทร์ 7 ก.ย. 2569 (ค.ศ. 2026)
+const SEA = [
+  { icon: "🌧️", name: "ฤดูฝนฉ่ำ", tip: "น้ำดื่มและมอสเจอง่ายขึ้น", say: "ฝนตกพรำทั้งเมือง น้ำและมอสงอกตามซอกตึก ออกค้นหาได้ของพวกนี้ง่ายขึ้น", m: { w: 1.3, it: { moss: 1.25 } },
+    goals: [["srch", 250, "ค้นหาของ 250 ครั้ง"], ["bcol", 30, "เก็บผลผลิตจากที่พัก 30 ชิ้น"], ["use", 40, "ใช้ไอเทม 40 ครั้ง"]] },
+  { icon: "🦠", name: "ฤดูโรคระบาด", tip: "ซอมบี้ชุกขึ้นเล็กน้อย แต่ยารักษาเจอง่ายขึ้น", say: "โรคระบาดรอบใหม่แพร่ในเมือง ซอมบี้เพิ่มขึ้น แต่ก็มีคลังยาที่คนทิ้งไว้ให้คุ้ยเจอมากกว่าปกติ", m: { z: 1.08, it: { bandage: 1.3, medkit: 1.3, antidote: 1.3, serum: 1.3 } },
+    goals: [["zwin", 40, "ชนะซอมบี้ 40 ครั้ง", "bite", 12, "กัดเหยื่อ 12 ครั้ง"], ["use", 60, "ใช้ไอเทม 60 ครั้ง"], ["craft", 25, "คราฟต์ของ 25 ชิ้น"]] },
+  { icon: "🌾", name: "ฤดูเก็บเสบียง", tip: "อาหารและเศษวัสดุเจอง่ายขึ้น", say: "ถึงเวลาสะสมเสบียงก่อนฤดูแล้ง ทั้งเมืองมีอาหารกับเศษวัสดุให้เก็บมากกว่าปกติ", m: { f: 1.2, sc: 1.1 },
+    goals: [["srch", 300, "ค้นหาของ 300 ครั้ง"], ["camp", 150, "สมทบโปรเจกต์ค่าย 150 แต้ม"], ["mkt", 15, "ซื้อ/ขายในตลาด 15 ครั้ง"]] },
+  { icon: "❄️", name: "ฤดูหนาวเหน็บ", tip: "เนื้อเน่าและของหายากเจอง่ายขึ้น", say: "ลมหนาวพัดเข้าเมือง ซากสัตว์แข็งตัวเก็บง่ายขึ้น และของหายากที่ถูกหิมะกลบก็โผล่มา", m: { rm: 1.2, r: 1.1 },
+    goals: [["zwin", 50, "ชนะซอมบี้ 50 ครั้ง", "bite", 15, "กัดเหยื่อ 15 ครั้ง"], ["zwar", 150, "สะสมแต้มศึกชิงโซน 150 แต้ม"], ["boss", 3, "ล้มมินิบอส 3 ครั้ง", "bite", 20, "กัดเหยื่อ 20 ครั้ง"]] }
+];
+const seaDay = (t = serverNow()) => coopDay(t) - SEA_EPOCH;
+const seaIdx = (t = serverNow()) => Math.max(0, Math.floor(seaDay(t) / SEA_LEN));
+const seaDayIn = (t = serverNow()) => Math.max(0, seaDay(t)) % SEA_LEN + 1;
+const seaDef = (i = seaIdx()) => SEA[i % SEA.length];
+const seaOn = () => T("sea_on", 1) === 1;
+function fxSeasonMods(m, z) {
+  if (!seaOn()) return; const s = Math.max(0, T("sea_str", 100)) / 100, d = seaDef().m; if (!s) return;
+  ["z", "n", "r", "f", "w", "a", "rm", "sc"].forEach((q) => { if (d[q] && !(z === "safe" && q === "z")) m[q] *= Math.pow(d[q], s); });
+  if (d.it) Object.entries(d.it).forEach(([id, v]) => { m.it[id] = (m.it[id] || 1) * Math.pow(v, s); });
+}
+function seaGoals() {
+  const zom = state.profile?.faction === "zombie", sc = Math.max(10, T("sea_scale", 100)) / 100;
+  return seaDef().goals.map((g) => zom && g[3] ? { k: g[3], n: Math.max(1, Math.round(g[4] * sc)), t: g[5] } : { k: g[0], n: Math.max(1, Math.round(g[1] * sc)), t: g[2] });
+}
+const seaBase = (s = seaIdx()) => fxGet("sea_b_" + s, null);
+function seaProg() {   // [{k,n,t,v,done}]
+  const c = state.ach?.c || {}, b = seaBase() || {};
+  return seaGoals().map((g) => { const v = Math.max(0, (c[g.k] || 0) - (b[g.k] || 0)); return { ...g, v, done: v >= g.n }; });
+}
+const popcnt = (x) => { let n = 0; while (x > 0) { n += x & 1; x = Math.floor(x / 2); } return n; };
+function seaTick(now) {
+  if (!seaOn() || !state.profile || !state.ach?.loaded) return;
+  const s = seaIdx(now), c = state.ach.c;
+  if (!seaBase(s)) { const o = {}; ["srch", "bcol", "use", "zwin", "bite", "craft", "camp", "mkt", "zwar", "boss"].forEach((k) => { o[k] = c[k] || 0; }); fxSet("sea_b_" + s, o); }
+  const d = seaDef(s), dayIn = seaDayIn(now);
+  if (!fxGet("sea_ann_" + s, 0)) { fxSet("sea_ann_" + s, 1); radioPush(`📻 [ฤดูกาลใหม่] ${d.icon} ${d.name} — ${d.say} (ผ่านไป ${dayIn}/${SEA_LEN} วัน)`, now, true); try { logLine(`${d.icon} ${d.name} — ${d.tip} • เป้าฤดูกาลดูได้ที่แท็บ 🌍`, "system"); } catch { /* ข้าม */ } }
+  if (dayIn >= SEA_LEN - 2 && !fxGet("sea_end_" + s, 0)) { fxSet("sea_end_" + s, 1); const left = SEA_LEN - dayIn + 1; radioPush(`📻 [ฤดูกาล] ${d.icon} ${d.name} เหลืออีก ${left} วัน — ใครยังทำเป้าฤดูกาลไม่ครบรีบเก็บเหรียญ`, now, true); }
+  const pr = seaProg();
+  pr.forEach((g, i) => { const k = `sea_g${i}_${s}`; if (g.done && !fxGet(k, 0)) { fxSet(k, 1); try { toast(`🍂 เป้าฤดูกาลสำเร็จ: ${g.t}`); logLine(`🍂 เป้าฤดูกาลสำเร็จ: ${g.t}`, "system"); } catch { /* ข้าม */ } } });
+  if (pr.every((g) => g.done) && !fxGet("sea_medal_" + s, 0)) {
+    fxSet("sea_medal_" + s, 1);
+    if (s < 26) { const mask = (state.ach.c.seab || 0) | (1 << s); achSet("seab", mask); achSet("sea", popcnt(mask)); } else achBump("sea");
+    try { toast(`🏅 ได้เหรียญ ${d.icon} ${d.name}!`); logLine(`🏅 คุณทำเป้าฤดูกาลครบ ได้เหรียญ ${d.icon} ${d.name}`, "system"); sfx("boss"); } catch { /* ข้าม */ }
+  }
+}
+
+/* ---------- สมุดสะสม ---------- */
+const bookSet = (k) => new Set(fxGet("book_" + k, []));
+function bookNote(k, id) {
+  if (!id) return; const s = bookSet(k); if (s.has(id)) return; s.add(id); fxSet("book_" + k, [...s]); state.bookDirty = 1;
+  try { toast(`📖 บันทึกลงสมุดสะสมแล้ว`); } catch { /* ข้าม */ }
+}
+const bookItems = () => Object.keys(ITEMS).filter((id) => !ITEMS[id].gmOnly && ITEMS[id].type !== "stat" && !(ITEMS[id].zombieOnly && state.profile?.faction !== "zombie"));
+function bookScan() {
+  if (!state.profile) return;
+  const it = bookSet("i"); let ch = false;
+  Object.values(state.inv || {}).forEach((x) => { if (x && ITEMS[x.id] && !ITEMS[x.id].gmOnly && ITEMS[x.id].type !== "stat" && !it.has(x.id)) { it.add(x.id); ch = true; } });
+  if (ch) fxSet("book_i", [...it]);
+  const z = bookSet("z"); if (state.zone && ZONES[state.zone] && !z.has(state.zone)) { z.add(state.zone); fxSet("book_z", [...z]); ch = true; }
+  const f = new Set(fxGet("festseen", [])); const bf = bookSet("f"); f.forEach((x) => { if (!bf.has(x)) { bf.add(x); ch = true; } }); if (ch) fxSet("book_f", [...bf]);
+  if (state.ach?.loaded) { const n = bookCount(); if (n > 0) achSet("book", n); }
+}
+function bookCount() {
+  const it = bookSet("i"), ids = new Set(bookItems()); let n = 0; it.forEach((x) => { if (ids.has(x)) n++; });
+  return n + [...bookSet("z")].filter((z) => ZONES[z]).length + [...bookSet("f")].filter((f) => FEST.some((x) => x.id === f)).length + [...bookSet("s")].filter((s) => SITE_TYPES.some((x) => x.id === s)).length;
+}
+function bookRows(b) {
+  const sec = (title, all, known, label) => {
+    const r = mk("div", "world-row"), ks = new Set(known), n = all.filter((x) => ks.has(x[0])).length;
+    r.append(mk("div", "", `${title} ${n}/${all.length}`), worldBar(all.length ? n / all.length : 0, `${Math.round(100 * n / Math.max(1, all.length))}%`));
+    const g = mk("div"); g.style.cssText = "display:flex;flex-wrap:wrap;gap:4px;margin-top:4px";
+    all.forEach(([id, icon, name]) => { const c = mk("span", "fx-chip", ks.has(id) ? icon : "❓"); c.title = ks.has(id) ? name : "ยังไม่เคยพบ"; c.style.opacity = ks.has(id) ? "1" : "0.45"; g.append(c); });
+    r.append(g); b.append(r);
+  };
+  sec("🎒 ของที่เคยพบ", bookItems().map((id) => [id, ITEMS[id].icon, ITEMS[id].name]), [...bookSet("i")]);
+  sec("🗺️ สถานที่ที่เคยไป", Object.keys(ZONES).map((z) => [z, ZONES[z].icon, ZONES[z].name]), [...bookSet("z")]);
+  sec("🎆 เทศกาลที่เคยร่วม", FEST.map((f) => [f.id, f.icon, f.name]), [...bookSet("f")]);
+  sec("🛩️ คลังลับที่เคยค้นพบ", SITE_TYPES.map((s) => [s.id, s.icon, s.name]), [...bookSet("s")]);
+  b.append(mk("div", "muted", "สมุดเก็บในเครื่องนี้ (ถ้าเปลี่ยนเครื่อง ของที่เคยเก็บแล้วจะเติมกลับมาเมื่อเจออีก) • ยอดรวมบันทึกในความสำเร็จ"));
+}
+
+/* ---------- พรจากมิตรภาพ NPC (มิรา/เคน — ระดับหัวใจจากระบบ NPC เดิม) ---------- */
+const NPC_PERK = {
+  mira: [{ h: 2, eff: { cut: 0.03 }, t: "มือนิ่ง: เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง 3%" }, { h: 4, eff: { it: { moss: 1.15, bandage: 1.15 } }, t: "สายตาหมอ: มอสและผ้าพันแผลเจอมากขึ้น 15%" }, { h: 5, eff: { cut: 0.03 }, t: "ใจเย็นยามคับขัน: ทนสถานะดีขึ้นอีก 3%" }],
+  kane: [{ h: 2, eff: { sc: 1.05 }, t: "รู้แหล่งของ: เศษวัสดุเจอมากขึ้น 5%" }, { h: 4, eff: { wear: 0.05 }, t: "ดูแลอาวุธเป็น: 5% ที่ตีแล้วไม่เสียความทน" }, { h: 5, eff: { z: 0.97 }, t: "รู้ทางหลบ: เจอซอมบี้ตอนค้นหาน้อยลง 3% (ซอมบี้: ได้เนื้อเน่ามากขึ้น 5%)" }]
+};
+function npcPerks() {
+  const out = [], s = Math.max(0, T("npc_str", 100)) / 100;
+  if (!s || !state.npc) return out;
+  NPC_IDS.forEach((id) => { const h = npcHearts(id); (NPC_PERK[id] || []).forEach((p) => { if (h >= p.h) out.push({ id, ...p }); }); });
+  return out;
+}
+function fxNpcMods(m, z) {
+  const s = Math.max(0, T("npc_str", 100)) / 100, zom = state.profile?.faction === "zombie";
+  npcPerks().forEach((p) => {
+    Object.entries(p.eff).forEach(([q, v]) => {
+      if (q === "cut" || q === "wear") return;
+      if (q === "it") { Object.entries(v).forEach(([id, x]) => { m.it[id] = (m.it[id] || 1) * Math.pow(x, s); }); return; }
+      if (q === "z" && zom) { m.rm *= Math.pow(1.05, s); return; }
+      if (q === "z" && z === "safe") return;
+      m[q] *= Math.pow(v, s);
+    });
+  });
+}
+const npcCut = () => { const s = Math.max(0, T("npc_str", 100)) / 100; return npcPerks().reduce((a, p) => a + (p.eff.cut || 0) * s, 0); };
+const npcWear = () => { const s = Math.max(0, T("npc_str", 100)) / 100; return npcPerks().reduce((a, p) => a + (p.eff.wear || 0) * s, 0); };
+
+/* ---------- สรุปจบวัน ---------- */
+const DS_KEYS = [["srch", "🔍", "ค้นหา", "ครั้ง"], ["found", "🎒", "ของที่เจอ", "ชิ้น"], ["zwin", "⚔️", "ชนะซอมบี้", "ครั้ง"], ["bite", "🦷", "กัดเหยื่อ", "ครั้ง"], ["boss", "👹", "ล้มมินิบอส", "ครั้ง"], ["use", "🧪", "ใช้ไอเทม", "ครั้ง"], ["craft", "🔧", "คราฟต์", "ชิ้น"], ["bcol", "🏠", "เก็บผลผลิตที่พัก", "ชิ้น"], ["camp", "🏕️", "สมทบโปรเจกต์", "แต้ม"], ["zwar", "🚩", "แต้มศึกชิงโซน", "แต้ม"], ["mkt", "🏪", "ซื้อ/ขายในตลาด", "ครั้ง"]];
+const dsSnap = () => { const c = state.ach?.c || {}, o = {}; DS_KEYS.forEach(([k]) => { o[k] = c[k] || 0; }); return o; };
+const dsDelta = (b) => { const c = state.ach?.c || {}, d = {}; DS_KEYS.forEach(([k]) => { const x = (c[k] || 0) - ((b || {})[k] || 0); if (x > 0) d[k] = x; }); return d; };
+function dsHints() {
+  const h = [], now = serverNow();
+  try { const n = typeof baseReady === "function" ? baseReady() : 0; if (n > 0) h.push(`🏠 ที่พักมีผลผลิต/งานรอรับ ${n} รายการ`); } catch { /* ข้าม */ }
+  try { NPC_IDS.forEach((id) => { if (npcRec(id).d !== npcToday()) h.push(`${NPC_META[id].icon} วันนี้ยังไม่ได้คุยกับ${NPC_META[id].name} (${npcHeartStr(npcHearts(id))})`); }); } catch { /* ข้าม */ }
+  try { const a = festActive(now); if (a.length) h.push(`${a[0].icon} ตอนนี้: ${a[0].name} — ${a[0].tip}`); else { const nx = FEST.map((f) => [f, festNext(f, now)]).filter(([, d]) => d !== null && d > 0).sort((x, y) => x[1] - y[1])[0]; if (nx && nx[1] <= 7) h.push(`${nx[0].icon} อีก ~${nx[1]} วัน: ${nx[0].name}`); } } catch { /* ข้าม */ }
+  try { const fac = coopFac(), P = PROJ[fac].map((p) => [p, projCost(p) - projSum(p.id)]).filter(([, r]) => r > 0).sort((a, b) => a[1] - b[1])[0]; if (P) h.push(`${P[0].icon} ${P[0].name} ขาดอีก ${P[1]} แต้มจะเสร็จ`); } catch { /* ข้าม */ }
+  try { if (seaOn()) { const pr = seaProg(), left = pr.filter((g) => !g.done); h.push(left.length ? `🍂 เป้าฤดูกาลเหลือ ${left.length}/3 ข้อ (ฤดูกาลเหลืออีก ${SEA_LEN - seaDayIn()} วัน)` : "🏅 เป้าฤดูกาลนี้ครบแล้ว"); } } catch { /* ข้าม */ }
+  try { const c = careerOf(); if (c && c.L < 4) h.push(`${c.def.icon} ${c.title}: อีก ${Math.max(1, CAREER_LV[c.L] - c.score)} แต้มถึงขั้นถัดไป`); } catch { /* ข้าม */ }
+  return h;
+}
+function dsTick() {
+  if (T("ds_on", 1) !== 1 || !state.profile || !state.ach?.loaded) return;
+  const day = coopDay(), cur = fxGet("ds_cur", null);
+  if (!cur || typeof cur.day !== "number") { fxSet("ds_cur", { day, b: dsSnap() }); return; }
+  if (cur.day !== day) {
+    fxSet("ds_last", { day: cur.day, span: Math.max(1, day - cur.day), d: dsDelta(cur.b) }); fxSet("ds_cur", { day, b: dsSnap() });
+    if (state.dsSeen) { try { toast("📅 สรุปวันพร้อมแล้ว — กดปุ่ม 📅 ดูได้"); } catch { /* ข้าม */ } }
+  }
+  if (!state.dsSeen) {
+    state.dsSeen = 1; const last = fxGet("ds_last", null);
+    if (last && fxGet("ds_shown", 0) !== day) { fxSet("ds_shown", day); setTimeout(() => { try { dsOpen(); } catch { /* ข้าม */ } }, 5000); }
+  }
+}
+function dsRender() {
+  const body = $("ds-body"); if (!body) return; body.innerHTML = "";
+  const list = (title, d, note) => {
+    const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:4px"; c.append(mk("b", "", title)); if (note) c.append(mk("span", "muted", note));
+    const rows = DS_KEYS.filter(([k]) => d[k] > 0); if (!rows.length) c.append(mk("span", "muted", "ยังไม่มีความเคลื่อนไหว"));
+    rows.forEach(([k, ic, nm, un]) => c.append(mk("div", "", `${ic} ${nm}: ${d[k]} ${un}`))); body.append(c);
+  };
+  const last = fxGet("ds_last", null), cur = fxGet("ds_cur", null);
+  if (last) list(last.span > 1 ? `📅 ${last.span} วันที่ผ่านมา` : "📅 เมื่อวาน", last.d || {});
+  list("☀️ วันนี้จนถึงตอนนี้", dsDelta(cur?.b));
+  const hs = dsHints(), c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:4px"; c.append(mk("b", "", "📌 วันนี้/พรุ่งนี้มีอะไรรอ"));
+  if (!hs.length) c.append(mk("span", "muted", "ไม่มีอะไรค้างอยู่ — ออกไปสำรวจได้เลย")); hs.forEach((t) => c.append(mk("div", "", t))); body.append(c);
+}
+function dsOpen() {
+  if (!$("ds-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "ds-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "📅 สรุปวัน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "ds-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  dsRender(); $("ds-modal").classList.remove("hidden");
+}
+
+/* ---------- ตัวประสาน: tick + แผงโลก ---------- */
+function fxTick3(now) {
+  try { seaTick(now); } catch (e) { console.warn("seaTick", e); }
+  try { bookScan(); } catch (e) { console.warn("bookScan", e); }
+  try { dsTick(); } catch (e) { console.warn("dsTick", e); }
+}
+function fxWorldRows3(box) {
+  fxSection(box, "ds", "📅 สรุปวัน", (b) => {
+    const hs = dsHints(); hs.slice(0, 6).forEach((t) => b.append(mk("div", "", t))); if (!hs.length) b.append(mk("div", "muted", "ไม่มีอะไรค้างอยู่"));
+    b.append(btn("📅 ดูสรุปเต็ม", dsOpen, "btn ghost mini"));
+  }, true);
+  if (seaOn()) fxSection(box, "sea", `🍂 ฤดูกาล: ${seaDef().icon} ${seaDef().name}`, (b) => {
+    const d = seaDef(), dayIn = seaDayIn(), r = mk("div", "world-row evt-live");
+    r.append(mk("div", "", `${d.icon} ${d.name} — วันที่ ${dayIn}/${SEA_LEN}`), worldBar(dayIn / SEA_LEN, `เหลืออีก ${SEA_LEN - dayIn + 1} วัน`), mk("div", "muted", d.tip)); b.append(r);
+    seaProg().forEach((g) => { const x = mk("div", "world-row" + (g.done ? " evt-live" : "")); x.append(mk("div", "", `${g.done ? "✅ " : ""}${g.t}`), worldBar(Math.min(1, g.v / g.n), `${Math.min(g.v, g.n)}/${g.n}`)); b.append(x); });
+    const mask = state.ach?.c?.seab || 0; b.append(mk("div", "muted", `เป้าส่วนตัวครบทั้ง 3 ข้อ = เหรียญประจำฤดู • เหรียญที่สะสม ${popcnt(mask)} เหรียญ`));
+  }, true);
+  fxSection(box, "book", `📖 สมุดสะสม (${bookCount()})`, (b) => bookRows(b), false);
+  fxSection(box, "perk", "🤝 พรจากมิตรภาพ", (b) => {
+    NPC_IDS.forEach((id) => {
+      const h = npcHearts(id), r = mk("div", "world-row"); r.append(mk("div", "", `${NPC_META[id].icon} ${NPC_META[id].name} ${npcHeartStr(h)}`));
+      (NPC_PERK[id] || []).forEach((p) => r.append(mk("div", h >= p.h ? "" : "muted", `${h >= p.h ? "✅" : "🔒 ❤️" + p.h} ${p.t}`))); b.append(r);
+    });
+    b.append(mk("div", "muted", "คุยและให้ของขวัญประจำวันในค่ายเพื่อเพิ่มหัวใจ"));
+  }, false);
+}
+
+/* =========================================================
+   40) 🛠️ โต๊ะงานตั้งเวลา • 🪟 ของตกแต่งที่พัก (ต้องใช้ rules v33: base/{uid}/j1,j2 และ base/{uid}/deco)
+   - โต๊ะงาน: ใส่วัตถุดิบแล้วรอเวลา (หักของทันทีตอนเริ่ม) เสร็จแล้วกลับมารับ — สูตรตายตัวใน rules (แลกของแบบเสียเปรียบเล็กน้อย/เท่าทุน)
+     ช่อง 1 ฟรี ช่อง 2 ปลดล็อกที่ที่พักขั้น 2
+   - ของตกแต่ง: จ่ายของเพื่อปลดล็อกถาวร (มนุษย์: เศษวัสดุ • ซอมบี้: เนื้อเน่า) ไม่มีผลต่อสมดุลเกม คนอื่นเห็นได้ในหน้า "ประวัติ" ของเรา
+   ========================================================= */
+const BENCH = {
+  1: { in: ["water", 2], out: ["water_jug", 1], ms: 7200000, name: "กลั่นน้ำสะอาด" },
+  2: { in: ["canned_food", 2], out: ["soup", 2], ms: 10800000, name: "ตุ๋นซุปอุ่น" },
+  3: { in: ["moss", 3], out: ["bandage", 2], ms: 10800000, name: "หมักมอสทำผ้าพันแผล" },
+  4: { in: ["bandage", 3], out: ["medkit", 1], ms: 14400000, name: "ประกอบชุดปฐมพยาบาล" },
+  5: { in: ["canned_food", 2], out: ["army_meal", 1], ms: 14400000, name: "อุ่นอาหารทหาร" },
+  6: { in: ["rotten_meat", 4], out: ["bandage", 1], ms: 10800000, name: "สกัดเนื้อเน่า", z: 1 }
+};
+const DECO = [
+  ["d0", "🪴", "กระถางต้นไม้", 10], ["d1", "🕯️", "เทียนไข", 10], ["d2", "🧸", "ตุ๊กตาผ้า", 15], ["d3", "📻", "วิทยุเก่า", 15],
+  ["d4", "🖼️", "รูปถ่ายครอบครัว", 20], ["d5", "🪑", "เก้าอี้โยก", 25], ["d6", "🏺", "แจกันโบราณ", 30], ["d7", "🎸", "กีตาร์เก่า", 40],
+  ["d8", "🔭", "กล้องโทรทรรศน์", 50], ["d9", "🏆", "ถ้วยรางวัล", 60], ["d10", "🛋️", "โซฟานุ่ม", 80], ["d11", "🌌", "โคมไฟดวงดาว", 100]
+];
+const benchSlots = () => (baseLv() >= 2 ? 2 : 1);
+const benchLeft = (rec, now = serverNow()) => (rec && BENCH[rec.r] && typeof rec.t === "number" ? rec.t + BENCH[rec.r].ms - now : 1e15);
+const benchDone = () => { let n = 0; for (let j = 1; j <= benchSlots(); j++) { const r = state.base?.["j" + j]; if (r && benchLeft(r) <= 0) n++; } return n; };
+const benchHave = async (id) => (await get(ref(db, `inventory/${state.uid}/${id}`))).val();
+async function benchStart(j, r) {
+  const R = BENCH[r]; if (!R || state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะใช้โต๊ะงานได้"); state.busy = true;
+  try {
+    const have = await benchHave(R.in[0]);
+    if (!have || have.id !== R.in[0] || have.qty < R.in[1]) { toast(`ต้องมี ${ITEMS[R.in[0]].icon} ${ITEMS[R.in[0]].name} ×${R.in[1]}`); return; }
+    await update(ref(db), { [`base/${state.uid}/j${j}`]: { r: String(r), t: serverTimestamp() }, ...(have.qty === R.in[1] ? { [`inventory/${state.uid}/${R.in[0]}`]: null } : { [`inventory/${state.uid}/${R.in[0]}/qty`]: have.qty - R.in[1] }) });
+    toast(`🛠️ เริ่ม${R.name}`);
+  } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+async function benchCancel(j) {
+  const rec = state.base?.["j" + j]; if (!rec || state.busy || !baseCan()) return;
+  if (!confirm("ยกเลิกงานนี้? วัตถุดิบที่ใส่ไปแล้วจะไม่คืน")) return; state.busy = true;
+  try { await update(ref(db), { [`base/${state.uid}/j${j}`]: null }); toast("ยกเลิกงานแล้ว"); } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+async function benchCollectOne(j, retry = true) {
+  const rec = state.base?.["j" + j], R = rec && BENCH[rec.r]; if (!R || benchLeft(rec) > -1500) return false;
+  const [oid, q] = R.out, have = await benchHave(oid);
+  const up = { [`baseTx/${state.uid}`]: { ts: serverTimestamp(), s: "j" + j }, [`base/${state.uid}/j${j}`]: null };
+  if (have && have.id === oid && have.qty > 0) up[`inventory/${state.uid}/${oid}/qty`] = have.qty + q; else up[`inventory/${state.uid}/${oid}`] = { id: oid, qty: q };
+  try { await update(ref(db), up); achBump("bcol", q); return true; }
+  catch (e) { if (retry && String(e?.code || e).includes("PERMISSION_DENIED")) { await new Promise((r) => setTimeout(r, 2500)); return benchCollectOne(j, false); } throw e; }
+}
+async function benchCollect(j) {
+  if (state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะรับงานได้"); state.busy = true;
+  try {
+    const wait = BASE_MIN_GAP - (Date.now() - baseLastTx); if (wait > 0) await new Promise((r) => setTimeout(r, wait)); baseLastTx = Date.now();
+    const rec = state.base?.["j" + j], R = rec && BENCH[rec.r];
+    if (await benchCollectOne(j)) { toast(`🛠️ ได้ ${ITEMS[R.out[0]].icon} ${ITEMS[R.out[0]].name} ×${R.out[1]}`); logLine(`🛠️ ${R.name}เสร็จ ได้ ${ITEMS[R.out[0]].name} ×${R.out[1]}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }
+    else toast("งานยังไม่เสร็จ");
+  } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+function benchRows(body) {
+  const can = baseCan(), zom = state.profile?.faction === "zombie", slots = benchSlots();
+  const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
+  c.append(mk("b", "", `🛠️ โต๊ะงาน (${slots}/2 ช่อง)`), mk("span", "muted", "ใส่วัตถุดิบแล้วรอ เสร็จแล้วกลับมารับได้ แม้ไม่ได้ออนไลน์ • ช่อง 2 ปลดล็อกที่ที่พักขั้น 2"));
+  for (let j = 1; j <= 2; j++) {
+    const r = mk("div"); r.style.cssText = "border-top:1px solid var(--line);padding-top:6px;display:grid;gap:6px";
+    if (j > slots) { r.append(mk("span", "muted", `🔒 ช่องงาน ${j} — อัปเกรดที่พักถึงขั้น 2`)); c.append(r); continue; }
+    const rec = state.base?.["j" + j];
+    if (rec && BENCH[rec.r]) {
+      const R = BENCH[rec.r], left = benchLeft(rec);
+      r.append(mk("b", "", `${ITEMS[R.in[0]].icon}×${R.in[1]} → ${ITEMS[R.out[0]].icon}×${R.out[1]} ${R.name}`));
+      r.append(worldBar(left <= 0 ? 1 : 1 - left / R.ms, left <= 0 ? "เสร็จแล้ว" : `อีก ~${baseHm(left)}`));
+      const row = mk("div"); row.style.cssText = "display:flex;gap:6px";
+      const cb = btn(`รับ ${ITEMS[R.out[0]].icon}×${R.out[1]}`, () => benchCollect(j), "btn primary mini"); cb.disabled = !can || left > 0;
+      const xb = btn("ยกเลิก", () => benchCancel(j), "btn ghost mini"); xb.disabled = !can; row.append(cb, xb); r.append(row);
+    } else {
+      r.append(mk("b", "", `ช่องงาน ${j} (ว่าง)`));
+      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap";
+      Object.entries(BENCH).filter(([, R]) => !R.z || zom).forEach(([id, R]) => {
+        const have = state.inv[R.in[0]]?.id === R.in[0] ? state.inv[R.in[0]].qty : 0;
+        const b = btn(`${ITEMS[R.in[0]].icon}×${R.in[1]} → ${ITEMS[R.out[0]].icon}×${R.out[1]}`, () => benchStart(j, +id), "btn ghost mini");
+        b.disabled = !can || have < R.in[1]; b.title = `${R.name} • ใช้เวลา ~${baseHm(R.ms)} • คุณมี ${ITEMS[R.in[0]].name} ${have}`; row.append(b);
+      });
+      r.append(row, mk("span", "muted", "เลื่อนเมาส์/กดค้างที่ปุ่มดูชื่อสูตรและเวลา"));
+    }
+    c.append(r);
+  }
+  body.append(c);
+}
+/* ---- ของตกแต่ง ---- */
+const decoOwned = () => state.base?.deco || {};
+async function decoBuy(d) {
+  const row = DECO.find((x) => x[0] === d), it = baseUpItem(); if (!row || decoOwned()[d] || state.busy || !baseCan()) return toast("ต้องอยู่ที่ Safe Zone ถึงจะซื้อของตกแต่งได้");
+  const cost = row[3]; state.busy = true;
+  try {
+    const have = await benchHave(it);
+    if (!have || have.id !== it || have.qty < cost) { toast(`ต้องมี ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost}`); return; }
+    await update(ref(db), { [`base/${state.uid}/deco/${d}`]: true, ...(have.qty === cost ? { [`inventory/${state.uid}/${it}`]: null } : { [`inventory/${state.uid}/${it}/qty`]: have.qty - cost }) });
+    toast(`${row[1]} ตกแต่งที่พักด้วย${row[2]}แล้ว`); try { sfx("boss"); } catch { /* ข้าม */ }
+  } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
+}
+function decoRows(body) {
+  const own = decoOwned(), can = baseCan(), it = baseUpItem(), have = state.inv[it]?.id === it ? state.inv[it].qty : 0, n = DECO.filter((x) => own[x[0]]).length;
+  const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+  c.append(mk("b", "", `🪟 ของตกแต่งที่พัก (${n}/${DECO.length})`));
+  const shelf = mk("div"); shelf.style.cssText = "font-size:26px;letter-spacing:4px;min-height:34px"; shelf.textContent = DECO.filter((x) => own[x[0]]).map((x) => x[1]).join(" ") || "ยังว่างเปล่า…"; c.append(shelf);
+  c.append(mk("span", "muted", `ซื้อด้วย ${ITEMS[it].icon} ${ITEMS[it].name} (คุณมี ${have}) • ไม่มีผลต่อการเล่น แต่คนอื่นเห็นในหน้าประวัติของคุณ`));
+  DECO.filter((x) => !own[x[0]]).forEach(([d, ic, nm, cost]) => {
+    const r = mk("div"); r.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px";
+    r.append(mk("span", have >= cost ? "" : "muted", `${ic} ${nm}`)); const b = btn(`${ITEMS[it].icon}×${cost}`, () => decoBuy(d), "btn ghost mini"); b.disabled = !can || have < cost; r.append(b); c.append(r);
+  });
+  body.append(c);
+}
+async function baseDecoLine(uid) {
+  try { const v = (await get(ref(db, `base/${uid}/deco`))).val() || {}; const t = DECO.filter((x) => v[x[0]] === true).map((x) => x[1]).join(" "); return t ? `🏠 ของตกแต่งที่พัก: ${t}` : ""; } catch { return ""; }
 }
 
 /* =========================================================
@@ -7626,6 +7947,12 @@ function tuneDefs() {
     rows.push(["zw_str", "ความแรงของโบนัสโซนที่ยึดได้ (% • 100 = เดิม, 0 = แค่ธง)", 100, 0, 200, g]);
     rows.push(["zw_min", "แต้มรวมขั้นต่ำของโซนในสัปดาห์นั้นถึงจะนับว่ามีผู้ยึด", 30, 1, 5000, g]); }
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
+  { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
+    rows.push(["ds_on", "สรุปจบวัน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["sea_on", "ฤดูกาล 28 วัน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
+    rows.push(["sea_scale", "ขนาดเป้าส่วนตัวของฤดูกาล (% • 100 = เดิม, 50 = ง่ายขึ้นครึ่งหนึ่ง)", 100, 10, 500, g]);
+    rows.push(["sea_str", "ความแรงของโบนัสฤดูกาล (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, g]);
+    rows.push(["npc_str", "ความแรงของพรจากมิตรภาพ NPC (% • 100 = เดิม, 0 = ปิด)", 100, 0, 200, g]); }
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
