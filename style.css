@@ -770,3 +770,7 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 /* ---- เหตุการณ์ใหญ่ / ค่าหัว ---- */
 .world-row.evt-live{border-left:3px solid #ffc247;padding-left:8px;background:linear-gradient(90deg,#ffc24714,transparent)}
 .bty-btn{white-space:nowrap}
+
+/* ---- 🎛️ ปรับตัวเลข ---- */
+.tune-row .tune-ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}
+.tune-row input{width:92px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#3a3a3a);background:#0d0f13;color:inherit;font-size:15px}

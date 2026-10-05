@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-04.1928";
+const APP_VERSION = "2026-10-05.0742";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4023,6 +4023,7 @@ function gachaRefresh() {
 async function gachaPull() {
   const p = state.profile, fac = p?.faction, cost = GACHA_COST[fac];
   if (!cost || state.gaBusy || state.gaTicket || !mktGuard()) return;
+  { const cap = Math.round(T("gacha_cap", 0)); if (cap > 0 && gachaToday() >= cap) return toast(`วันนี้หมุนครบ ${cap} ครั้งแล้ว พรุ่งนี้ค่อยมาใหม่`); }
   const keys = Object.keys(state.gaMeta || {});
   if (!keys.length) return toast("ตู้กาชาว่างแล้ว รอแอดมินเติมของ");
   if (mktHave(cost.id) < cost.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(cost.id)} ×${cost.qty}`);
@@ -4032,7 +4033,7 @@ async function gachaPull() {
   state.gaBusy = true;
   try { await update(ref(db), u); }
   catch (e) { state.gaBusy = false; return toast(gachaIsPerm(e) ? "หมุนไม่สำเร็จ — อาจมีคนหมุนช่องเดียวกันก่อน ลองอีกครั้ง (ของยังไม่ถูกหัก)" : "ทำรายการไม่สำเร็จ"); }
-  state.gaBusy = false;
+  state.gaBusy = false; gachaTodayAdd();
   await gachaClaim({ f: fac, slot });
 }
 // รับของตามตั๋ว: เติมของเข้ากระเป๋า + ลบตั๋ว + ลบช่องออกจากกอง ในคำสั่งเดียว (rules บังคับให้ของตรงกับช่องและจำนวนไม่เกิน)
@@ -4162,6 +4163,7 @@ function gachaRender(body, card, row) {
     r.append(b);
   }
   box.append(r);
+  { const cap = Math.round(T("gacha_cap", 0)); if (cap > 0) box.append(mk("span", "muted", `โควตาวันนี้: หมุนแล้ว ${gachaToday()}/${cap} ครั้ง`)); }
   if (state.gaLast) box.append(mk("span", "", `ครั้งล่าสุดได้: ${mktLabel(state.gaLast.id)} ×${state.gaLast.qty}`));
   if (isStaff()) gachaAdminPanel(box, row);
   body.append(box);
@@ -4921,7 +4923,7 @@ function hubTab(tab) {
   const m = $("hub-modal"); if (!m) return; m.dataset.tab = tab;
   m.querySelectorAll(".hub-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   const box = $("hub-body"); box.textContent = "";
-  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else if (tab === "fame") fameRender(box); else hubJournal(box);
+  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else if (tab === "fame") fameRender(box); else if (tab === "econ" && state.profile?.role === "owner") econRender(box); else if (tab === "tune" && state.profile?.role === "owner") tuneRender(box); else hubJournal(box);
 }
 function openHub(tab = "day") {
   let m = $("hub-modal");
@@ -4929,7 +4931,7 @@ function openHub(tab = "day") {
     m = mk("div", "modal hidden"); m.id = "hub-modal"; m.setAttribute("role", "dialog");
     const bx = mk("div", "modal-box"); bx.style.maxWidth = "440px";
     const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • ความสำเร็จ • โลก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["fame", "🏆"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
+    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["fame", "🏆"], ["log", "บันทึก"], ...(state.profile?.role === "owner" ? [["econ", "📈"], ["tune", "🎛️"]] : [])].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
     const body = mk("div", "hub-body"); body.id = "hub-body";
     bx.append(hd, tabs, body); m.append(bx); document.body.append(m);
     m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
@@ -5835,7 +5837,7 @@ const ACH_FAM = [
 ];
 const ACH = [];
 ACH_FAM.forEach(([k, ic, cat, f, verb, unit, ths, names]) => ths.forEach((n, i) => ACH.push({
-  id: k + (i + 1), k, ic, cat, f, n, name: names[i], desc: `${verb} ${n.toLocaleString("en-US")} ${unit}`,
+  id: k + (i + 1), k, ic, cat, f, n, n0: n, dv: verb, du: unit, name: names[i], desc: `${verb} ${n.toLocaleString("en-US")} ${unit}`,
   tier: i === ths.length - 1 && ths.length >= 3 ? 3 : Math.min(3, Math.floor(i * 4 / ths.length))
 })));
 // ความสำเร็จลับ: ซ่อนชื่อ/เงื่อนไขจนกว่าจะปลดล็อก
@@ -6057,7 +6059,11 @@ const GOALS = {
     { ev: "bite", n: 60, min: 2, t: "กัดเหยื่อรวมกัน 60 ครั้ง" }
   ]
 };
-const goalOf = (grp, wk = qpKey("weekly")) => { const L = GOALS[grp]; return { ...L[rdHash("goal", grp, wk) % L.length], grp, wk, key: GROUP_KEY[grp] + wk }; };
+const goalOf = (grp, wk = qpKey("weekly")) => {
+  const L = GOALS[grp], d = L[rdHash("goal", grp, wk) % L.length];
+  const n = Math.max(1, Math.round(T(`g_${grp}_${d.ev}`, d.n))), min = Math.max(0, Math.round(T(`gm_${grp}_${d.ev}`, d.min)));   // ปรับค่าได้จากแท็บ 🎛️ (tune/)
+  return { ...d, n, min, t: d.t.replace(String(d.n), String(n)), grp, wk, key: GROUP_KEY[grp] + wk };
+};
 const MIS = {
   human: [
     { ev: "search", z: 1, n: 15, t: (z) => `ค้นหาของที่${z}รวมกัน 15 ครั้ง` },
@@ -6073,7 +6079,8 @@ const MIS = {
 function misOf(fac, slot = coopSlot()) {
   const L = MIS[fac], d = L[rdHash("mis", fac, slot) % L.length], zl = Object.keys(ZONES).filter((z) => z !== "safe");
   const zone = d.z ? zl[rdHash("misz", fac, slot) % zl.length] : null;
-  return { ev: d.ev, n: d.n, zone, slot, fac, key: (fac === "human" ? "mh" : "mz") + slot, text: d.t(zone ? ZONES[zone].name : ""), end: slot * COOP_SLOT_MS + MIS_LIVE_MS };
+  const n = Math.max(1, Math.round(T(`m_${fac}_${d.ev}`, d.n)));
+  return { ev: d.ev, n, zone, slot, fac, key: (fac === "human" ? "mh" : "mz") + slot, text: d.t(zone ? ZONES[zone].name : "").replace(String(d.n), String(n)), end: slot * COOP_SLOT_MS + MIS_LIVE_MS };
 }
 const misLive = (t = serverNow()) => t - coopSlot(t) * COOP_SLOT_MS < MIS_LIVE_MS;
 const coopFac = () => (state.profile?.faction === "zombie" ? "zombie" : "human");
@@ -6173,7 +6180,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
+  tuneListen(); feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000);
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -6348,19 +6355,20 @@ function evtOf(day, i) {
   const dayStart = day * COOP_DAY_MS - COOP_TZ, zl = Object.keys(ZONES).filter((z) => z !== "safe");
   const start = dayStart + (8 + i * 5) * 3600000 + (rdHash("evs", day, i) % (4 * 3600000));
   const type = rdHash("evt", day, i) % 2 ? "air" : "horde", zone = zl[rdHash("evz", day, i) % zl.length];
-  return { key: `e${day}_${i}`, type, zone, start, end: start + EVT_DUR };
+  return { key: `e${day}_${i}`, type, zone, start, end: start + Math.max(5, Math.min(180, T("evt_dur", 30))) * 60000 };
 }
 function evtList(now = serverNow()) { const d = coopDay(now), out = []; for (const dd of [d - 1, d, d + 1]) for (let i = 0; i < EVT_PER_DAY; i++) out.push(evtOf(dd, i)); return out; }
-const evtActive = (now = serverNow()) => evtList(now).filter((e) => now >= e.start && now < e.end);
+const evtActive = (now = serverNow()) => (T("evt_on", 1) ? evtList(now).filter((e) => now >= e.start && now < e.end) : []);
 const evtHere = (zone = state.zone, now = serverNow()) => evtActive(now).find((e) => e.zone === zone) || null;
 function evtTable(t, isZ) {
   const e = evtHere(); if (!e) return t;
-  if (e.type === "air") return t.map((d) => d.id === null ? { ...d, w: d.w * 0.4 } : (d.id === "zombie" || d.id === "boss") ? d : d.w <= 5 ? { ...d, w: d.w * 2.2 } : { ...d, w: d.w * 1.3 });
-  return t.map((d) => isZ ? (d.id === "rotten_meat" ? { ...d, w: d.w * 2.5 } : d.id === null ? { ...d, w: d.w * 0.6 } : d) : (d.id === "zombie" ? { ...d, w: d.w * 2 } : d.id === null ? { ...d, w: d.w * 0.7 } : d));
+  const em = (f) => Math.pow(f, Math.max(0, T("evt_str", 100)) / 100);   // ความแรงเหตุการณ์ปรับได้ (100 = ค่าเดิม, 0 = ไม่มีผล)
+  if (e.type === "air") return t.map((d) => d.id === null ? { ...d, w: d.w * em(0.4) } : (d.id === "zombie" || d.id === "boss") ? d : d.w <= 5 ? { ...d, w: d.w * em(2.2) } : { ...d, w: d.w * em(1.3) });
+  return t.map((d) => isZ ? (d.id === "rotten_meat" ? { ...d, w: d.w * em(2.5) } : d.id === null ? { ...d, w: d.w * em(0.6) } : d) : (d.id === "zombie" ? { ...d, w: d.w * em(2) } : d.id === null ? { ...d, w: d.w * em(0.7) } : d));
 }
 function evtSearchHook() { const e = evtHere(); if (e) { achBump("evt", 1); stat("evt"); } }
 function evtTick() {
-  if (!state.profile || !state.ach?.loaded) return;
+  if (!state.profile || !state.ach?.loaded || !T("evt_on", 1)) return;
   const now = serverNow(), say = (k, text) => { if (LS.get(lsKey("evt_" + k), 0)) return; LS.set(lsKey("evt_" + k), 1); radioPush(`📻 [วิทยุฉุกเฉิน] ${text}`, now, true); };
   evtList(now).forEach((e) => {
     const T = EVT_TYPES[e.type], zn = ZONES[e.zone]?.name || e.zone;
@@ -6371,10 +6379,135 @@ function evtTick() {
 }
 function evtWorldRows(box) {
   box.append(mk("div", "hub-day", "⚡ เหตุการณ์ใหญ่"));
+  if (!T("evt_on", 1)) return box.append(mk("div", "muted", "เหตุการณ์ใหญ่ปิดอยู่ชั่วคราว"));
   const now = serverNow(), act = evtActive(now), nxt = evtList(now).filter((e) => e.start > now).sort((a, b) => a.start - b.start)[0];
   if (!act.length && !nxt) return;
   act.forEach((e) => { const T = EVT_TYPES[e.type], row = mk("div", "world-row evt-live"); row.append(mk("div", "", `${T.icon} ${T.name} • ${ZONES[e.zone]?.name || e.zone}`), mk("div", "muted", `${T.tip} • เหลือ ~${Math.max(1, Math.ceil((e.end - now) / 60000))} นาที${state.zone === e.zone ? " • คุณอยู่ที่นี่!" : ""}`)); box.append(row); });
   if (!act.length && nxt) { const m = Math.ceil((nxt.start - now) / 60000), row = mk("div", "world-row"); row.append(mk("div", "muted", `ยังไม่มีเหตุการณ์ตอนนี้ — รอบถัดไปในอีก ${m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`} (ไม่บอกล่วงหน้าว่าที่ไหน ฟังวิทยุไว้)`)); box.append(row); }
+}
+
+
+/* =========================================================
+   32) 🎛️ ปรับตัวเลขเกมสดๆ (tune/) + 📈 แดชบอร์ดเศรษฐกิจ (เจ้าของเท่านั้น)
+   tune/{key} = ตัวเลข (เจ้าของเขียนได้คนเดียว) — ทุกเครื่องฟังสด ไม่ต้องอัปโหลดโค้ดใหม่ ไม่มีค่า = ใช้ค่าตั้งต้นในโค้ด
+   ========================================================= */
+state.tune = state.tune || {};
+function T(k, d) { const v = state.tune?.[k]; return typeof v === "number" && Number.isFinite(v) ? v : d; }
+const gachaDay = () => qpDayKey(serverNow());
+function gachaToday() { const o = LS.get(lsKey("gcnt"), { d: 0, n: 0 }); return o.d === gachaDay() ? o.n : 0; }
+function gachaTodayAdd() { const d = gachaDay(), o = LS.get(lsKey("gcnt"), { d: 0, n: 0 }); LS.set(lsKey("gcnt"), { d, n: (o.d === d ? o.n : 0) + 1 }); }
+function achApplyTune() {
+  const m = Math.max(10, Math.min(1000, T("ach_mult", 100)));
+  ACH.forEach((a) => { a.n = Math.max(1, Math.round(a.n0 * m / 100)); a.desc = `${a.dv} ${a.n.toLocaleString("en-US")} ${a.du}`; });
+  if (state.ach?.loaded) achCheck(true);   // ลดเกณฑ์แล้วปลดล็อกย้อนหลังแบบเงียบๆ ไม่เด้งเตือน/ไม่ขึ้นวิทยุ
+}
+function tuneListen() {
+  if (state.tuneOn || !state.uid) return; state.tuneOn = true; let last = null;
+  onValue(ref(db, "tune"), (snap) => {
+    state.tune = snap.val() || {};
+    const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
+    try { worldRefresh(); const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "tune" && !(document.activeElement && document.activeElement.tagName === "INPUT")) hubTab("tune"); } catch { /* ข้าม */ }
+  }, (er) => console.warn("tune", er?.code || er));
+}
+function tuneDefs() {
+  const rows = [];
+  const gl = { all: "🌐 เป้าหมายทั้งเซิร์ฟเวอร์", human: "🧑 เป้าหมายฝั่งมนุษย์", zombie: "🧟 เป้าหมายฝั่งซอมบี้" };
+  Object.entries(GOALS).forEach(([grp, L]) => L.forEach((d) => {
+    rows.push([`g_${grp}_${d.ev}`, `${d.t}`, d.n, 1, 20000, gl[grp] + " (ยอดรวมที่ต้องทำ)"]);
+    rows.push([`gm_${grp}_${d.ev}`, `ขั้นต่ำที่ต้องทำเองถึงจะรับรางวัล: ${d.t}`, d.min, 0, 2000, gl[grp] + " (ขั้นต่ำรับรางวัล)"]);
+  }));
+  Object.entries(MIS).forEach(([fac, L]) => L.forEach((d) => rows.push([`m_${fac}_${d.ev}`, `${d.t("โซน")}`, d.n, 1, 2000, (fac === "human" ? "🧑" : "🧟") + " ภารกิจกลุ่มทุก 2 ชม. (ยอดรวม)"])));
+  rows.push(["evt_on", "เหตุการณ์ใหญ่ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "⚡ เหตุการณ์ใหญ่"], ["evt_dur", "ระยะเวลาเหตุการณ์ (นาที)", 30, 5, 180, "⚡ เหตุการณ์ใหญ่"], ["evt_str", "ความแรงของผล (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 300, "⚡ เหตุการณ์ใหญ่"]);
+  rows.push(["ach_mult", "ตัวคูณเกณฑ์ความสำเร็จทั้งหมด (% • 100 = เดิม, 50 = ง่ายขึ้นครึ่งหนึ่ง)", 100, 10, 1000, "🏅 ความสำเร็จ"]);
+  rows.push(["gacha_cap", "เพดานหมุนกาชาต่อคนต่อวัน (0 = ไม่จำกัด)", 0, 0, 500, "🎰 กาชา"]);
+  return rows;
+}
+function tuneRender(box) {
+  box.append(mk("div", "muted", "ปรับแล้วทุกเครื่องได้ค่าใหม่ทันที ไม่ต้องรีเฟรช • ช่องว่าง/รีเซ็ต = กลับไปใช้ค่าตั้งต้น • ผลของเป้าหมาย/ภารกิจที่เริ่มแล้วจะใช้ยอดใหม่ทันที"));
+  let grp = "";
+  const order = []; tuneDefs().forEach((r) => { if (!order.includes(r[5])) order.push(r[5]); });
+  tuneDefs().sort((a, b) => order.indexOf(a[5]) - order.indexOf(b[5])).forEach(([key, label, def, mn, mx, g]) => {
+    if (g !== grp) { grp = g; box.append(mk("div", "hub-day", g)); }
+    const tuned = typeof state.tune?.[key] === "number", cur = T(key, def);
+    const row = mk("div", "world-row tune-row"); row.append(mk("div", "", label));
+    const ctl = mk("div", "tune-ctl"), inp = mk("input"); inp.type = "number"; inp.min = mn; inp.max = mx; inp.step = 1; inp.value = cur; inp.inputMode = "numeric";
+    const info = mk("span", "muted", tuned ? `ปรับแล้ว (เดิม ${def})` : "ค่าตั้งต้น");
+    const save = btn("บันทึก", async () => {
+      const v = Number(inp.value);
+      if (!Number.isFinite(v) || v < mn || v > mx) return toast(`ใส่ค่า ${mn}–${mx}`);
+      if (v === def && !tuned) return toast("เท่าค่าตั้งต้นอยู่แล้ว");
+      try { await update(ref(db, "tune"), { [key]: Math.round(v) }); toast("บันทึกแล้ว"); } catch (e) { toast(errMsg(e)); }
+    }, "btn primary mini");
+    const rst = btn("↺", async () => { try { await update(ref(db, "tune"), { [key]: null }); toast("กลับไปค่าตั้งต้นแล้ว"); } catch (e) { toast(errMsg(e)); } }, "btn ghost mini"); rst.title = "รีเซ็ตเป็นค่าตั้งต้น"; rst.disabled = !tuned;
+    ctl.append(inp, save, rst, info); row.append(ctl); box.append(row);
+  });
+}
+
+/* ---- 📈 แดชบอร์ดเศรษฐกิจ ---- */
+const ECON_KEYS = [["srch", "🔍 ค้นหา"], ["found", "🎒 เจอของ"], ["gacha", "🎰 หมุนกาชา"], ["use", "🧪 ใช้ไอเทม"], ["craft", "🔧 คราฟต์"], ["mkt", "🏪 ตลาด"], ["zwin", "⚔️ ชนะซอมบี้"], ["scrap", "🔩 ซ่อมกำแพง (ชิ้น)"], ["smash", "🔨 ทุบกำแพง"], ["trav", "🧭 เดินทาง"], ["evt", "🪂 ร่วมเหตุการณ์"], ["bty", "💰 เก็บค่าหัว"]];
+async function econLoad(force) {
+  const C = state.econCache; if (!force && C && serverNow() - C.at < 60000) return C.data;
+  const [ach, stats, gh, gz] = await Promise.all([get(ref(db, "ach")), get(ref(db, "stats")), get(ref(db, "gachaMeta/human")), get(ref(db, "gachaMeta/zombie"))]);
+  const A = ach.val() || {}, uids = [...new Set([...Object.keys(A), ...Object.keys(stats.val() || {})])];
+  const people = await Promise.all(uids.map(async (uid) => {
+    const [u, inv] = await Promise.all([get(ref(db, "users/" + uid)).then((x) => x.val()).catch(() => null), get(ref(db, "inventory/" + uid)).then((x) => x.val()).catch(() => null)]);
+    return { uid, u, inv: inv || {}, a: A[uid] || null };
+  }));
+  let pool = { human: null, zombie: null };
+  try { for (const f of ["human", "zombie"]) { const p = (await get(ref(db, "gachaPool/" + f))).val() || {}; const by = {}; Object.values(p).forEach((x) => { if (x?.id) by[x.id] = (by[x.id] || 0) + (x.qty || 1); }); pool[f] = by; } } catch { /* ไม่มีสิทธิ์อ่าน */ }
+  const data = { at: serverNow(), people, gaLeft: { human: Object.keys(gh.val() || {}).length, zombie: Object.keys(gz.val() || {}).length }, pool };
+  state.econCache = { at: data.at, data }; return data;
+}
+const isFoodItem = (id) => { const d = ITEMS[id]; return !!d && d.type === "consumable" && ((d.food || 0) > 0 || (d.water || 0) > 0); };
+function econCompute(D) {
+  const P = D.people.filter((p) => p.u), now = D.at, tot = {}, inv = {};
+  ECON_KEYS.forEach(([k]) => { tot[k] = 0; });
+  D.people.forEach((p) => ECON_KEYS.forEach(([k]) => { tot[k] += p.a?.c?.[k] || 0; }));
+  let noFood = 0;
+  P.forEach((p) => { let f = 0; Object.entries(p.inv).forEach(([id, it]) => { const q = it?.qty || 0; const key = it?.id || id; inv[key] = (inv[key] || 0) + q; if (isFoodItem(key)) f += q; }); p.food = f; if (f === 0 && p.u.hp > 0) noFood++; });
+  const pullers = D.people.map((p) => ({ n: p.u?.username || p.a?.n || "?", g: p.a?.c?.gacha || 0 })).filter((x) => x.g > 0).sort((a, b) => b.g - a.g);
+  return {
+    n: P.length, human: P.filter((p) => p.u.faction !== "zombie").length, zombie: P.filter((p) => p.u.faction === "zombie").length,
+    active: P.filter((p) => now - (p.u.seenAt || 0) < 86400000).length, dead: P.filter((p) => p.u.hp === 0).length, noFood,
+    withAch: D.people.filter((p) => p.a?.c).length, tot, inv, pullers, totalPulls: tot.gacha
+  };
+}
+function econSnapshot(tot) {
+  const now = Date.now(), key = "zc_econ_snap", L = LS.get(key, []);
+  const base = L.filter((x) => now - x.t >= 3600000 && now - x.t <= 30 * 3600000).sort((a, b) => a.t - b.t)[0] || L.filter((x) => now - x.t >= 600000).sort((a, b) => b.t - a.t)[0] || null;
+  if (!L.length || now - L[L.length - 1].t > 3600000) { L.push({ t: now, tot }); LS.set(key, L.slice(-30)); }
+  return base;
+}
+async function econRender(box) {
+  box.append(mk("p", "muted", "กำลังรวบรวมข้อมูล…"));
+  try {
+    const D = await econLoad(), X = econCompute(D); box.textContent = "";
+    const base = econSnapshot(X.tot), fmt = (n) => Number(n).toLocaleString("en-US");
+    const flags = [];
+    const left = D.gaLeft.human + D.gaLeft.zombie;
+    if (D.gaLeft.human <= 15 || D.gaLeft.zombie <= 15) flags.push(`🎰 ตู้กาชาเหลือน้อย (มนุษย์ ${D.gaLeft.human} • ซอมบี้ ${D.gaLeft.zombie} ช่อง) — เติมของก่อนคนหมุนไม่ได้`);
+    if (X.pullers[0] && X.totalPulls >= 15 && X.pullers[0].g / X.totalPulls > 0.4) flags.push(`🎰 ${X.pullers[0].n} หมุนกาชา ${Math.round(100 * X.pullers[0].g / X.totalPulls)}% ของทั้งเซิร์ฟเวอร์`);
+    if (X.n >= 3 && X.noFood / X.n >= 0.3) flags.push(`🍖 ผู้เล่น ${X.noFood}/${X.n} คนไม่มีอาหาร/น้ำในกระเป๋าเลย`);
+    const hit = X.tot.srch ? X.tot.found / X.tot.srch : null;
+    if (hit !== null && X.tot.srch >= 100 && (hit < 0.15 || hit > 0.65)) flags.push(`🔍 อัตราเจอของ ${Math.round(hit * 100)}% ${hit < 0.15 ? "ต่ำมาก คนอาจหมดสนุก" : "สูงมาก ของอาจล้น"}`);
+    if (X.withAch < X.n) flags.push(`ℹ️ ตัวเลขกิจกรรมนับเฉพาะคนที่เปิดเวอร์ชันใหม่แล้ว ${X.withAch}/${X.n} คน`);
+    box.append(mk("div", "hub-day", "⚠️ ข้อสังเกต"));
+    if (flags.length) flags.forEach((f) => box.append(mk("div", "", f))); else box.append(mk("div", "muted", "ยังไม่พบสัญญาณผิดปกติ"));
+    box.append(mk("div", "hub-day", "👥 ผู้เล่น"));
+    box.append(mk("div", "", `ทั้งหมด ${X.n} • 🧑 ${X.human} • 🧟 ${X.zombie} • ออนใน 24 ชม. ${X.active} • ล้มอยู่ ${X.dead}`));
+    const hrs = base ? Math.max(1, Math.round((Date.now() - base.t) / 3600000)) : 0;
+    box.append(mk("div", "hub-day", `📊 กิจกรรมรวม (ตลอดชีพ${base ? ` • เทียบ ${hrs} ชม.ก่อน` : " • ยังไม่มีสแนปช็อตเก่าให้เทียบ — เปิดซ้ำภายหลัง"})`));
+    ECON_KEYS.forEach(([k, label]) => { const d = base ? X.tot[k] - (base.tot[k] || 0) : null; box.append(mk("div", "", `${label}: ${fmt(X.tot[k])}${d ? `  (+${fmt(d)})` : ""}`)); });
+    if (hit !== null) box.append(mk("div", "muted", `อัตราเจอของจากการค้นหา ≈ ${Math.round(hit * 100)}%`));
+    box.append(mk("div", "hub-day", "🎰 กาชา"));
+    box.append(mk("div", "", `เหลือในตู้: 🧑 ${D.gaLeft.human} ช่อง • 🧟 ${D.gaLeft.zombie} ช่อง`));
+    if (X.pullers.length) box.append(mk("div", "", "ผู้หมุนมากสุด: " + X.pullers.slice(0, 3).map((x, i) => `${i + 1}. ${x.n} ${x.g}`).join("  ")));
+    ["human", "zombie"].forEach((f) => { const p = D.pool[f]; if (p) { const top = Object.entries(p).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id, q]) => `${ITEMS[id]?.icon || "📦"}×${q}`).join(" "); box.append(mk("div", "muted", `ของในตู้ ${f === "human" ? "🧑" : "🧟"}: ${top || "ว่าง"}`)); } });
+    box.append(mk("div", "hub-day", "🎒 ของในมือผู้เล่นทุกคนรวมกัน"));
+    const top = Object.entries(X.inv).filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    box.append(mk("div", "", top.length ? top.map(([id, q]) => `${ITEMS[id]?.icon || "📦"} ${ITEMS[id]?.name || id} ${fmt(q)}`).join(" • ") : "ไม่มีข้อมูล"));
+    const row = mk("div", "row"); row.append(btn("รีเฟรชข้อมูล", () => { state.econCache = null; hubTab("econ"); }, "btn ghost mini")); box.append(row);
+  } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดแดชบอร์ดไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("econ", e); }
 }
 
 if (HAS_DOM) initNpcUi();
