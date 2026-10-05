@@ -788,3 +788,26 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 /* Release K: จุดแดงบนปุ่มลัด */
 .btn-dot { position: relative; }
 .btn-dot::after { content: ""; position: absolute; top: 2px; right: 2px; width: 9px; height: 9px; border-radius: 50%; background: #e53935; box-shadow: 0 0 0 2px #14171c; }
+
+/* ===== จัดหน้ามือถือให้โล่งขึ้น (2026-10-05) ===== */
+@media (max-width: 900px) {
+  /* แถบบนบางลง */
+  .topbar { gap: 4px; padding: 6px 10px; }
+  .who b { font-size: 16px; }
+  .top-actions .btn, .top-actions .btn.mini { min-height: 30px; padding: 3px 10px; font-size: 13px; }
+  .bars { gap: 3px !important; }
+  .bar { height: 17px; }
+  .bar span { font-size: 11px; line-height: 15px; }
+
+  /* หัวโซน: พับเก็บ (แตะชื่อโซนเพื่อกาง) — เหลือชื่อ + สถานะสั้น ๆ บรรทัดเดียว ให้แชทได้พื้นที่เยอะ */
+  .chat-head { max-height: none; overflow: visible; padding: 6px 10px; gap: 0 12px; }
+  .chat-head h2 { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 15px; }
+  .chat-head h2::after { content: "▾"; margin-left: auto; font-size: 13px; opacity: .7; padding: 0 4px; }
+  .chat-head.open h2::after { content: "▴"; }
+  .chat-head .danger-line, .chat-head .time-line, .chat-head .event-line { font-size: 12px; margin: 2px 0 0; font-weight: 500; }
+  .chat-head:not(.open) #zone-desc, .chat-head:not(.open) #wall-box, .chat-head:not(.open) #sign-box { display: none; }
+  .chat-head.open { max-height: 52vh; overflow-y: auto; }
+  .chat { gap: 6px; grid-template-rows: auto minmax(180px, 1fr) auto; }
+  .chat-log { gap: 8px; padding: 8px; }
+  .chat-form { gap: 6px; }
+}

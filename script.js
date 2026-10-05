@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1815";
+const APP_VERSION = "2026-10-05.1850";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -647,6 +647,8 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
+    "🔥 ปุ่ม “🔥 n/28” บนแถบบน: ปฏิทินเช็กอินประจำซีซัน (28 วัน) นับสะสมวันที่เข้าเล่น ไม่ต้องติดกัน มีรางวัลวันที่ 3/7/14/21/28 กดรับเอง — รางวัลซีซันเก่ารับได้จนกว่าจะเริ่มนับซีซันใหม่",
+    "🎁 ห่างไปเกิน 3 ชั่วโมง จะมีสรุปว่าระหว่างที่ไม่อยู่มีอะไรรอคุณ • ห่างไปเกิน 7 วัน รับของขวัญต้อนรับกลับได้หนึ่งครั้ง",
     "🚨 ทุกวันมี “คืนปิดล้อม” 30 นาทีช่วงหัวค่ำ (เวลาเริ่มไม่เท่ากันทุกวัน ดูได้ที่แผงวิทยุ) ซอมบี้ทุบกำแพง มนุษย์ซ่อมกำแพงที่ Safe Zone นับเป็นเควสพิเศษ"
   ]);
   sec("ความสำเร็จ • ฉายา • เป้าหมายร่วม", [
@@ -1044,7 +1046,7 @@ function startGame() {
     if (state.wasInfected !== undefined && inf !== state.wasInfected) syncInfectedFlag(inf);
     state.wasInfected = inf;
     if (p.banned) { teardownZone(); show("banned"); return; }
-    if (!state.hbStarted) { state.hbStarted = true; resumeOffline(p).finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
+    if (!state.hbStarted) { state.hbStarted = true; (async () => { try { await mArrive(p); } catch (e) { console.warn("mArrive", e?.code || e); } await resumeOffline(p); })().finally(() => setInterval(beat, HEARTBEAT_MS)); }   // ต้องจัดการเวลาที่หายไปก่อนเริ่มส่งสัญญาณ ไม่งั้น seenAt เก่าจะถูกทับ
     if (!$("screen-game").classList.contains("active")) {
       show("game"); buildZoneList(); renderZoneTags(); buildAdmin(); listenEvents(); listenInventory(); listenAnnouncements(); listenAttacks(); listenWhispers(); listenShouts(); listenBites(); listenMyMute(); listenQuests(); listenBoss(); listenWorldBoss(); listenSkills(); listenMarket(); listenBlackMarket(); listenGacha(); qpListen(); try { kInit(); } catch (e) { console.warn("kInit", e); } achInit(); wallListen(); deepInit(); headCompactInit();
       enterZone(p.zone in ZONES ? p.zone : "safe", true);
@@ -8842,13 +8844,13 @@ function kHintTick() {
 }
 
 // ---- 10) กรองบันทึกเหตุการณ์ ----
-function logFilterInit() {
-  const log = $("chat-log"); if (!log || $("log-filter")) return;
+const LOG_FILTERS = [["", "ทั้งหมด"], ["chat", "💬 แชทอย่างเดียว"], ["combat", "⚔️ เฉพาะต่อสู้"], ["log", "📦 เฉพาะเหตุการณ์/ระบบ"]];
+function logFilterApply(f) {
+  const log = $("chat-log"); if (!log) return; log.dataset.f = f || "";
   if (!$("kl-style")) { const st = document.createElement("style"); st.id = "kl-style"; st.textContent = '#chat-log[data-f="chat"] .msg.info,#chat-log[data-f="chat"] .msg.system,#chat-log[data-f="chat"] .msg.combat,#chat-log[data-f="chat"] .msg.ambient{display:none}#chat-log[data-f="combat"] .msg:not(.combat){display:none}#chat-log[data-f="log"] .msg:not(.info):not(.system):not(.ambient){display:none}'; document.head.append(st); }
-  const bar = mk("div"); bar.id = "log-filter"; bar.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin:0 0 6px";
-  [["", "ทั้งหมด"], ["chat", "💬 แชท"], ["combat", "⚔️ ต่อสู้"], ["log", "📦 เหตุการณ์"]].forEach(([f, l]) => { const b = btn(l, () => { log.dataset.f = f; LS.set("zc_logf", f); bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", (x.dataset.f || "") === f)); log.scrollTop = log.scrollHeight; }, "btn ghost mini"); b.dataset.f = f; bar.append(b); });
-  log.before(bar); const f0 = LS.get("zc_logf", ""); log.dataset.f = f0 || ""; bar.querySelectorAll("button").forEach((x) => x.classList.toggle("on", (x.dataset.f || "") === (f0 || "")));
+  log.scrollTop = log.scrollHeight;
 }
+function logFilterInit() { logFilterApply(LS.get("zc_logf", "")); }   // ตัวกรองย้ายไปอยู่ใน ⚙️ ตั้งค่า (ไม่กินที่หน้าแชท)
 
 // ---- 11) ขนาดตัวอักษร / โหมดกะทัดรัด ----
 function viewApply() {
@@ -8864,7 +8866,10 @@ function kSettingsExtra(body) {
   sel.addEventListener("change", () => { LS.set("zc_zoom", +sel.value); viewApply(); });
   const cb = mk("input"); cb.type = "checkbox"; cb.checked = LS.get("zc_compact", false) === true; cb.addEventListener("change", () => { LS.set("zc_compact", cb.checked); viewApply(); });
   const l2 = mk("label"); l2.style.cssText = "display:flex;gap:8px;align-items:center"; l2.append(cb, mk("span", "", "โหมดกะทัดรัด (ลดระยะห่าง เห็นข้อความต่อหน้าจอมากขึ้น)"));
-  box.append(sel, l2, mk("small", "muted", "⌨️ ปุ่มลัด (คอมพิวเตอร์): S ค้นหา • F ตกปลา • 1–4 ไอเทมโปรด • Q สลับอาวุธ • B กระเป๋า • M แผนที่ • C แชท"));
+  const lf = mk("label"); lf.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap"; lf.append(mk("span", "", "กรองบันทึกหน้าแชท:"));
+  const ls = mk("select"); ls.style.cssText = sel.style.cssText; LOG_FILTERS.forEach(([v, l]) => { const o = mk("option", "", l); o.value = v; if (v === LS.get("zc_logf", "")) o.selected = true; ls.append(o); });
+  ls.addEventListener("change", () => { LS.set("zc_logf", ls.value); logFilterApply(ls.value); }); lf.append(ls);
+  box.append(sel, l2, lf, mk("small", "muted", "⌨️ ปุ่มลัด (คอมพิวเตอร์): S ค้นหา • F ตกปลา • 1–4 ไอเทมโปรด • Q สลับอาวุธ • B กระเป๋า • M แผนที่ • C แชท"));
   body.append(box);
 }
 
@@ -8887,11 +8892,164 @@ function kInit2() {
   try { logFilterInit(); } catch (e) { console.warn("log filter", e); }
   try { viewApply(); } catch (e) { console.warn("view", e); }
   try { kKeysInit(); } catch (e) { console.warn("keys", e); }
+  try { mInit(); } catch (e) { console.warn("mInit", e); }
 }
 function kTick2() {
+  try { mTick(); } catch { /* ข้าม */ }
   try { kHintTick(); } catch { /* ข้าม */ }
   try { kTitleTick(); } catch { /* ข้าม */ }
   try { zonePreview(); } catch { /* ข้าม */ }
+}
+
+/* =========================================================
+   49) 🔥 Release M — เหตุผลให้กลับมา (ต้องใช้ rules v40)
+   1 สรุปตอนกลับมา (ฝั่งเกมล้วน) • 2 ปฏิทินเช็กอินสะสมรายซีซัน 28 วัน (ck/{uid}, ckm/{uid}/{mN}) • 3 ของขวัญต้อนรับกลับหลังหายไป 7 วัน (back/{uid})
+   - เช็กอิน: เปิดเกมวันละครั้ง (เวลาไทย) นับสะสม ไม่ต้องติดกัน • รางวัลวันที่ 3/7/14/21/28 กดรับเอง • รางวัลซีซันเก่ารับได้จนกว่าจะเช็กอินซีซันใหม่
+   - ของขวัญกลับมา: ตอนเข้าเกม ถ้า seenAt เก่ากว่า 7 วัน จะบันทึกสิทธิ์ไว้ก่อนส่งสัญญาณ seenAt ใหม่ (rules ตรวจกับ seenAt เดิมในเซิร์ฟเวอร์) แล้วกดรับเองได้ครั้งเดียวต่อรอบ
+   - ปรับได้จากแท็บ 🎛️: ck_on, cb_on, wb_on
+   ========================================================= */
+const CK_MILES = [
+  { k: "m3", n: 3, r: [["bandage", 2], ["water", 2]] },
+  { k: "m7", n: 7, r: [["medkit", 1], ["energy_drink", 1], ["water", 1]] },
+  { k: "m14", n: 14, r: [["trauma_kit", 1], ["water_jug", 1], ["bandage", 2]] },
+  { k: "m21", n: 21, r: [["medkit", 2], ["energy_drink", 2], ["bandage", 2]] },
+  { k: "m28", n: 28, r: [["trauma_kit", 2], ["serum", 1], ["water_jug", 2], ["medkit", 1]] }
+];
+const BACK_REW = [["bandage", 3], ["water", 3], ["energy_drink", 2], ["medkit", 1]], BACK_MS = 604800000, WB_MS = 10800000;
+const ckOn = () => T("ck_on", 1) === 1, cbOn = () => T("cb_on", 1) === 1, wbOn = () => T("wb_on", 1) === 1;
+const ckDay = () => coopDay(), ckSeas = () => SEA_EPOCH + seaIdx() * SEA_LEN;
+const mRew = (l) => l.map(([id, q]) => `${ITEMS[id]?.icon || "📦"}${ITEMS[id]?.name || id} ×${q}`).join(" ");
+const ckUnclaimed = (C = state.ck) => (C ? CK_MILES.filter((m) => C.n >= m.n && state.ckm?.[m.k]?.s !== C.s) : []);
+const ckToday = () => !!state.ck && state.ck.s === ckSeas() && state.ck.d === ckDay();
+const ckHold = () => !!state.ck && state.ck.s !== ckSeas() && ckUnclaimed().length > 0 && !state.ckSkip;
+const cbPending = () => cbOn() && !!state.back && state.back.c === 0;
+const mAwayTxt = (ms) => { const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000); return d > 0 ? `${d} วัน ${h} ชม.` : `${Math.max(1, h)} ชม.`; };
+
+// ก่อนส่ง seenAt ใหม่ (เรียกจาก startGame): จำเวลาที่หายไป + ลงทะเบียนสิทธิ์ของขวัญกลับมา
+async function mArrive(p) {
+  const uid = state.uid, now = serverNow();
+  state.mSeen = typeof p.seenAt === "number" ? p.seenAt : null;
+  state.mAway = state.mSeen ? Math.max(0, now - state.mSeen) : 0;
+  if (!cbOn() || !state.mSeen || state.mAway < BACK_MS + 5000) return;
+  const cur = (await get(ref(db, "back/" + uid))).val();
+  if (cur && cur.c === 0) return;
+  await update(ref(db), { [`back/${uid}`]: { a: state.mSeen, t: serverTimestamp(), c: 0 } });
+}
+function mInit() {
+  if (state.mOn || !state.uid) return; state.mOn = true; state.ck = undefined;
+  const uid = state.uid, re = () => { try { mTick(); mwRender(); } catch { /* ข้าม */ } };
+  onValue(ref(db, "ck/" + uid), (s) => { state.ck = s.val() || null; re(); }, (e) => { state.ck = null; console.warn("ck", e?.code || e); });
+  onValue(ref(db, "ckm/" + uid), (s) => { state.ckm = s.val() || {}; re(); }, (e) => console.warn("ckm", e?.code || e));
+  onValue(ref(db, "back/" + uid), (s) => { state.back = s.val() || null; re(); }, (e) => { state.back = null; console.warn("back", e?.code || e); });
+  const pr = $("btn-profile"); if (pr && !$("btn-ck")) { const b = btn("🔥", mwOpen, "btn ghost mini"); b.id = "btn-ck"; b.classList.add("hidden"); pr.before(b); }
+}
+async function ckTick() {
+  const uid = state.uid, p = state.profile;
+  if (!ckOn() || !uid || state.ckBusy || state.ck === undefined || !p || !p.username || p.banned || Date.now() < (state.ckNext || 0) || state.busy) return;
+  const C = state.ck, S = ckSeas(), D = ckDay();
+  if (C && C.s === S && C.d === D) return;
+  if (ckHold()) return;
+  const n = C && C.s === S ? C.n + 1 : 1;
+  state.ckBusy = true;
+  try {
+    await update(ref(db), { [`ck/${uid}`]: { s: S, d: D, n } });
+    toast(`🔥 เช็กอินวันที่ ${n}/${SEA_LEN} ของซีซัน`); try { logLine(`🔥 เช็กอินซีซัน ${seaDef().icon} ${seaDef().name} สะสม ${n}/${SEA_LEN} วัน${CK_MILES.some((m) => m.n === n) ? " — มีรางวัลให้กดรับ!" : ""}`, "system"); } catch { /* ข้าม */ }
+  } catch (e) { console.warn("ck checkin", e?.code || e); state.ckNext = Date.now() + 300000; }   // rules ยังไม่ได้อัป / เน็ตหลุด → รออีก 5 นาทีค่อยลองใหม่
+  finally { state.ckBusy = false; }
+}
+async function mGive(u, list) {
+  for (const [id, q] of list) { const have = (await get(ref(db, `inventory/${state.uid}/${id}/qty`))).val() || 0; u[`inventory/${state.uid}/${id}`] = { id, qty: Math.min(99, have + q) }; }
+}
+async function ckClaim(k) {
+  const m = CK_MILES.find((x) => x.k === k), C = state.ck; if (!m || !C || state.busy || C.n < m.n || state.ckm?.[k]?.s === C.s) return;
+  if (C.s !== ckSeas() && C.s !== ckSeas() - SEA_LEN) return toast("รางวัลซีซันเก่านี้หมดอายุแล้ว");
+  state.busy = true;
+  try {
+    const u = { [`ckm/${state.uid}/${k}`]: { s: C.s, t: serverTimestamp() } }; await mGive(u, m.r);
+    await update(ref(db), u); toast(`🎁 รับรางวัลเช็กอินวันที่ ${m.n}`); try { logLine(`🔥 รางวัลเช็กอินวันที่ ${m.n}: ${mRew(m.r)}`, "system"); } catch { /* ข้าม */ }
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; try { mTick(); mwRender(); } catch { /* ข้าม */ } }
+}
+async function cbClaim() {
+  const B = state.back; if (!B || B.c !== 0 || state.busy || !cbOn()) return;
+  state.busy = true;
+  try {
+    const u = { [`back/${state.uid}/c`]: serverTimestamp() }; await mGive(u, BACK_REW);
+    await update(ref(db), u); toast("🎁 รับของขวัญต้อนรับกลับแล้ว"); try { logLine(`🎁 ของขวัญต้อนรับกลับ: ${mRew(BACK_REW)}`, "system"); } catch { /* ข้าม */ }
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; try { mTick(); mwRender(); } catch { /* ข้าม */ } }
+}
+
+// ---- 1) สรุปตอนกลับมา ----
+function mDigest() {
+  const rows = [], away = state.mAway || 0; if (!wbOn() || away < WB_MS) return { away, rows };
+  const add = (icon, text) => rows.push([icon, text]);
+  try { const n = baseReady(); if (n > 0) add("🏠", `ที่พักมีของ/งานรอรับ ${n} รายการ (ปุ่ม “ที่พัก”)`); } catch { /* ข้าม */ }
+  try { if (expReady()) add("🧭", "ทีมสำรวจกลับมาแล้ว รอรับของ"); } catch { /* ข้าม */ }
+  try { if (petReady()) add("🐾", "สัตว์เลี้ยงกลับมาแล้ว รอรับของ"); } catch { /* ข้าม */ }
+  try { const k = Object.keys(state.mktPay || {}).length; if (k > 0) add("💰", `ตลาดมีของรอรับ ${k} รายการ (ของที่ขายได้/ของฝากจากเพื่อน)`); } catch { /* ข้าม */ }
+  try { const q = qpClaimable(); if (q > 0) add("📜", `รางวัลภารกิจรอรับ ${q} รายการ`); } catch { /* ข้าม */ }
+  try { const rl = (state.radioLog || []).filter((x) => state.mSeen && x.ts > state.mSeen).slice(0, 4); rl.forEach((x) => add("📻", String(x.text).replace(/^📻\s*/, "").slice(0, 110))); } catch { /* ข้าม */ }
+  try { if (seaOn()) { const g = seaProg(), d = g.filter((x) => x.done).length; add(seaDef().icon, `${seaDef().name} วันที่ ${seaDayIn()}/${SEA_LEN} • เป้าซีซัน ${d}/${g.length}`); } } catch { /* ข้าม */ }
+  try { const w = wxNow(serverNow()); add(WX[w.type].icon, `ตอนนี้อากาศ: ${WX[w.type].name}`); } catch { /* ข้าม */ }
+  return { away, rows };
+}
+
+// ---- หน้าต่าง กลับมา/เช็กอิน ----
+function mwOpen() {
+  if (!$("mw-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "mw-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🔥 เช็กอิน & ยินดีต้อนรับกลับ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "mw-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("mw-modal").classList.remove("hidden"); mwRender();
+}
+function mwRender() {
+  const body = $("mw-body"); if (!body || $("mw-modal").classList.contains("hidden")) return; body.innerHTML = "";
+  const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
+  const B = state.back;
+  if (cbPending()) {
+    const c = card(" evt-live"); c.append(mk("div", "", `🎁 ของขวัญต้อนรับกลับ — คุณห่างไปนานกว่า 7 วัน`), mk("div", "muted", mRew(BACK_REW)));
+    c.append(btn("รับของขวัญ", cbClaim, "btn primary mini"));
+  }
+  const dg = mDigest();
+  if (dg.rows.length) {
+    const c = card(); c.append(mk("div", "", `📋 ระหว่างที่คุณไม่อยู่ (${mAwayTxt(dg.away)})`));
+    dg.rows.forEach(([i, t]) => c.append(mk("div", "muted", `${i} ${t}`)));
+  }
+  if (!ckOn()) { body.append(mk("div", "muted", "เช็กอินซีซันถูกปิดชั่วคราวโดยผู้ดูแล")); return; }
+  const C = state.ck, S = ckSeas(), cur = C && C.s === S, n = cur ? C.n : 0, d = seaDef();
+  const c = card(); c.append(mk("div", "", `${d.icon} ปฏิทินเช็กอิน ${d.name}: สะสม ${n}/${SEA_LEN} วัน ${ckToday() ? "• วันนี้เช็กอินแล้ว ✅" : state.ck === undefined ? "" : "• วันนี้ยังไม่ได้เช็กอิน"}`));
+  const grid = mk("div"); grid.style.cssText = "display:grid;grid-template-columns:repeat(14,1fr);gap:3px;margin:6px 0";
+  for (let i = 1; i <= SEA_LEN; i++) { const x = mk("span", "", i <= n ? "✔" : String(i)); x.style.cssText = `font-size:10px;text-align:center;padding:3px 0;border-radius:4px;background:${i <= n ? "var(--accent,#e0a030)" : "var(--panel-2,#1c2128)"};color:${i <= n ? "#14171c" : "var(--muted,#8b949e)"};${CK_MILES.some((m) => m.n === i) ? "outline:1px solid var(--accent,#e0a030)" : ""}`; grid.append(x); }
+  c.append(grid, mk("div", "muted", `นับสะสมวันที่เข้าเล่น ไม่ต้องติดกัน • ซีซันนี้เหลืออีก ${SEA_LEN - seaDayIn() + 1} วัน (เวลาไทย)`));
+  if (ckHold()) {
+    const h = card(" evt-live"); h.append(mk("div", "", "🍂 ซีซันใหม่เริ่มแล้ว — ยังมีรางวัลซีซันเก่าที่ยังไม่รับ"), mk("div", "muted", "กดรับให้ครบก่อนจึงจะเริ่มนับซีซันใหม่ (หรือข้ามไปเลย รางวัลที่ยังไม่รับจะหายไป)"));
+    h.append(btn("ข้ามไปซีซันใหม่", () => { if (confirm("รางวัลซีซันเก่าที่ยังไม่รับจะหายไป ต้องการข้ามไหม?")) { state.ckSkip = true; ckTick(); mwRender(); } }, "btn ghost mini"));
+  }
+  const MC = C || { s: S, n: 0 };
+  CK_MILES.forEach((m) => {
+    const got = state.ckm?.[m.k]?.s === MC.s, ok = MC.n >= m.n, r = card(ok && !got ? " evt-live" : "");
+    r.append(mk("div", "", `${got ? "✅" : ok ? "🎯" : "⬜"} วันที่ ${m.n}`), mk("div", "muted", mRew(m.r) + (got || ok ? "" : ` • อีก ${m.n - MC.n} วัน`)));
+    if (ok && !got) r.append(btn("รับรางวัล", () => ckClaim(m.k), "btn primary mini"));
+  });
+}
+function mTick() {
+  try { ckTick(); } catch { /* ข้าม */ }
+  const b = $("btn-ck"); if (!b) return;
+  const show = ckOn() && state.ck !== undefined || cbPending();
+  b.classList.toggle("hidden", !show);
+  const n = state.ck && state.ck.s === ckSeas() ? state.ck.n : 0, dot = ckUnclaimed().length > 0 || cbPending();
+  b.textContent = `🔥 ${n}/${SEA_LEN}`; b.classList.toggle("btn-dot", dot);
+  b.title = cbPending() ? "มีของขวัญต้อนรับกลับรอรับ" : dot ? "มีรางวัลเช็กอินให้กดรับ" : "ปฏิทินเช็กอินประจำซีซัน";
+  // เปิดหน้าต่างให้เองครั้งเดียวต่อการเข้าเกม: มีของขวัญรอรับ หรือห่างไป ≥ 3 ชม. (หลังโหลดข้อมูลเสร็จ)
+  if (!state.mwShown && state.ck !== undefined && state.back !== undefined && state.profile && Date.now() - (state.mBoot || (state.mBoot = Date.now())) > 3500) {
+    state.mwShown = true;
+    const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
+    if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
+  }
 }
 
 /* =========================================================
@@ -9202,6 +9360,9 @@ function tuneDefs() {
   rows.push(["onb_on", "ภารกิจวันแรก (1 = เปิด, 0 = ซ่อนปุ่ม)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
   rows.push(["pet_on", "สัตว์เลี้ยงประจำค่าย (1 = เปิด, 0 = ปิด • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
   rows.push(["fish_on", "ตกปลาที่ท่าเรือ (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v39)", 1, 0, 1, "🎒 ชุดเริ่มต้น/สัตว์เลี้ยง/ตกปลา"]);
+  rows.push(["ck_on", "ปฏิทินเช็กอินรายซีซัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
+  rows.push(["cb_on", "ของขวัญต้อนรับกลับหลังหาย 7 วัน (1 = เปิด, 0 = ปิด • ต้องใช้ rules v40)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
+  rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
