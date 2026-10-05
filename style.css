@@ -644,6 +644,7 @@ textarea#chat-input {
 #screen-game[data-zone="hospital"] { --zone: #e0605a; }
 #screen-game[data-zone="police"] { --zone: #6a86e0; }
 #screen-game[data-zone="tunnel"] { --zone: #8a68e0; }
+#screen-game[data-zone="lab"] { --zone: #3fd0c0; }
 
 /* พื้นหลังมีเนื้อ + ขอบมืดเล็กน้อย */
 body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, .035), transparent 60%); background-attachment: fixed; }

@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1512";
+const APP_VERSION = "2026-10-05.1610";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -76,7 +76,7 @@ const DEATH_STACK = ["canned_food", "water", "bandage", "medkit", "scrap", "chem
 const STARVE_HP = 10;   // HP ที่เสียต่อการค้นหาตอนหิว/กระหาย (ทำได้เฉพาะใน Safe Zone) — ต้องตรงกับ database_rules.json
 // ---- มินิบอสประจำโซน: มนุษย์ค้นหาแล้วสุ่มเจอ (ไอเดียซอมบี้พิเศษแนว Zombicide: Runner / Fatty / ซอมบี้ถืออาวุธ / Abomination) ----
 const BOSS_COOLDOWN = 120000;   // เจอบอสได้ทุก ๆ 2 นาทีอย่างน้อย — ต้องตรงกับ rules (users/lastBoss)
-const BOSS_W = { ruins: 2, mall: 3, hospital: 3, police: 4, forest: 2, factory: 3, port: 3, base: 4, tunnel: 5 };   // น้ำหนักเจอบอสในตารางค้นหา (≈ % ต่อครั้ง)
+const BOSS_W = { ruins: 2, mall: 3, hospital: 3, police: 4, forest: 2, factory: 3, port: 3, base: 4, tunnel: 5, lab: 4 };   // น้ำหนักเจอบอสในตารางค้นหา (≈ % ต่อครั้ง)
 // hp: เลือดบอส (rules จำกัด ≤300) / hits: จำนวนครั้งที่โจมตีต่อรอบ / dmg: ช่วงดาเมจต่อครั้ง / acc: โอกาสโดน / flee: โอกาสหนีสำเร็จ
 // loot: ได้ 1 ชิ้น (สุ่มตามน้ำหนัก) / bonus: ของแถม (อาจไม่ได้) — ไอเดมต้องอยู่ใน regex ของ rules และอาวุธต้องมี maxDur ≤ 30
 const BOSSES = {
@@ -106,11 +106,14 @@ const BOSSES = {
     loot: [{ id: "shotgun", w: 2 }, { id: "pistol", w: 3 }, { id: "trauma_kit", w: 2 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "army_meal", w: 3 }, { id: "medkit", w: 2 }, { id: null, w: 2 }] },
   tunnel: { name: "อสุรกายอุโมงค์", icon: "👹", tag: "Abomination — บอสใหญ่สุดของเมือง", hp: 220, hits: 1, dmg: [22, 34], acc: 0.8, flee: 0.5, verb: "กรงเล็บมหึมาฉีกอกเข้าอย่างจัง",
     intro: "พื้นสะเทือนเป็นจังหวะ… สิ่งที่ไม่ควรมีอยู่ลากร่างออกมาจากความมืดของอุโมงค์!",
-    loot: [{ id: "samurai_sword", w: 3 }, { id: "shotgun", w: 2 }, { id: "serum", w: 3 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "medkit", w: 3 }, { id: "antidote", w: 2 }, { id: "trauma_kit", w: 2 }] }
+    loot: [{ id: "samurai_sword", w: 3 }, { id: "shotgun", w: 2 }, { id: "serum", w: 3 }, { id: "stim_shot", w: 2 }], bonus: [{ id: "medkit", w: 3 }, { id: "antidote", w: 2 }, { id: "trauma_kit", w: 2 }] },
+  lab: { name: "วัตถุทดลองหมายเลข 0", icon: "🧫", tag: "Experiment — ตัวทดลองที่ล้มเหลว ฟาดเร็วสองครั้งและพิษแรง", hp: 170, hits: 2, dmg: [10, 16], acc: 0.75, flee: 0.45, verb: "กรงเล็บที่ถูกตัดต่อพันธุกรรมฟาดใส่",
+    intro: "ไฟฉุกเฉินกะพริบแดง… ตู้เพาะเลี้ยงกระจกแตก สิ่งที่ถูกขังไว้ลากร่างเปียกชื้นออกมาจากหมอกไอเย็น!",
+    loot: [{ id: "serum", w: 3 }, { id: "trauma_kit", w: 2 }, { id: "stim_shot", w: 2 }, { id: "samurai_sword", w: 1 }, { id: "lab_blade", w: 2 }], bonus: [{ id: "antidote", w: 3 }, { id: "medkit", w: 2 }, { id: "lab_core", w: 3 }, { id: null, w: 1 }] }
 };
 const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA_SAFE = 5;
 // ค่าเดินทางคิดตามปลายทาง ยิ่งไกล Safe Zone ยิ่งแพง (ใกล้ 6 / กลาง 10 / ไกล 14, กลับ Safe 5) — ต้องตรงกับ rules
-const TRAVEL_NEAR = ["forest", "ruins"], TRAVEL_FAR = ["base", "police", "tunnel"], TRAVEL_STAMINA = 10;
+const TRAVEL_NEAR = ["forest", "ruins"], TRAVEL_FAR = ["base", "police", "tunnel", "lab"], TRAVEL_STAMINA = 10;
 
 // ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
 const STAT_POINTS = 7, DODGE_PER_POINT = 0.03;
@@ -145,30 +148,32 @@ const FX_TYPES = {
 const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
 const FX_TICK = 15000, FX_MAX_TICKS = 40, POISON_STAMINA = 2, FX_MAX_MIN = 720;
 // พิษ 2 ระดับ: อ่อน (v=1) ทุกไอเทมรักษาได้ / แรง (v≥2) เฉพาะยาแก้พิษกับชุดช่วยชีวิตขั้นสูง (ข้อจำกัดนี้อยู่ฝั่งเกม rules ไม่ได้บังคับ) • ยาแก้พิษให้ภูมิต้านพิษ 10 นาที (เก็บในเครื่อง)
-const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit"], ANTI_IMM_MS = 600000;
+const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit", "exp_serum"], ANTI_IMM_MS = 600000;
 const poisonImmLeft = () => Math.max(0, (LS.get(lsKey("pimm"), 0) || 0) - serverNow());
 const fxName = (t) => (t === "poison" && effV("poison") >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name);
-const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
+const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"], exp_serum: ["bleed", "poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
 // สถานะจากมอนสเตอร์: โดนตีจริง (HP ลด) → สุ่มติดอย่างมาก 1 อย่าง [โอกาส %, ค่า v, นาที] — เพดานตรงกับ rules: bleed/poison v≤3, stun 1 นาที, dice −1..−2, ทุกอย่าง ≤5 นาที
 const MON_FX = {
   zombie: { bleed: [18, 2, 3], poison: [10, 1, 4] },
   ruins: { bleed: [30, 2, 3] }, mall: { dice: [30, -2, 3] }, hospital: { poison: [30, 2, 4], bleed: [15, 2, 3] }, police: { stun: [20, 1, 1], dice: [20, -1, 3] },
   forest: { poison: [30, 1, 5] }, factory: { bleed: [30, 3, 3], poison: [18, 2, 4] }, port: { stun: [25, 1, 1], poison: [18, 2, 4] }, base: { bleed: [20, 2, 3], stun: [15, 1, 1] },
   tunnel: { poison: [25, 3, 5], dice: [25, -2, 5], stun: [10, 1, 1] },
+  lab: { poison: [30, 3, 5], stun: [12, 1, 1] },
   wboss: { bleed: [15, 2, 4], poison: [12, 2, 5], stun: [8, 1, 1], dice: [15, -2, 4] }
 };
 function monFx(u, src, loss, hpAfter) {
   if (!(loss > 0) || !(hpAfter > 0)) return "";
   for (const [t, [pc, v, mins]] of Object.entries(MON_FX[src] || {})) {
-    if (Math.random() * 100 >= pc || effActive(t) || (t === "poison" && poisonImmLeft() > 0)) continue;
-    u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v, tick: serverTimestamp() }; stat("fx");
-    return ` ⚠️ ติด${FX_TYPES[t].icon}${t === "poison" && v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name}`;
+    const pg = t === "poison" && (gearHas("chem_gloves") || gearHas("mut_fang3")), v2 = pg && v > 1 ? v - 1 : v;   // ถุงมือ/ต่อมพิษ: โอกาสติดพิษครึ่งเดียว และพิษแรงอ่อนลง 1 ระดับ
+    if (Math.random() * 100 >= (pg ? pc * 0.5 : pc) || effActive(t) || (t === "poison" && poisonImmLeft() > 0)) continue;
+    u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v: v2, tick: serverTimestamp() }; stat("fx");
+    return ` ⚠️ ติด${FX_TYPES[t].icon}${t === "poison" && v2 >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name}`;
   }
   return "";
 }
 const pveD6 = () => Math.max(1, d6() + Math.min(0, effV("dice")));   // ติดสถานะอ่อนแรง (dice ติดลบ) → ทอยสู้มอนสเตอร์แย่ลง; บัฟบวกไม่มีผลกับ PvE
 // อาวุธคมมีโอกาสทำให้บอสประจำโซนเลือดไหล (ฝั่งเกมล้วน ๆ: บอสเสียเลือดเพิ่ม BOSS_BLEED/รอบ นาน BOSS_BLEED_N รอบ) — สกิลโจมตีโดนแน่ได้โอกาส ×2
-const WPN_PROC = { knife: 20, spiked_bat: 25, fire_axe: 25, samurai_sword: 25, pocket_knife: 15 }, BOSS_BLEED = 3, BOSS_BLEED_N = 3;
+const WPN_PROC = { knife: 20, spiked_bat: 25, fire_axe: 25, samurai_sword: 25, pocket_knife: 15, lab_blade: 25 }, BOSS_BLEED = 3, BOSS_BLEED_N = 3;
 // สลับอาวุธระหว่างสู้: หน้าบอส/บอสโลกมีแถบสลับ — ถ้าอาวุธพังจนมือเปล่าจะสลับได้ทันที ไม่งั้นติดคูลดาวน์ SWAP_CD
 const SWAP_CD = 15000;
 const swapLeft = () => Math.max(0, SWAP_CD - (serverNow() - (state.lastSwap || 0)));
@@ -263,6 +268,14 @@ const ITEMS = {
   headlamp: { name: "ไฟฉายคาดหัว", icon: "🔦", type: "gear", slot: "acc" },
   gas_mask: { name: "หน้ากากกันแก๊ส", icon: "😷", type: "gear", slot: "acc" },
   toolkit: { name: "กล่องเครื่องมือ", icon: "🛠️", type: "gear", slot: "acc" },
+  lab_coat: { name: "เสื้อกาวน์ปลอดเชื้อ", icon: "🥼", type: "gear", slot: "arm", red: 12 },
+  bio_lens: { name: "เลนส์สแกนชีวภาพ", icon: "🔬", type: "gear", slot: "acc" },
+  lab_sample: { name: "ตัวอย่างวิจัย", icon: "🧫", type: "material" },
+  chem_gloves: { name: "ถุงมือกันสารเคมี", icon: "🧤", type: "gear", slot: "acc" },
+  lab_blade: { name: "มีดผ่าตัดเลเซอร์", icon: "🔪", type: "weapon", dmg: 24, maxDur: 20 },
+  lab_core: { name: "แกนวิจัย", icon: "💠", type: "material" },
+  exp_serum: { name: "ซีรั่มทดลอง", icon: "🧪", type: "consumable", heal: 60 },
+  mut_fang3: { name: "ต่อมพิษ", icon: "☣️", type: "gear", slot: "mf", zombieOnly: true },
   mut_fang1: { name: "เขี้ยวแหลม", icon: "🦷", type: "gear", slot: "mf", zombieOnly: true },
   mut_fang2: { name: "เขี้ยวเหล็กไน", icon: "🐍", type: "gear", slot: "mf", zombieOnly: true },
   mut_hide1: { name: "หนังหนา", icon: "🦴", type: "gear", slot: "mh", red: 8, zombieOnly: true },
@@ -289,7 +302,8 @@ const RECIPES = {
   rag_vest: { need: { scrap: 5 }, out: "rag_vest", qty: 1 },
   scrap_plate: { need: { scrap: 10, chem: 2 }, out: "scrap_plate", qty: 1 },
   headlamp: { need: { scrap: 4, energy_drink: 1 }, out: "headlamp", qty: 1 },
-  toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 }
+  toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 },
+  exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -298,7 +312,7 @@ const RECIPES = {
 //   ซ่อม  = เขียนช่องอาวุธ {dur: m, maxDur: m} (m = nextMaxDur) + หัก scrap = repairCost ในคำสั่ง update เดียวกัน
 //   รื้อ/พัง = ลบช่องอาวุธ + เขียน scrap (qty ใหม่) + เขียน salvage/{uid} = { slot: <ช่องอาวุธที่ลบ>, ts: serverTimestamp() } ในคำสั่งเดียวกัน
 //   พังเอง (dur 1→0) ได้ซาก BREAK_SCRAP = 1 ฝั่งมนุษย์ ส่วนซอมบี้ไม่ได้
-const SALVAGE_IDS = ["wooden_bat", "pocket_knife", "crowbar", "knife", "spiked_bat", "fire_axe", "crossbow", "pistol", "samurai_sword", "shotgun"];
+const SALVAGE_IDS = ["wooden_bat", "pocket_knife", "crowbar", "knife", "spiked_bat", "fire_axe", "crossbow", "pistol", "samurai_sword", "shotgun", "lab_blade"];
 const BREAK_SCRAP = 1;
 const isSalvageable = (it) => !!it && SALVAGE_IDS.includes(it.id);
 const repairFull = (id) => Math.ceil(ITEMS[id].dmg / 4) + 1;                 // ค่าซ่อมเต็ม (scrap) = ปัดขึ้น(ดาเมจ ÷ 4) + 1
@@ -336,7 +350,8 @@ const ZONES = {
   factory: { name: "โรงงานร้าง", icon: "🏭", danger: 5, desc: "เครื่องจักรสนิมเขรอะ เศษวัสดุและสารเคมีเพียบ อาวุธหนักๆ ก็พอมี", drops: [{ id: "zombie", w: 20 }, { id: "scrap", w: 15 }, { id: "chem", w: 10 }, { id: "energy_drink", w: 5 }, { id: "fire_axe", w: 6 }, { id: "spiked_bat", w: 5 }, { id: "pocket_knife", w: 6 }, { id: "canned_food", w: 6 }, { id: "antidote", w: 3 }, { id: null, w: 24 }] },
   port: { name: "ท่าเรือ", icon: "⚓", danger: 5, desc: "ตู้คอนเทนเนอร์เรียงรายเต็มไปด้วยเสบียง ระวังฝูงซอมบี้หลบอยู่หลังตู้", drops: [{ id: "zombie", w: 18 }, { id: "canned_food", w: 14 }, { id: "water_jug", w: 8 }, { id: "army_meal", w: 4 }, { id: "choco_bar", w: 8 }, { id: "bread", w: 6 }, { id: "fruit", w: 5 }, { id: "scrap", w: 8 }, { id: "pocket_knife", w: 4 }, { id: "crossbow", w: 3 }, { id: "soup", w: 4 }, { id: null, w: 18 }] },
   base: { name: "ค่ายทหารร้าง", icon: "🪖", danger: 8, desc: "คลังแสงและเสบียงทหาร ของดีจริงแต่ทหารผีเฝ้าอยู่เต็มพื้นที่", drops: [{ id: "zombie", w: 30 }, { id: "army_meal", w: 10 }, { id: "shotgun", w: 5 }, { id: "pistol", w: 8 }, { id: "crossbow", w: 4 }, { id: "trauma_kit", w: 4 }, { id: "stim_shot", w: 5 }, { id: "medkit", w: 5 }, { id: "bandage", w: 5 }, { id: "water_jug", w: 6 }, { id: null, w: 18 }] },
-  tunnel: { name: "อุโมงค์ใต้ดิน", icon: "🕳️", danger: 10, desc: "มืดสนิทและอับชื้น ซอมบี้ชุกที่สุดในเมือง แต่ของหายากซ่อนอยู่ข้างใน", drops: [{ id: "zombie", w: 35 }, { id: "chem", w: 10 }, { id: "scrap", w: 8 }, { id: "samurai_sword", w: 3 }, { id: "shotgun", w: 4 }, { id: "serum", w: 5 }, { id: "antidote", w: 5 }, { id: "trauma_kit", w: 3 }, { id: "stim_shot", w: 5 }, { id: "soup", w: 4 }, { id: null, w: 18 }] }
+  tunnel: { name: "อุโมงค์ใต้ดิน", icon: "🕳️", danger: 10, desc: "มืดสนิทและอับชื้น ซอมบี้ชุกที่สุดในเมือง แต่ของหายากซ่อนอยู่ข้างใน", drops: [{ id: "zombie", w: 35 }, { id: "chem", w: 10 }, { id: "scrap", w: 8 }, { id: "samurai_sword", w: 3 }, { id: "shotgun", w: 4 }, { id: "serum", w: 5 }, { id: "antidote", w: 5 }, { id: "trauma_kit", w: 3 }, { id: "stim_shot", w: 5 }, { id: "soup", w: 4 }, { id: null, w: 18 }] },
+  lab: { name: "ศูนย์วิจัยร้าง", icon: "🧬", danger: 9, desc: "ห้องแล็บใต้ดินของโครงการที่ล้มเหลว ตัวอย่างและยาทดลองยังเหลืออยู่เต็มตู้ แต่สิ่งที่ถูกทดลองก็ยังเดินอยู่ด้วย", drops: [{ id: "zombie", w: 30 }, { id: "chem", w: 12 }, { id: "lab_sample", w: 8 }, { id: "scrap", w: 8 }, { id: "serum", w: 6 }, { id: "antidote", w: 6 }, { id: "stim_shot", w: 5 }, { id: "energy_drink", w: 4 }, { id: "trauma_kit", w: 3 }, { id: null, w: 18 }] }
 };
 
 // เหตุการณ์ประจำโซน: dmod = ปรับระดับอันตราย, zmod = ปรับน้ำหนักโอกาสเจอซอมบี้, nmod = ปรับน้ำหนักช่อง "ไม่เจออะไร" (ลบ = เจอของง่ายขึ้น)
@@ -369,7 +384,7 @@ function effectiveDrops0(z) {
 }
 
 // เนื้อเน่า: น้ำหนักดรอปเพิ่มเฉพาะฝั่งซอมบี้ (นอก Safe Zone)
-const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10, safe: 6 };
+const ZOMBIE_EXTRA = { ruins: 8, mall: 6, hospital: 6, police: 4, forest: 14, factory: 5, port: 10, base: 4, tunnel: 10, lab: 8, safe: 6 };
 function humanDrops(z) {
   const d = effectiveDrops(z), w = BOSS_W[z], g = GEAR_DROPS[z];
   let t = w ? [...d, { id: "boss", w }] : d;
@@ -670,6 +685,7 @@ function openGuide() {
     "🎁 เยี่ยมบ้าน/ฝากของ: กดชื่อเพื่อนเพื่อเปิดประวัติ จะเห็นห้องและขั้นบ้านจริงของเขา • ฝากน้ำ/อาหาร/ผ้าพันแผล/มอส/ผลไม้ให้เพื่อนฝั่งเดียวกันได้ทีละ 1 ชิ้น (ตอนอยู่ Safe Zone) เขาไปรับที่ 📬 ตลาด • ฝากค้างได้ 1 ชิ้นต่อคน จนกว่าเขาจะรับ",
     "🌳 ต้นไม้ทักษะ: ทำสายไหนบ่อย สายนั้นได้แต้มทักษะ (ดูที่ 📅 → 🌍 → เส้นทางอาชีพ) ใช้เรียนทักษะเสริมของสายนั้น 5 ขั้น แล้วเลือกปลายสาย 1 จาก 2 • เรียนแล้วเปลี่ยนไม่ได้ ได้โบนัสเล็ก ๆ เหมือนโบนัสอื่น ๆ ในเกม",
     "🧭 ทีมสำรวจ (ปุ่ม 🏠 ที่พัก): ที่พักขั้น 1+ ส่งทีมออกนอกค่าย 4 ชั่วโมง จ่ายเสบียงเล็กน้อย กลับมารับของตามโซนที่ส่งไป แม้ไม่ได้ออนไลน์ • ทีละ 1 ทีม",
+    "🧬 ศูนย์วิจัยร้าง (โซนใหม่ ไกลและอันตราย): หาได้ยาทดลอง/สารเคมี และของเฉพาะที่นี่ — 🧫 ตัวอย่างวิจัย (สมทบโปรเจกต์ค่าย/รังได้ 5 แต้มต่อชิ้น) • 🥼 เสื้อกาวน์ปลอดเชื้อ (เกราะ ลดดาเมจ ~17%) • 🔬 เลนส์สแกนชีวภาพ (ของหายากออกง่ายขึ้น) • 🧤 ถุงมือกันสารเคมี (ทนพิษ) • ☣️ ต่อมพิษ (ซอมบี้ ทุบกำแพง+5 ทนพิษ) • ประกอบ 🧪 ซีรั่มทดลอง (ตัวอย่างวิจัย×2 + สารเคมี×2 ที่ Safe Zone: ฟื้น 60 HP รักษาเลือดไหล/พิษทุกระดับ) • บอสประจำโซนมีโอกาสทิ้ง 🔪 มีดผ่าตัดเลเซอร์ กับ 💠 แกนวิจัย (ส่งให้ห้องวิจัยของค่ายได้ผลวิจัยชั่วคราว) • บางช่วงเกิดเหตุการณ์ 🔌 ไฟดับฉุกเฉิน (ของหายากออกง่ายมากแต่ซอมบี้โผล่เพิ่ม) • ส่งทีมสำรวจไปได้",
     "🎮 มินิเกมก่อนค้นลึก: จำรหัสวิทยุ 📻 หรือลำดับเสียงป่า 🌲 ให้ถูกครบ = ค้นครั้งนั้นเจอของว่างเปล่าน้อยลง 40% ของหายากออกง่ายขึ้น 50% ซอมบี้น้อยลง 15% (ผิดตัวเดียวได้โบนัสครึ่งหนึ่ง) • กด ข้าม ได้ตลอด หรือปิดด้วยปุ่ม 🎮 ข้างปุ่มค้นลึก",
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
@@ -3796,7 +3812,7 @@ const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", 
 const MKT_SLOTS = 3, MKT_MAX = 99;
 const mktIdsFor = () => MKT_IDS.filter((id) => id !== "rotten_meat" || state.profile?.faction === "zombie");
 const mktHave = (id) => state.inv?.[id]?.qty || 0;
-const MKT_WEAP = ["wooden_bat", "pocket_knife", "crowbar", "knife", "spiked_bat", "fire_axe", "crossbow", "pistol", "samurai_sword", "shotgun"];   // อาวุธที่ลงตลาดได้ (ขายทีละชิ้น พร้อมความทน) — ไม่รวมอาวุธ GM/อาวุธสร้างเอง
+const MKT_WEAP = ["wooden_bat", "pocket_knife", "crowbar", "knife", "spiked_bat", "fire_axe", "crossbow", "pistol", "samurai_sword", "shotgun", "lab_blade"];   // อาวุธที่ลงตลาดได้ (ขายทีละชิ้น พร้อมความทน) — ไม่รวมอาวุธ GM/อาวุธสร้างเอง
 const mktWeaponSlots = () => Object.entries(state.inv || {}).filter(([, it]) => it && MKT_WEAP.includes(it.id) && it.dur > 0).map(([slot]) => "w:" + slot);
 const mktLabel = (id) => {
   if (String(id).startsWith("w:")) { const it = state.inv?.[id.slice(2)]; if (!it) return "—"; const d = ITEMS[it.id]; return `${d.icon || "🗡️"} ${d.name} (${it.dur}/${it.maxDur ?? d.maxDur})`; }
@@ -4761,17 +4777,19 @@ const GEAR_FX = {
   rag_vest: "ลดดาเมจที่โดน 5%", scrap_plate: "ลดดาเมจที่โดน 10%", riot_vest: "ลดดาเมจที่โดน 15%", army_vest: "ลดดาเมจที่โดน 20%",
   lucky_charm: "ค้นหาแล้ว “ไม่เจออะไร” น้อยลง 20%", headlamp: "กลางคืนไม่เพิ่มอันตรายตอนค้นหา", gas_mask: "เจอซอมบี้ตอนค้นหาน้อยลง 25%", toolkit: "ค้นลึกเสียพลังงาน ×1.6 แทน ×2",
   mut_fang1: "ทุบกำแพงแรงขึ้น +3", mut_fang2: "ทุบกำแพงแรงขึ้น +6", mut_hide1: "ลดดาเมจที่โดน 8%", mut_hide2: "ลดดาเมจที่โดน 16%",
-  mut_nose1: "เจอเนื้อเน่าบ่อยขึ้น ×1.3", mut_nose2: "เจอเนื้อเน่าบ่อยขึ้น ×1.7 และไม่เจออะไรน้อยลง 20%"
+  mut_nose1: "เจอเนื้อเน่าบ่อยขึ้น ×1.3", mut_nose2: "เจอเนื้อเน่าบ่อยขึ้น ×1.7 และไม่เจออะไรน้อยลง 20%",
+  lab_coat: "ลดดาเมจที่โดนรวมประมาณ 17% (เกราะ 12% + ผ้าปลอดเชื้ออีก 5%)", bio_lens: "ของหายากออกง่ายขึ้น 7%",
+  chem_gloves: "โอกาสติดพิษจากมอนสเตอร์ลดครึ่ง และพิษแรงอ่อนลงหนึ่งระดับ", mut_fang3: "ทุบกำแพงแรงขึ้น +5 และทนพิษ (โอกาสติดพิษลดครึ่ง)"
 };
 const GEAR_DROPS = {   // ฝั่งมนุษย์ (น้ำหนักเทียบกับตารางโซน) — ต้องตรงกับ rules
   ruins: { rag_vest: 3 }, mall: { rag_vest: 2, lucky_charm: 2 }, hospital: { gas_mask: 3, riot_vest: 1 }, police: { riot_vest: 2, headlamp: 2, gas_mask: 1 },
   forest: { lucky_charm: 1, rag_vest: 1 }, factory: { scrap_plate: 3, headlamp: 2, toolkit: 3 }, port: { scrap_plate: 2, toolkit: 2, lucky_charm: 1 },
-  base: { army_vest: 2, riot_vest: 2, gas_mask: 2 }, tunnel: { army_vest: 1, headlamp: 2, toolkit: 1 }
+  base: { army_vest: 2, riot_vest: 2, gas_mask: 2 }, tunnel: { army_vest: 1, headlamp: 2, toolkit: 1 }, lab: { lab_coat: 2, bio_lens: 1, gas_mask: 1, chem_gloves: 1 }
 };
 const MUT_DROPS = {    // ฝั่งซอมบี้
   ruins: { mut_hide1: 2, mut_nose1: 3, mut_fang1: 2 }, mall: { mut_nose1: 3, mut_fang1: 2 }, hospital: { mut_hide1: 2, mut_nose2: 1 },
   police: { mut_fang1: 3, mut_hide1: 2, mut_fang2: 1 }, forest: { mut_nose1: 4, mut_hide1: 2 }, factory: { mut_hide1: 2, mut_fang1: 2, mut_hide2: 1 },
-  port: { mut_nose1: 3, mut_hide1: 2, mut_nose2: 1 }, base: { mut_fang2: 1, mut_hide2: 1, mut_fang1: 2 }, tunnel: { mut_fang2: 2, mut_hide2: 2, mut_nose2: 2 }
+  port: { mut_nose1: 3, mut_hide1: 2, mut_nose2: 1 }, base: { mut_fang2: 1, mut_hide2: 1, mut_fang1: 2 }, tunnel: { mut_fang2: 2, mut_hide2: 2, mut_nose2: 2 }, lab: { mut_nose2: 2, mut_hide2: 1, mut_fang2: 1, mut_fang3: 1 }
 };
 const GEAR_SLOT_BY_FAC = { human: ["arm", "acc"], zombie: ["mf", "mh", "mn"] };
 // ของที่สวมอยู่จริง: ต้องมี id นั้นในช่อง และยังมีของในกระเป๋า
@@ -4782,11 +4800,12 @@ function gearId(slot) { return gearDef(slot) ? state.profile[slot] : null; }
 function gearHas(id) { return !!ITEMS[id] && gearId(ITEMS[id].slot) === id; }
 function gearRed() { let red = 0; for (const s of ["arm", "acc", "mh"]) { const d = gearDef(s); if (d) red += d.red || 0; } return Math.min(40, red); }
 function gearCut(dmg) { const red = gearRed(); return dmg > 0 && red ? Math.max(1, Math.round(dmg * (1 - red / 100))) : dmg; }
-function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang1" ? 3 : 0; }
+function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang3" ? 5 : id === "mut_fang1" ? 3 : 0; }
 function gearTable(t) {
   let out = t;
   if (gearHas("lucky_charm")) out = out.map((d) => d.id === null ? { ...d, w: d.w * 0.8 } : d);
   if (gearHas("gas_mask")) out = out.map((d) => d.id === "zombie" ? { ...d, w: d.w * 0.75 } : d);
+  if (gearHas("bio_lens")) out = out.map((d) => d.id && d.id !== "zombie" && d.id !== "boss" && d.id !== "rotten_meat" && d.w <= 5 ? { ...d, w: d.w * 1.07 } : d);
   const n = gearId("mn");
   if (n) out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * (n === "mut_nose2" ? 1.7 : 1.3) } : d.id === null && n === "mut_nose2" ? { ...d, w: d.w * 0.8 } : d);
   return out;
@@ -4930,6 +4949,7 @@ const AMB_ZONE = {
   factory: ["สายพานค้างอยู่กลางไลน์ผลิต สลักสนิมส่งเสียงเอี๊ยดเมื่อลมผ่าน", "ไอน้ำพุ่งออกจากท่อรั่วเป็นช่วง ๆ ฟู่… ฟู่… ทำให้เงาในโรงงานดูขยับได้", "หมวกนิรภัยสีเหลืองเรียงอยู่หน้าห้องล็อกเกอร์ ขาดไปหลายใบ", "เสียงมอเตอร์เก่าติดขัดแล้วดับ… ใครเปิดสวิตช์ไว้เมื่อไหร่กัน", "กลิ่นน้ำมันเครื่องกับสารเคมีฉุนจนตาแสบ", "รอยลากเหล็กยาวบนพื้นคอนกรีตมุ่งหน้าไปทางโกดังด้านหลัง"],
   port: ["คลื่นกระทบท่าเรือเป็นจังหวะ เสียงโซ่เรือเสียดกับเสาเสียวฟัน", "ตู้คอนเทนเนอร์ซ้อนสูงเป็นเขาวงกต ประตูตู้หนึ่งแง้มอยู่ มีรอยข่วนด้านใน", "นกนางนวลวนอยู่เหนือกองอะไรสักอย่างที่ปลายท่า", "กลิ่นเค็มปนกลิ่นปลาเน่าพัดมาทางลม", "ไฟประภาคารเก่าหมุนช้า ๆ สาดแสงผ่านสายหมอกแล้วหายไป", "เรือประมงจมครึ่งลำนอนเอียงอยู่ในน้ำ ธงฉีกขาดโบกสะบัด"],
   base: ["ลวดหนามขดเป็นวงรอบค่ายทหาร ป้ายเตือนเขตหวงห้ามผุกร่อนจนอ่านไม่ออก", "ถุงทรายกองสูงหลังจุดยิง ปลอกกระสุนเปล่ากองเป็นเนินเล็ก ๆ", "ธงชาติครึ่งเสาสีซีดจางสะบัดอยู่เหนือหอบังคับการ", "วิทยุสนามดังซ่า… มีเสียงนับถอยหลังวนอยู่ แล้วก็ตัดเงียบไป", "เต็นท์ทหารฉีกขาด รอยกัดที่ขอบเตียงสนามชัดเจน", "รถจิ๊ปคันหนึ่งดับเครื่องกลางลาน กุญแจยังเสียบค้างอยู่"],
+  lab: ["ไฟฉุกเฉินสีแดงกะพริบเป็นจังหวะ ป้าย “ห้ามเข้า ตัวอย่างอันตรายทางชีวภาพ” ติดอยู่ทุกบานประตู", "ตู้เพาะเลี้ยงกระจกร้าวเป็นแผ่นใยแมงมุม ของเหลวสีเขียวซีดหยดลงพื้นทีละหยด", "เครื่องปรับอากาศยังทำงานอยู่ใต้ดิน ลมเย็นพัดกลิ่นสารเคมีมาแตะจมูก", "จอคอมพิวเตอร์ค้างอยู่ที่บันทึกการทดลองฉบับสุดท้าย ตัวหนังสือสั่นไหวเหมือนมีใครเพิ่งพิมพ์"],
   tunnel: ["เสียงน้ำหยดก้องในความมืด ติ๋ง… ก้องไปไกลกว่าที่ควรจะเป็น", "ลมเย็นพัดจากลึกเข้าไปในอุโมงค์ เหมือนมีอะไรหายใจอยู่ปลายทาง", "ไฟฉายเริ่มสลัว ผนังคอนกรีตเปียกชื้นสะท้อนเงาเป็นสองสามเงา", "รางรถไฟสนิมเขรอะ ไม้หมอนผุยุ่ย รอยเลือดแห้งลากยาวตามราง", "เสียงเท้าย่ำน้ำดังมาจากที่ไกล ๆ… ตามด้วยเสียงคราง", "กลิ่นอับชื้นปนกลิ่นเหม็นเปรี้ยวของสิ่งที่ไม่ควรมีชีวิตแต่ยังเคลื่อนไหวอยู่"]
 };
 const AMB_TIME = {
@@ -5130,8 +5150,8 @@ if (HAS_DOM && typeof window !== "undefined") {
    ========================================================= */
 /* ---- แผนที่โซน: ตำแหน่งโหนด (เปอร์เซ็นต์) และถนนเชื่อม — แค่ภาพ ไม่มีผลกับค่าเดินทาง ---- */
 // ผังแผนที่: แถวล่างสุด = Safe Zone ยิ่งขึ้นไปยิ่งไกล/อันตราย (ใกล้: ป่าลึก เขตเมืองร้าง / กลาง: ท่าเรือ โรงงาน ห้าง โรงพยาบาล / ไกล: ค่ายทหาร สถานีตำรวจ อุโมงค์)
-const ZMAP = { base: [20, 12], police: [50, 12], tunnel: [80, 12], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
-const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"]];
+const ZMAP = { base: [20, 12], police: [50, 12], tunnel: [80, 12], lab: [80, 34], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
+const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"], ["hospital", "lab"], ["tunnel", "lab"]];
 const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
 function zmapRoads() {
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
@@ -5940,14 +5960,14 @@ function fxStatus() {
 const ACH_GAP = 6000, ACH_FLUSH_MS = 20000, ACH_STEP = 3000;
 const ACH_TIER = [["b", "🥉", "ทองแดง"], ["s", "🥈", "เงิน"], ["g", "🥇", "ทอง"], ["l", "💎", "ตำนาน"]];
 const ACH_CATS = [["explore", "🔍 สำรวจ"], ["combat", "⚔️ ต่อสู้"], ["camp", "🧱 ค่าย"], ["social", "💬 สังคม"], ["world", "🌍 โลก"], ["secret", "❓ ลับ"]];
-const ZSHORT = { safe: "safe", ruins: "ruins", mall: "mall", hospital: "hosp", police: "police", forest: "forest", factory: "fact", port: "port", base: "base", tunnel: "tunnel" };
+const ZSHORT = { lab: "lab", safe: "safe", ruins: "ruins", mall: "mall", hospital: "hosp", police: "police", forest: "forest", factory: "fact", port: "port", base: "base", tunnel: "tunnel" };
 // [ตัวนับ, ไอคอน, หมวด, ฝ่าย(h=มนุษย์ z=ซอมบี้ ว่าง=ทุกคน), คำกริยา, หน่วย, [เกณฑ์], [ชื่อฉายา]]
 const ACH_FAM = [
   ["srch", "🔍", "explore", "", "ค้นหาของ", "ครั้ง", [10, 50, 150, 400, 1000, 2500], ["มือใหม่ขุดซาก", "นักคุ้ยเศษ", "นักสำรวจซากเมือง", "ขาประจำกองขยะ", "ปรมาจารย์ผู้ค้นหา", "ตำนานนักคุ้ยโลกแตก"]],
   ["found", "🎒", "explore", "", "เจอของจากการค้นหา", "ชิ้น", [5, 25, 100, 300, 800], ["เจอของชิ้นแรกๆ", "ตาไว", "โชคดีติดตัว", "โชคชะตาเข้าข้าง", "เทพเจ้าแห่งการเจอของ"]],
   ["nsrch", "🌙", "explore", "", "ค้นหาตอนกลางคืน", "ครั้ง", [10, 50, 200], ["คนกลางคืน", "นักค้นหาไร้แสง", "เจ้าแห่งรัตติกาล"]],
   ["trav", "🧭", "explore", "", "เดินทางข้ามโซน", "ครั้ง", [5, 30, 100, 300], ["นักเดินทางมือใหม่", "คนรู้ทาง", "นักเดินทางช่ำชอง", "ไม่มีที่ไหนไม่เคยไป"]],
-  ["zvis", "🗺️", "explore", "", "ไปเยือนโซนต่างๆ ให้ครบ", "โซน", [4, 7, 10], ["เปิดแผนที่", "ครึ่งทางของแผนที่", "รู้จักทุกซอกมุมเมือง"]],
+  ["zvis", "🗺️", "explore", "", "ไปเยือนโซนต่างๆ ให้ครบ", "โซน", [4, 7, 11], ["เปิดแผนที่", "ครึ่งทางของแผนที่", "รู้จักทุกซอกมุมเมือง"]],
   ["craft", "🔧", "explore", "", "คราฟต์ของ", "ชิ้น", [5, 25, 80, 200], ["ช่างฝึกหัด", "ช่างประดิษฐ์", "ช่างฝีมือดี", "ช่างแห่งโลกใหม่"]],
   ["use", "🧪", "explore", "", "ใช้ไอเทม", "ครั้ง", [10, 50, 200, 600], ["ลองใช้ดู", "ชินมือ", "ผู้ใช้ของคล่อง", "ไม่เหลือทิ้งสักชิ้น"]],
   ["mkt", "🏪", "explore", "", "ซื้อ/ขายในตลาด", "ครั้ง", [3, 15, 50, 150], ["ลูกค้าใหม่", "พ่อค้าประจำ", "เจ้าพ่อตลาด", "จักรพรรดิตลาด"]],
@@ -6002,6 +6022,7 @@ const ACH_FAM = [
   ["wgd", "🌍", "world", "", "ทำเป้าหมายโลกครบทั้ง 3 ข้อในวันเดียว", "วัน", [3, 10, 30, 60], ["ใส่ใจโลกใบนี้", "นักสำรวจประจำวัน", "ผู้รับใช้เมืองร้าง", "ไม่เคยปล่อยให้วันผ่านไปเปล่า"]],
   ["vis", "🏡", "social", "", "เยี่ยมบ้านเพื่อน (คนละ 1 ครั้ง/วัน)", "ครั้ง", [3, 15, 50, 150], ["แวะทักทาย", "แขกประจำ", "เพื่อนบ้านทั้งเมือง", "ผู้ไม่เคยลืมใคร"]],
   ["gft", "🎁", "social", "", "ฝากของให้เพื่อน", "ชิ้น", [1, 5, 20, 60], ["น้ำใจแรก", "คนใจดี", "ซานต้ากลางป่า", "ผู้ให้ไม่รู้จบ"]],
+  ["labs", "🧫", "world", "", "ส่งตัวอย่างวิจัยให้ค่าย", "ชิ้น", [5, 25, 80, 200], ["ผู้ช่วยนักวิจัย", "คนเก็บตัวอย่าง", "หัวหน้าห้องแล็บสนาม", "ผู้ไขปริศนาโครงการลับ"]],
   ["expd", "🧭", "explore", "", "ทีมสำรวจกลับมารับของสำเร็จ", "ครั้ง", [1, 5, 20, 60], ["ส่งทีมแรก", "หัวหน้าทีมสำรวจ", "เจ้าของเส้นทางเสบียง", "ผู้ไม่เคยให้ค่ายอดอยาก"]],
   ["book", "📖", "world", "", "บันทึกลงสมุดสะสม", "รายการ", [10, 25, 45, 70], ["นักจดบันทึก", "นักสะสมตัวยง", "ผู้รอบรู้เมืองร้าง", "สารานุกรมเดินได้"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
@@ -6543,13 +6564,14 @@ function bountyWorldRows(box) {
 /* ---- เหตุการณ์ใหญ่ ---- */
 const EVT_TYPES = {
   air: { icon: "🪂", name: "เครื่องบินทิ้งเสบียง", say: (z) => `เครื่องบินขนส่งทิ้งเสบียงลงที่${z}! ค้นหาที่นั่นตอนนี้จะเจอของดีกว่าปกติ`, end: (z) => `เสบียงที่${z}ถูกเก็บจนเกลี้ยงแล้ว`, tip: "ค้นหาในโซนนี้เจอของมากขึ้น ของหายากออกง่ายขึ้น" },
-  horde: { icon: "🧟‍♂️", name: "ฝูงซอมบี้บุก", say: (z) => `มีรายงานฝูงซอมบี้ใหญ่เคลื่อนเข้าสู่${z}! ระวังตัวให้ดี (ซอมบี้: กลิ่นเลือดฟุ้ง เนื้อเน่าออกเยอะ)`, end: (z) => `ฝูงซอมบี้ที่${z}สลายตัวแล้ว`, tip: "มนุษย์: เจอซอมบี้บ่อยขึ้น • ซอมบี้: เนื้อเน่าออกเยอะขึ้น" }
+  horde: { icon: "🧟‍♂️", name: "ฝูงซอมบี้บุก", say: (z) => `มีรายงานฝูงซอมบี้ใหญ่เคลื่อนเข้าสู่${z}! ระวังตัวให้ดี (ซอมบี้: กลิ่นเลือดฟุ้ง เนื้อเน่าออกเยอะ)`, end: (z) => `ฝูงซอมบี้ที่${z}สลายตัวแล้ว`, tip: "มนุษย์: เจอซอมบี้บ่อยขึ้น • ซอมบี้: เนื้อเน่าออกเยอะขึ้น" },
+  blackout: { icon: "🔌", name: "ไฟดับฉุกเฉิน", say: (z) => `ไฟสำรองของ${z}ดับทั้งอาคาร! ในความมืดของหายากโผล่ง่ายขึ้น แต่ก็มีอะไรเคลื่อนไหวอยู่ด้วย`, end: (z) => `ไฟสำรองของ${z}กลับมาติดแล้ว`, tip: "ของหายากออกง่ายมาก • มนุษย์: ซอมบี้โผล่บ่อยขึ้น" }
 };
 const EVT_DUR = 30 * 60000, EVT_PER_DAY = 3;
 function evtOf(day, i) {
   const dayStart = day * COOP_DAY_MS - COOP_TZ, zl = Object.keys(ZONES).filter((z) => z !== "safe");
   const start = dayStart + (8 + i * 5) * 3600000 + (rdHash("evs", day, i) % (4 * 3600000));
-  const type = rdHash("evt", day, i) % 2 ? "air" : "horde", zone = zl[rdHash("evz", day, i) % zl.length];
+  const zone = zl[rdHash("evz", day, i) % zl.length], type = zone === "lab" && (rdHash("evb", day, i) >>> 9) % 2 ? "blackout" : rdHash("evt", day, i) % 2 ? "air" : "horde";   // ไฟดับเกิดเฉพาะศูนย์วิจัย (สลับกับเหตุการณ์เดิม) — โซนอื่นตารางเดิมไม่เปลี่ยน
   return { key: `e${day}_${i}`, type, zone, start, end: start + Math.max(5, Math.min(180, T("evt_dur", 30))) * 60000 };
 }
 function evtList(now = serverNow()) {
@@ -6563,6 +6585,7 @@ const evtHere = (zone = state.zone, now = serverNow()) => evtActive(now).find((e
 function evtTable(t, isZ) {
   const e = evtHere(); if (!e) return t;
   const em = (f) => Math.pow(f, Math.max(0, T("evt_str", 100)) / 100);   // ความแรงเหตุการณ์ปรับได้ (100 = ค่าเดิม, 0 = ไม่มีผล)
+  if (e.type === "blackout") return t.map((d) => d.id === null ? { ...d, w: d.w * em(0.8) } : d.id === "boss" ? d : d.id === "zombie" ? (isZ ? d : { ...d, w: d.w * em(1.7) }) : d.id === "rotten_meat" ? d : d.w <= 5 ? { ...d, w: d.w * em(1.9) } : d);
   if (e.type === "air") return t.map((d) => d.id === null ? { ...d, w: d.w * em(0.4) } : (d.id === "zombie" || d.id === "boss") ? d : d.w <= 5 ? { ...d, w: d.w * em(2.2) } : { ...d, w: d.w * em(1.3) });
   return t.map((d) => isZ ? (d.id === "rotten_meat" ? { ...d, w: d.w * em(2.5) } : d.id === null ? { ...d, w: d.w * em(0.6) } : d) : (d.id === "zombie" ? { ...d, w: d.w * em(2) } : d.id === null ? { ...d, w: d.w * em(0.7) } : d));
 }
@@ -6820,7 +6843,7 @@ const SITE_TYPES = [
 ];
 const SITE_HINT = {
   ruins: "ตึกที่ถล่มครึ่งหนึ่ง กองเศษปูนสูงเป็นเนิน", mall: "ป้ายไฟห้างที่ยังกะพริบไม่ยอมดับ", hospital: "กลิ่นยาฆ่าเชื้อจาง ๆ ลอยมาตามลม", police: "เสียงไซเรนที่ไม่มีใครเปิด",
-  forest: "ใต้ร่มไม้ที่แสงลอดไม่ถึง", factory: "เสียงเหล็กครูดจากเครื่องจักรสนิม", port: "กลิ่นเกลือและตู้คอนเทนเนอร์ที่ซ้อนกันสูง", base: "รั้วลวดหนามของค่ายทหารเก่า", tunnel: "ความมืดและอากาศอับชื้นใต้ดิน"
+  lab: "ไอเย็นลอดขึ้นมาจากช่องระบายอากาศพื้นดิน มีป้ายเตือนสารชีวภาพผุพัง", forest: "ใต้ร่มไม้ที่แสงลอดไม่ถึง", factory: "เสียงเหล็กครูดจากเครื่องจักรสนิม", port: "กลิ่นเกลือและตู้คอนเทนเนอร์ที่ซ้อนกันสูง", base: "รั้วลวดหนามของค่ายทหารเก่า", tunnel: "ความมืดและอากาศอับชื้นใต้ดิน"
 };
 function siteOf(slot) {
   const zl = Object.keys(ZONES).filter((z) => z !== "safe");
@@ -6911,13 +6934,13 @@ function careerCheck() {
 }
 const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
 let fxMemo = { k: "", v: null };
 function fxMods(z) {
-  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0, typeof skEff === "function" ? skEff.s || "" : ""].join(",");
+  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0, labBuffLeft() > 0 ? 1 : 0, typeof skEff === "function" ? skEff.s || "" : ""].join(",");
   if (fxMemo.k === k) return fxMemo.v;
   const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0, it: {} }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
   festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
@@ -6925,6 +6948,7 @@ function fxMods(z) {
   if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
   if (duoBuffLeft() > 0) m.a *= 1.1;
   if (typeof skApply === "function") skApply(m);
+  labBuffMods(m);
   if (typeof fxCampMods === "function") fxCampMods(m, z);
   if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
   if (typeof fxNpcMods === "function") fxNpcMods(m, z);
@@ -7084,7 +7108,7 @@ function fxInit() {
      จบสัปดาห์ ฝั่งที่แต้มมากกว่าในโซนนั้น "ยึดโซน" ตลอดสัปดาห์ถัดไป → สมาชิกฝั่งผู้ชนะได้โบนัสเล็ก ๆ ในโซนนั้น
    - ปรับได้จากแท็บ 🎛️: proj_on, proj_scale, proj_str, proj_season, zw_on, zw_str, zw_min
    ========================================================= */
-const PROJ_ITEMS = { human: { scrap: 1, chem: 3, bandage: 2, canned_food: 2, water: 1, medkit: 6 }, zombie: { rotten_meat: 1, chem: 3, moss: 2, medkit: 6 } };
+const PROJ_ITEMS = { human: { scrap: 1, chem: 3, bandage: 2, canned_food: 2, water: 1, medkit: 6, lab_sample: 5, lab_core: 25 }, zombie: { rotten_meat: 1, chem: 3, moss: 2, medkit: 6, lab_sample: 5, lab_core: 25 } };
 const PROJ = {
   human: [
     { id: 1, icon: "🗼", name: "หอสังเกตการณ์", cost: 500, tip: "ตาไวขึ้น: เจอซอมบี้ตอนค้นหาน้อยลง 5%", eff: { z: 0.95 } },
@@ -7381,7 +7405,7 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
-  try { benchRows(body); expRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+  try { benchRows(body); expRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
 }
 
 /* =========================================================
@@ -7932,8 +7956,8 @@ async function baseSceneBio(uid, facIn) {
    - สมุดสะสม: เก็บเป็นบิตลงตัวนับ ach (ชิ้นละ 11 บิต ≤ 2047 < เพดาน +3000/ครั้ง) แล้วรวม (OR) กลับเข้าทุกเครื่อง
    ========================================================= */
 const BK_SP = {   // ลำดับต้องคงที่ตลอดไป: เพิ่มของใหม่ได้เฉพาะต่อท้ายเท่านั้น
-  i: ["canned_food", "water", "bandage", "medkit", "wooden_bat", "knife", "crowbar", "pistol", "bread", "fruit", "moss", "energy_drink", "scrap", "chem", "pocket_knife", "spiked_bat", "fire_axe", "crossbow", "samurai_sword", "shotgun", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat", "rag_vest", "scrap_plate", "riot_vest", "army_vest", "lucky_charm", "headlamp", "gas_mask", "toolkit", "mut_fang1", "mut_fang2", "mut_hide1", "mut_hide2", "mut_nose1", "mut_nose2"],
-  z: ["safe", "ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel"],
+  i: ["canned_food", "water", "bandage", "medkit", "wooden_bat", "knife", "crowbar", "pistol", "bread", "fruit", "moss", "energy_drink", "scrap", "chem", "pocket_knife", "spiked_bat", "fire_axe", "crossbow", "samurai_sword", "shotgun", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "rotten_meat", "rag_vest", "scrap_plate", "riot_vest", "army_vest", "lucky_charm", "headlamp", "gas_mask", "toolkit", "mut_fang1", "mut_fang2", "mut_hide1", "mut_hide2", "mut_nose1", "mut_nose2", "lab_coat", "bio_lens", "lab_sample", "chem_gloves", "lab_blade", "lab_core", "exp_serum", "mut_fang3"],
+  z: ["safe", "ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel", "lab"],
   f: ["newmoon", "fullmoon", "meteor", "songkran", "loy", "halloween", "harvest", "newyear"],
   s: ["plane", "truck", "bunker"]
 };
@@ -8285,9 +8309,9 @@ function skOpen() {
    - รางวัลคงที่ตามโซนที่ส่งไป (rules ตรวจตรง ๆ) • ทีละ 1 ทีม • รับได้เมื่อครบเวลา ตอนอยู่ Safe Zone
    ========================================================= */
 const EXP_MS = 14400000;
-const EXP_ZONES = ["ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel"];
-const EXP_H = { ruins: ["canned_food", 3], mall: ["bread", 3], hospital: ["bandage", 3], police: ["scrap", 4], forest: ["moss", 3], factory: ["chem", 2], port: ["water_jug", 1], base: ["army_meal", 1], tunnel: ["energy_drink", 2] };
-const EXP_Z = { ruins: 2, mall: 2, hospital: 3, police: 3, forest: 3, factory: 2, port: 3, base: 3, tunnel: 4 };
+const EXP_ZONES = ["ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel", "lab"];
+const EXP_H = { ruins: ["canned_food", 3], mall: ["bread", 3], hospital: ["bandage", 3], police: ["scrap", 4], forest: ["moss", 3], factory: ["chem", 2], port: ["water_jug", 1], base: ["army_meal", 1], tunnel: ["energy_drink", 2], lab: ["antidote", 2] };
+const EXP_Z = { ruins: 2, mall: 2, hospital: 3, police: 3, forest: 3, factory: 2, port: 3, base: 3, tunnel: 4, lab: 4 };
 const expOn = () => T("exp_on", 1) === 1;
 const expZom = () => state.profile?.faction === "zombie";
 const expReward = (z) => expZom() ? ["rotten_meat", EXP_Z[z]] : EXP_H[z];
@@ -8325,6 +8349,36 @@ async function expClaim() {
 function expNotice() {   // ทีมกลับมาแล้ว → แจ้งครั้งเดียวต่อทริป
   if (!expOn() || !expReady()) return; const k = "exp_n_" + state.exp.t; if (fxGet(k, 0)) return; fxSet(k, 1);
   try { toast("🧭 ทีมสำรวจกลับมาแล้ว — รับของที่ 🏠 ที่พัก"); logLine(`🧭 ทีมสำรวจจาก ${ZONES[state.exp.z]?.name || state.exp.z} กลับมาแล้ว รอรับที่ที่พัก (ใน Safe Zone)`, "system"); } catch { /* ข้าม */ }
+}
+/* ---- 🧫 ส่งตัวอย่างวิจัยให้ค่าย → "ผลวิจัย" ชั่วคราว (ฝั่งเกมล้วน ๆ เก็บเวลาในเครื่อง: ของหายาก ×1.08 / ของทุกชนิด ×1.03) ---- */
+const LAB_BUFF_KEY = "labbuf", LAB_MIN_PER = 10, LAB_MIN_CORE = 30, LAB_MAX_MIN = 60;
+const labBuffLeft = () => Math.max(0, (LS.get(lsKey(LAB_BUFF_KEY), 0) || 0) - serverNow());
+function labBuffMods(m) { if (labBuffLeft() > 0) { m.r *= 1.08; m.a *= 1.03; } }
+async function labSubmit(id, n) {
+  const it = state.inv?.[id], per = id === "lab_core" ? LAB_MIN_CORE : LAB_MIN_PER;
+  if (!it || !(n > 0) || state.busy) return;
+  n = Math.min(n, it.qty, Math.max(0, Math.ceil((LAB_MAX_MIN * 60000 - labBuffLeft()) / (per * 60000))));
+  if (n <= 0) return toast("ผลวิจัยเต็ม 60 นาทีแล้ว รอให้ลดลงก่อนค่อยส่งเพิ่ม");
+  state.busy = true;
+  try {
+    await update(ref(db), { [`inventory/${state.uid}/${id}` + (it.qty - n > 0 ? "/qty" : "")]: it.qty - n > 0 ? it.qty - n : null });
+    LS.set(lsKey(LAB_BUFF_KEY), Math.min(serverNow() + LAB_MAX_MIN * 60000, Math.max(serverNow(), LS.get(lsKey(LAB_BUFF_KEY), 0) || 0) + n * per * 60000));
+    fxMemo = { k: "", v: null }; achBump("labs", n);
+    toast(`🧫 ส่ง ${ITEMS[id].name} ×${n} — ผลวิจัยเหลือ ~${Math.ceil(labBuffLeft() / 60000)} นาที`);
+  } catch (e) { toast(errMsg(e)); }
+  finally { state.busy = false; try { renderBase(); } catch { /* ข้าม */ } }
+}
+function labRows(body) {
+  const sm = state.inv?.lab_sample?.qty || 0, core = state.inv?.lab_core?.qty || 0, left = labBuffLeft();
+  if (!sm && !core && !left) return;
+  const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
+  c.append(mk("b", "", "🧫 ห้องวิจัยของค่าย"));
+  c.append(mk("span", "muted", `ส่งตัวอย่างวิจัยให้ค่ายวิเคราะห์ (ชิ้นละ +${LAB_MIN_PER} นาที / แกนวิจัยละ +${LAB_MIN_CORE} นาที สูงสุด ${LAB_MAX_MIN} นาที) ได้ผลวิจัย: ของหายากออกง่ายขึ้น 8% และของทุกชนิดออกง่ายขึ้น 3%${left > 0 ? ` • เหลือ ~${Math.ceil(left / 60000)} นาที` : ""}`));
+  const row = mk("div"); row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px";
+  const b1 = btn(`🧫 ส่ง 1 ชิ้น (มี ${sm})`, () => labSubmit("lab_sample", 1), "btn ghost mini"); b1.disabled = sm < 1;
+  const b2 = btn(`🧫 ส่งทั้งหมด`, () => labSubmit("lab_sample", sm), "btn ghost mini"); b2.disabled = sm < 2;
+  const b3 = btn(`💠 ส่งแกนวิจัย (มี ${core})`, () => labSubmit("lab_core", 1), "btn primary mini"); b3.disabled = core < 1;
+  row.append(b1, b2, b3); c.append(row); body.append(c);
 }
 function expRows(body) {
   if (!expOn()) return;
