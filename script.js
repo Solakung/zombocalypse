@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0742";
+const APP_VERSION = "2026-10-05.0810";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1345,6 +1345,7 @@ function renderInv() {
       const btnGrp = mk("div", "row-btns");
       const wb = btn(worn ? "ถอด" : "สวม", () => gearToggle(slot), "btn ghost mini"); wb.disabled = !mine; if (!mine) wb.title = def.zombieOnly ? "เฉพาะซอมบี้" : "เฉพาะมนุษย์";
       btnGrp.append(wb);
+      if (state.profile?.faction === "human" && state.zone === "safe" && armorYield(it)) btnGrp.append(btn(`รื้อ +${armorYield(it)}`, () => dismantleArmor(slot), "btn ghost mini"));   // ได้เศษวัสดุคืน (ต่ำกว่าต้นทุนคราฟต์)
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
       btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
       li.append(btnGrp);
@@ -1434,6 +1435,28 @@ async function repairWeapon(slot) {
 }
 
 // รื้ออาวุธเอาเศษวัสดุ (เบต้า) — ได้ ~40% ของค่าซ่อมเต็ม ยิ่งสึกยิ่งได้น้อย / อาวุธหายถาวร
+// รื้อเกราะ (มนุษย์ • Safe Zone): ได้เศษวัสดุคืน ไม่คืนสารเคมี — เพดานตามกฎ: เสื้อเก่า 2 • เกราะเศษเหล็ก/เสื้อปราบจลาจล 4 • เกราะทหาร 6
+const ARMOR_SALV = { rag_vest: 2, scrap_plate: 4, riot_vest: 4, army_vest: 6 };
+const armorYield = (it) => { const b = it && ARMOR_SALV[it.id]; return b ? Math.max(1, Math.floor(b * Math.max(0, Math.min(100, T("salv_pct", 100))) / 100)) : 0; };
+async function dismantleArmor(slot) {
+  if (state.busy) return;
+  const it = state.inv[slot], p = state.profile; if (!it || !p || !armorYield(it) || it.id !== slot) return;
+  if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่รื้อเกราะได้");
+  if (state.zone !== "safe") return toast("รื้อได้เฉพาะใน Safe Zone");
+  const def = ITEMS[it.id], qty = it.qty || 1;
+  if (p.arm === slot && qty <= 1) return toast("ถอดเกราะชิ้นนี้ก่อนค่อยรื้อ");
+  state.busy = true;
+  try {
+    const realHave = (await get(ref(db, `inventory/${state.uid}/scrap/qty`))).val() || 0;
+    const y = armorYield(it), after = Math.min(99, realHave + y);
+    if (!confirm(`รื้อ ${def.name} 1 ชิ้น?\nได้ เศษผ้าและวัสดุ ${y} ชิ้น (มี ${realHave} → ${after}${realHave + y > 99 ? " · เกิน 99 ส่วนเกินจะหาย" : ""})\n⚠ ได้คืนน้อยกว่าที่ใช้ทำ และเอากลับมาไม่ได้`)) { state.busy = false; return; }
+    const u = {};
+    if (qty <= 1) u[`inventory/${state.uid}/${slot}`] = null; else u[`inventory/${state.uid}/${slot}/qty`] = qty - 1;
+    u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: after }; u[`salvage/${state.uid}/slot`] = slot; u[`salvage/${state.uid}/ts`] = serverTimestamp();
+    await update(ref(db), u);
+    toast(`รื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`); logLine(`🔩 คุณรื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`, "info");
+  } catch (e) { toast(errMsg(e)); } finally { state.busy = false; }
+}
 async function dismantleWeapon(slot) {
   if (state.busy) return;
   const it = state.inv[slot], p = state.profile; if (!it || !p) return;
@@ -6420,6 +6443,7 @@ function tuneDefs() {
   rows.push(["evt_on", "เหตุการณ์ใหญ่ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "⚡ เหตุการณ์ใหญ่"], ["evt_dur", "ระยะเวลาเหตุการณ์ (นาที)", 30, 5, 180, "⚡ เหตุการณ์ใหญ่"], ["evt_str", "ความแรงของผล (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 300, "⚡ เหตุการณ์ใหญ่"]);
   rows.push(["ach_mult", "ตัวคูณเกณฑ์ความสำเร็จทั้งหมด (% • 100 = เดิม, 50 = ง่ายขึ้นครึ่งหนึ่ง)", 100, 10, 1000, "🏅 ความสำเร็จ"]);
   rows.push(["gacha_cap", "เพดานหมุนกาชาต่อคนต่อวัน (0 = ไม่จำกัด)", 0, 0, 500, "🎰 กาชา"]);
+  rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
 function tuneRender(box) {
