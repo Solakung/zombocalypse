@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1046";
+const APP_VERSION = "2026-10-05.1054";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -754,7 +754,7 @@ function renderBars() {
   const st = curStamina();
   const fd = curFood();
   const wt = curWater();
-  $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human"));
+  $("me-infected")?.classList.toggle("hidden", !(p.infected && p.faction === "human" && p.hp > 0));
   
   $("bar-hp").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "\%"; $("txt-hp").textContent = p.hp === 0 ? (deathWaitLeft() > 0 ? `💀 ล้มลง • ฟื้นได้ใน ${mmss(deathWaitLeft())}` : "💀 ล้มลง • กำลังฟื้น…") : `HP ${p.hp}/${maxHp()}`;
   renderTravelState(); renderBoss();
@@ -1719,6 +1719,7 @@ async function processDeath(attempt = 0) {
   if (!p || p.hp !== 0 || p.banned || state.dying || !state.invLoaded || !state.zone) return;
   const wait = deathWaitLeft();
   if (wait > 0) {   // ยังอยู่ในช่วงรอฟื้น → นับถอยหลังแล้วค่อยลองใหม่ (ฟื้นก่อนเวลา rules ไม่ยอม)
+    if (p.infected) update(ref(db), { [`users/${state.uid}/infected`]: null, [`users/${state.uid}/infectTs`]: null }).catch(() => {});   // ล้มลงแล้วเชื้อหายทันที (ไม่ต้องรอฟื้น) — ต้องใช้ rules v31
     if (!state.deathTimer) {
       logLine(`💀 คุณล้มลง… ร่างกายยังอ่อนล้าจากครั้งก่อน จะฟื้นได้ในอีก ${mmss(wait)} นาที (ดูเวลาที่แถบ HP)`, "system");
       state.deathTimer = setTimeout(() => { state.deathTimer = null; processDeath(); }, wait + 1500);
@@ -2183,7 +2184,7 @@ function renderWB() {
   $("wb-title").textContent = `${b.icon || "👹"} ${b.name}`;
   { const art = $("wb-art"), id = WB_ART[b.name]; if (art) art.classList.add("hidden"); box.classList.remove("has-art"); box.style.removeProperty("--wbart"); if (id) { const src = `img/wb/${id}.webp`; imgProbe(src, (ok) => { if (ok && box.isConnected) { box.style.setProperty("--wbart", `url(${src})`); box.classList.add("has-art"); } }); } }   // รูปบอสเป็นพื้นหลังกล่อง (เหมือนแบนเนอร์โซน) ไม่ดันปุ่มต่อสู้
   $("wb-time").textContent = dead ? "ล้มแล้ว" : b.endsAt ? `หายไปใน ~${Math.max(1, Math.ceil((b.endsAt - serverNow()) / 60000))} นาที` : "";
-  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}${fxChanceText("wboss")}`;
+  $("wb-tag").textContent = `${b.tag ? b.tag + " • " : ""}ตี ${b.hits} ครั้ง/รอบ ดาเมจ ${b.dmgLo}–${b.dmgHi}${T("wb_aura", WB_AURA_DEF) > 0 ? ` • ฟาดทุกคนในโซนทุก ~${T("wb_aura", WB_AURA_DEF)} วิ` : ""} • รางวัล ${wbRewardText(b)}${wbBonusText(b)}${fxChanceText("wboss")}`;
   $("bar-wb").style.width = Math.max(0, (b.hp / b.max) * 100) + "%";
   $("txt-wb").textContent = `HP ${Math.max(0, b.hp)}/${b.max}`;
   const top = Object.values(state.wbHits || {}).filter((h) => h.bid === b.startedAt).sort((a, c) => c.total - a.total).slice(0, 3);
@@ -2399,6 +2400,31 @@ function listenWorldBoss() {
   onValue(ref(db, "wbAuto"), (s) => { state.wbAuto = s.val(); state.wbAutoOk = true; wbaTick(); }, (e) => console.error("wbAuto", e));
   setInterval(() => { renderWB(); renderAdminWB(); }, 1000);
   setInterval(wbaTick, 20000);
+  setInterval(wbAuraTick, 5000);
+}
+// บอสโลกฟาดผู้เล่นที่ยืนอยู่ในโซนเป็นระยะ (กันยืนดูเฉย ๆ) — ฝั่งเครื่องผู้เล่นหักเลือดตัวเอง (rules เดิมให้ลดเลือดตัวเองได้อยู่แล้ว)
+// ฟาดครั้งละ 1 ที (ดาเมจ/โอกาสโดนตามบอส) • นับเวลาจากตอนเข้าโซน/บอสเกิด หรือจากการตีบอสครั้งล่าสุด (คนที่ตีอยู่โดนสวนกลับอยู่แล้ว) • ปรับ/ปิดได้ที่แท็บ 🎛️ (wb_aura = วินาที, 0 = ปิด)
+const WB_AURA_DEF = 45;
+async function wbAuraTick() {
+  try {
+    const z = state.zone, p = state.profile, b = z && z !== "safe" ? wbOf(z) : null;
+    if (!b || !wbAlive(b) || !p || !(p.hp > 0) || state.wbBusy || state.wbAuraBusy) return;
+    const ms = Math.max(0, T("wb_aura", WB_AURA_DEF)) * 1000; if (!ms) return;
+    const now = serverNow(), key = z + "_" + b.startedAt;
+    if (state.wbAuraAt?.k !== key) { state.wbAuraAt = { k: key, t: now }; return; }
+    if (now - Math.max(state.wbAuraAt.t, typeof p.lastAttack === "number" ? p.lastAttack : 0) < ms) return;
+    state.wbAuraAt.t = now; state.wbAuraBusy = true;
+    const s = strikeWith({ hits: 1, acc: b.acc, dmg: [b.dmgLo, b.dmgHi], verb: `${b.name}ฟาดใส่ทุกคนในโซน` }, null);
+    const hp = Math.max(0, p.hp - s.total), u = {};
+    if (hp !== p.hp) u[`users/${state.uid}/hp`] = hp;
+    let line = s.text;
+    if (hp < p.hp) line += monFx(u, "wboss", p.hp - hp, hp);
+    if (Object.keys(u).length) await update(ref(db), u);
+    if (hp < p.hp) stat("dmg", p.hp - hp);
+    logLine(`${b.icon || "👹"} ${line}`, "combat");
+    if (hp === 0) logLine(`${b.icon || "👹"} ${b.name}ฟาดคุณจนล้มลง…`, "system");
+  } catch (e) { console.warn("wbAura", e); }
+  finally { state.wbAuraBusy = false; }
 }
 
 /* =========================================================
@@ -3479,7 +3505,7 @@ const INFECT_TICK = 15000, INFECT_DMG = 2, INFECT_MAX_TICKS = 40;   // HP −2 �
 // ถ้าปิดเกมไปนาน กลับมาจะหักย้อนหลัง แต่ไม่ทำให้ตายตอนไม่อยู่ (เหลืออย่างน้อย 1 HP)
 async function infectionTick() {
   const p = state.profile;
-  if (!p || p.banned || !p.infected || p.faction !== "human" || state.busy || state.infBusy) return;
+  if (!p || p.banned || !p.infected || p.faction !== "human" || !(p.hp > 0) || state.busy || state.infBusy) return;   // ล้มลง (HP 0) แล้วเชื้อไม่ลุกลาม/ไม่เด้งข้อความซ้ำ
   const ticks = Math.min(INFECT_MAX_TICKS, Math.floor((serverNow() - Math.max(p.infected, p.infectTs || 0)) / INFECT_TICK));
   if (ticks < 1) return;
   state.infBusy = true;
@@ -6928,6 +6954,7 @@ function tuneDefs() {
     rows.push(["od_free", "ค่าพิษที่ยังกินได้ปลอดภัย (ค่าพิษ +1 ต่อเม็ด ลดลง 1 ทุก 12 ชม.)", 2, 0, 10, g]);
     rows.push(["od_step", "โอกาสโอเวอร์โดสที่เพิ่มต่อค่าพิษที่เกิน (%)", 20, 0, 100, g]);
     rows.push(["od_max", "โอกาสโอเวอร์โดสสูงสุด (%)", 70, 0, 100, g]); }
+  rows.push(["wb_aura", "บอสโลกฟาดผู้เล่นที่ยืนอยู่ในโซนทุกกี่วินาที (0 = ปิด • คนที่ตีบอสอยู่โดนสวนกลับตามปกติ ไม่นับซ้ำ)", WB_AURA_DEF, 0, 300, "👹 บอสโลก"]);
   { const g = "🌦️ อากาศ & 🔊 เสียงดึงซอมบี้";
     rows.push(["wx_on", "สภาพอากาศสุ่ม (1 = เปิด, 0 = ฟ้าโปร่งตลอด • สั่งอากาศเองยังใช้ได้)", 1, 0, 1, g]);
     rows.push(["wx_str", "ความแรงของผลอากาศ (% • 100 = เดิม, 0 = ไม่มีผลต่อการเล่น)", 100, 0, 200, g]);
