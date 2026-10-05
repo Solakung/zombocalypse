@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0931";
+const APP_VERSION = "2026-10-05.0946";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -358,8 +358,9 @@ const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
 const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
-const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z)));
-function effectiveDrops(z) {
+const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z)));
+function effectiveDrops(z) { return wxNzDrops(z, effectiveDrops0(z)); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
+function effectiveDrops0(z) {
   if (z === "safe" && wallBroken()) return [...ZONES.safe.drops, { id: "zombie", w: WALL_BREACH_Z }];   // กำแพงพัง → ซอมบี้บุก Safe Zone
   const e = zoneEv(z), n = nightMod(z);
   const zm = (e?.zmod || 0) + n.zmod, nm = (e?.nmod || 0) + n.nmod;
@@ -395,8 +396,9 @@ function renderZoneDanger(z) {
   const d = dangerInfo(z), base = ZONES[z].danger;
   el.className = "danger-line d" + d.tier;
   const pvpTxt = z === "safe" ? (wallBroken() ? "กำแพงพัง ต่อสู้กันได้" : "ต่อสู้ไม่ได้") : "ผู้เล่นโจมตีกันได้";
-  el.textContent = `⚠️ ${d.level}/10 (${d.label})${d.level !== base ? ` ปกติ ${base}` : ""} • เจอซอมบี้ ${d.chance}% • ${pvpTxt}`;
-  el.title = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${d.chance}% • ${pvpTxt}`;
+  const fogged = z !== "safe" && wxNow().type === "fog" && wxScale() > 0, cTxt = fogged ? `~${Math.max(0, Math.round(d.chance / 10) * 10 - 10)}–${Math.round(d.chance / 10) * 10 + 10}%` : `${d.chance}%`;
+  el.textContent = `⚠️ ${d.level}/10 (${d.label})${d.level !== base ? ` ปกติ ${base}` : ""} • เจอซอมบี้ ${cTxt}${fogged ? " 🌫️" : ""} • ${pvpTxt}`;
+  el.title = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${cTxt}${fogged ? " (หมอกบังสายตา ประเมินได้แค่ช่วง)" : ""} • ${pvpTxt}`;
   if (tEl) {
     const night = isNight();
     tEl.className = "time-line " + (night ? "night" : "day");
@@ -404,6 +406,7 @@ function renderZoneDanger(z) {
       ? `🌙 กลางคืน — อีกประมาณ ${phaseMinsLeft()} นาทีจะสว่าง${z === "safe" ? "" : ` • อันตราย +${NIGHT_MOD.dmod} ซอมบี้ชุกขึ้น`}`
       : `☀️ กลางวัน — อีกประมาณ ${phaseMinsLeft()} นาทีจะมืด`;
   }
+  try { wxRender(z); } catch { /* ข้าม */ }
   if (evEl) {
     evEl.classList.toggle("hidden", !d.ev);
     if (d.ev) evEl.textContent = `${eventIcon(d.ev)} ${d.ev.title} — ${d.ev.daily ? "ถึงเที่ยงคืน" : `อีกประมาณ ${minsLeft(d.ev)} นาที`}${state.profile?.faction === "zombie" && d.ev.type === "horde" ? " • 🥩 ซากเพียบ" : ""}`;
@@ -1031,7 +1034,7 @@ $("btn-copy-id").addEventListener("click", async () => {
 // buildZoneList → ดูหัวข้อ 23 ท้ายไฟล์ (แผนที่โซน)
 function teardownZone() { state.unsubs.forEach((f) => f()); state.unsubs = []; }
 
-const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.includes(z) ? 6 : TRAVEL_FAR.includes(z) ? 14 : TRAVEL_STAMINA);
+const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.includes(z) ? 6 : TRAVEL_FAR.includes(z) ? 14 : TRAVEL_STAMINA) + wxTravelExtra(z);
 function travelCooldownLeft() { const t = state.profile?.lastTravel; return typeof t === "number" ? Math.max(0, TRAVEL_COOLDOWN - (serverNow() - t)) : 0; }
 
 // moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
@@ -1093,6 +1096,7 @@ function addChat(key, m) {
   const isMe = m.uid === state.uid;
 
   if (m.type === "combat") {
+    try { nzNote(m); } catch { /* ข้าม */ }
     el = mk("div", "msg combat");
     el.append(mk("div", "bubble", m.text));
   } else if (m.type === "emote") {
@@ -1804,11 +1808,11 @@ async function scavengeOnce() {
     } else if (found) {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
-      stat("found"); logLine(`คุณค้นหา… เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
+      stat("found"); logLine(`${srchLead()} เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     } else {
       await update(ref(db), u);
-      logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : "คุณค้นหา… ไม่เจออะไรเลย", "info");
+      logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : srchEmpty(), "info");
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
@@ -4829,6 +4833,7 @@ function ambient() {
   const add = (arr, w) => { for (let i = 0; i < w; i++) pool.push(...arr); };
   add(AMB_ZONE[state.zone] || [], z ? 1 : 3); add(AMB_TIME[timeSlot()], z ? 1 : 2);
   if (z) add(AMB_ZOMBIE, 3); if (low) add(AMB_LOW, 4);
+  try { const wa = wxFlavor("amb"); if (wa && Math.random() < 0.5) { logLine("· " + wa, "ambient"); return; } } catch { /* ข้าม */ }
   const fresh = pool.filter((t) => t !== state.ambLast); const t = (fresh.length ? fresh : pool)[Math.floor(Math.random() * (fresh.length || pool.length))];
   if (!t) return; state.ambLast = t; logLine("· " + t, "ambient");
 }
@@ -5551,6 +5556,7 @@ function radioBulletin(slot) {
     if (tot <= 1) o.push([3, "สถานีตรวจพบสัญญาณชีวิตในเมืองน้อยมาก ถ้าคุณกำลังฟังอยู่ โปรดบอกให้เรารู้ว่าคุณยังอยู่"]);
     else if (zc[0]?.[1] >= 3) o.push([3, `ผู้รอดชีวิตรวมตัวกันที่${ZONES[zc[0][0]]?.name || zc[0][0]}ถึง ${zc[0][1]} คน ขอให้ระวังเสียงดังที่ดึงดูดฝูงซอมบี้`]);
     else if (zc[0]?.[1] >= 1) o.push([2, `จากการสำรวจ ขณะนี้มีผู้รอดชีวิตออนไลน์ราว ${tot} คน หนาแน่นที่สุดที่${ZONES[zc[0][0]]?.name || zc[0][0]}`]);
+    { const w = wxNow(now); if (w.type !== "clear") o.push([4, `พยากรณ์อากาศ: ขณะนี้ ${WX[w.type].name} ${WX_TIP[w.type]} คาดว่าจะคงอยู่อีกราว ${Math.max(1, Math.ceil((w.end - now) / 60000))} นาที`]); }
     const ev = Object.entries(state.events || {}).find(([z]) => activeEvent(z));
     if (ev) o.push([5, `ประกาศเตือน: เกิดเหตุการณ์ผิดปกติที่${ZONES[ev[0]]?.name || ev[0]} — ${ev[1].title || "ไม่ทราบสาเหตุ"}`]);
   } catch { /* ข้อมูลโลกยังไม่พร้อม → ใช้ข่าวทั่วไป */ }
@@ -6241,7 +6247,7 @@ function worldRender(box) {
     else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
     box.append(row);
   });
-  try { evtWorldRows(box); bountyWorldRows(box); } catch (e) { console.warn("world rows", e); }
+  try { wxWorldRows(box); evtWorldRows(box); bountyWorldRows(box); } catch (e) { console.warn("world rows", e); }
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
@@ -6427,6 +6433,180 @@ function evtWorldRows(box) {
   if (!act.length && nxt) { const m = Math.ceil((nxt.start - now) / 60000), row = mk("div", "world-row"); row.append(mk("div", "muted", `ยังไม่มีเหตุการณ์ตอนนี้ — รอบถัดไปในอีก ${m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`} (ไม่บอกล่วงหน้าว่าที่ไหน ฟังวิทยุไว้)`)); box.append(row); }
 }
 
+
+/* =========================================================
+   35) 🌦️ สภาพอากาศ + 🔊 เสียงดึงซอมบี้ + ข้อความบรรยายสมจริง
+   - อากาศคำนวณจากเวลาเซิร์ฟเวอร์ (rdHash) ทุกเครื่องเห็นตรงกัน ไม่ต้องมีข้อมูลใหม่ • เปลี่ยนทุก ~50 นาที (ต่อเนื่องได้) • เจ้าของสั่งทับได้ที่ wxForce/
+   - ผล: ฝน = น้ำเจอง่าย แต่เดินทางเหนื่อย / หมอก = ซอมบี้มาก มองโอกาสไม่ชัด / พายุ = ซอมบี้มาก เดินทางหนัก ค้นหาเสี่ยง
+   - เสียง: คนอยู่รวมกันในโซน + ข้อความต่อสู้ใน 90 วิ ล่าสุด → น้ำหนักซอมบี้เพิ่ม (ไม่ใช่ Safe Zone) — คำนวณฝั่งเครื่อง ไม่แตะ rules
+   - ปรับได้จากแท็บ 🎛️: wx_on, wx_str, noise_str
+   ========================================================= */
+const WX_BLOCK = 50 * 60000, NZ_WINDOW = 90000;
+const WX = {
+  clear: { icon: "🌤️", name: "ฟ้าโปร่ง", z: 1, w: 1, n: 1, t: 0, d: 0 },
+  rain: { icon: "🌧️", name: "ฝนตก", z: 1, w: 2.5, n: 1, t: 3, d: 0 },
+  fog: { icon: "🌫️", name: "หมอกลง", z: 1.4, w: 1, n: 1, t: 0, d: 1 },
+  storm: { icon: "⛈️", name: "พายุ", z: 1.5, w: 1.8, n: 1.15, t: 5, d: 2 }
+};
+const WX_TIP = {
+  clear: "ทัศนวิสัยดี ไม่มีผลพิเศษ",
+  rain: "เจอน้ำสะอาดง่ายขึ้น • เดินทางเหนื่อยกว่าเดิม (+พลังงาน)",
+  fog: "ซอมบี้ชุกขึ้น • มองไม่ชัดว่าเสี่ยงแค่ไหน (โอกาสเจอซอมบี้แสดงเป็นช่วง)",
+  storm: "ซอมบี้ชุกมาก • อันตรายเพิ่ม • เดินทางหนักมาก • แต่ฝนก็เก็บน้ำได้เยอะ"
+};
+function wxBase(b) {
+  if (rdHash("wxk", b) % 100 < 35) b--;   // 35% ต่อเนื่องจากช่วงก่อน → อากาศมีช่วงยาวบ้างสั้นบ้าง
+  const phase = (b * WX_BLOCK) % DAY_CYCLE, r = rdHash("wx", b) % 100;
+  if (phase < 10 * 60000 && r < 12) return "fog";   // รุ่งสางหมอกลงบ่อย
+  return r < 48 ? "clear" : r < 75 ? "rain" : r < 90 ? "fog" : "storm";
+}
+const wxAt = (t) => wxBase(Math.floor(t / WX_BLOCK));
+function wxForced(now = serverNow()) {
+  let best = null;
+  for (const f of Object.values(state.wxForce || {})) if (f && WX[f.type] && typeof f.start === "number" && typeof f.end === "number" && now >= f.start && now < f.end && (!best || f.start > best.start)) best = f;
+  return best;
+}
+function wxNow(now = serverNow()) {
+  const f = wxForced(now);
+  if (f) return { type: f.type, forced: true, end: f.end };
+  if (!T("wx_on", 1)) return { type: "clear", forced: false, end: now + WX_BLOCK };
+  const b = Math.floor(now / WX_BLOCK), ty = wxAt(now);
+  let k = 1; while (k < 8 && wxBase(b + k) === ty) k++;
+  return { type: ty, forced: false, end: (b + k) * WX_BLOCK };
+}
+const wxScale = () => Math.max(0, T("wx_str", 100)) / 100;
+const wxTravelExtra = (z) => { const w = WX[wxNow().type]; return w && w.t ? Math.round(w.t * wxScale()) : 0; };
+const wxDmod = (z) => { if (z === "safe") return 0; const w = WX[wxNow().type]; return w && w.d ? Math.round(w.d * wxScale()) : 0; };
+// เสียงดัง: จำนวนคนในโซน (ไม่นับตัวเองที่โซนปัจจุบัน) + ข้อความต่อสู้ในโซนนี้ภายใน 90 วิ
+function noiseInfo(z) {
+  if (z === "safe") return { lvl: 0, mul: 1, others: 0, fights: 0 };
+  const cnt = z === state.zone ? Object.keys(state.players || {}).length - 1 : (state.zcount?.[z] || 0), others = Math.max(0, cnt);
+  const now = serverNow(), fights = (state.nzCombat || []).filter((x) => x.z === z && now - x.t < NZ_WINDOW).length;
+  const raw = Math.min(0.35, 0.08 * others) + Math.min(0.25, 0.1 * fights), mul = 1 + raw * Math.max(0, T("noise_str", 100)) / 100;
+  return { lvl: raw < 0.1 ? 0 : raw < 0.3 ? 1 : 2, mul, others, fights };
+}
+function nzNote(m) {   // addChat เรียกตอนมีข้อความต่อสู้
+  if (!m || m.type !== "combat" || typeof m.ts !== "number" || serverNow() - m.ts > NZ_WINDOW) return;
+  const a = (state.nzCombat = (state.nzCombat || []).filter((x) => serverNow() - x.t < NZ_WINDOW)); a.push({ z: state.zone, t: m.ts }); if (a.length > 40) a.shift();
+}
+function wxNzDrops(z, d) {
+  const wt = WX[wxNow().type], s = wxScale(), nz = noiseInfo(z).mul, safe = z === "safe";
+  const zf = safe ? 1 : Math.pow(wt.z, s) * nz, wf = Math.pow(wt.w, s), nf = safe ? 1 : Math.pow(wt.n, s);
+  if (zf === 1 && wf === 1 && nf === 1) return d;
+  return d.map((x) => x.id === "zombie" && zf !== 1 ? { ...x, w: x.w * zf } : x.id === "water" && wf !== 1 ? { ...x, w: x.w * wf } : x.id === null && nf !== 1 ? { ...x, w: x.w * nf } : x);
+}
+/* ---- ข้อความบรรยาย ---- */
+const LEAD = {
+  clear: ["คุณค้นหา…", "คุณรื้อไปตามซอกมุม…", "คุณคุ้ยหาอย่างระวังตัว…", "คุณกวาดตามองหาของใช้…", "คุณเปิดลิ้นชักและกองเศษซาก…"],
+  rain: ["สายฝนเปียกโชกขณะคุณคุ้ยหา…", "น้ำฝนหยดลงคอเสื้อ คุณยังคุ้ยต่อ…", "เสียงฝนกลบเสียงฝีเท้า คุณค้นหา…", "พื้นลื่นเป็นเลน คุณก้มลงคลำหา…"],
+  fog: ["หมอกหนาจนมองไม่เห็นปลายเท้า คุณคลำหา…", "ในหมอกขาวคุณคลำทางค้นหา…", "เงาอะไรบางอย่างขยับในหมอก… คุณรีบค้นหา…"],
+  storm: ["ฟ้าผ่าวาบ! คุณรีบคุ้ยหา…", "ลมพายุหวีดหวิว คุณฝืนค้นหา…", "สายฝนสาดแรงจนลืมตาไม่ขึ้น คุณควานหา…"],
+  night: ["ในความมืดคุณคลำหา…", "แสงริบหรี่ คุณค้นหาอย่างเงียบที่สุด…", "คุณกลั้นหายใจแล้วคุ้ยหา…"],
+  dawn: ["แสงแรกส่องให้เห็นของเล็กน้อย คุณค้นหา…"],
+  dusk: ["แสงกำลังจะหมด คุณรีบค้นหา…"],
+  loud: ["เสียงเอะอะแถวนี้อาจดึงพวกมันมา… คุณรีบค้นหา…", "คุณรู้สึกว่ามีเสียงดังเกินไป แต่ก็ยังค้นหา…"],
+  quiet: ["ทุกอย่างเงียบสนิท คุณค้นหาโดยไม่มีใครรบกวน…"]
+};
+const LEAD_EMPTY = {
+  clear: ["คุณค้นหา… ไม่เจออะไรเลย", "คุณค้นหา… ไม่เจออะไรเลย มีแต่ฝุ่นกับซาก"],
+  rain: ["คุณค้นหา… น้ำฝนชะล้างทุกอย่างหายไปหมด ไม่เจออะไรเลย", "คุณค้นหา… ของเปียกเละใช้การไม่ได้ ไม่เจออะไรเลย"],
+  fog: ["คุณค้นหา… มองไม่เห็นอะไรในหมอก ไม่เจออะไรเลย"],
+  storm: ["คุณค้นหา… ลมพายุพัดของปลิวไปหมด ไม่เจออะไรเลย"]
+};
+const AMB_WX = {
+  rain: ["เสียงฝนกระทบสังกะสีดังเป็นจังหวะ ท่วงทำนองเดียวที่ยังเหลืออยู่", "ท่อระบายน้ำเอ่อล้น น้ำสีน้ำตาลไหลผ่านรองเท้า", "กลิ่นดินเปียกปนกลิ่นเน่า ลอยมาตามสายฝน", "ฝนเย็นเฉียบซึมเข้าแผลเก่าจนแสบ"],
+  fog: ["หมอกกลืนตึกทั้งแถบจนเหลือแต่เงาเลือนราง", "เสียงครางไกล ๆ ในหมอก… ไม่รู้ทิศทาง", "ความชื้นเกาะเต็มขนตา ทุกอย่างเป็นสีเทา", "ได้ยินเสียงฝีเท้าลากเบา ๆ แต่ไม่เห็นใคร"],
+  storm: ["ฟ้าร้องก้องเมืองร้าง สะเทือนไปถึงอก", "ป้ายโลหะบนตึกเหวี่ยงปะทะกันเสียงดังลั่น", "สายฟ้าฟาดไกล ๆ แสงขาววาบเผยเงาคนเดินเป็นแถว… แล้วก็มืดอีกครั้ง", "ลมกระชากจนต้องเกาะกำแพงไว้"],
+  clear: ["ท้องฟ้าโปร่งจนเห็นควันไฟจากไกล ๆ ลอยเป็นเส้น"]
+};
+const AMB_NZ = ["เสียงพูดคุยดังไปทั่วซอย… ถ้ามีอะไรได้ยินก็คงมาเร็ว", "คุณรู้สึกเหมือนมีสายตามองมาจากที่มืด ๆ"];
+const WX_RADIO = {
+  clear: ["ฟ้าเริ่มเปิด เมฆจางลง ทัศนวิสัยดีขึ้น", "ท้องฟ้าโปร่งแล้ว แต่อย่าประมาท"],
+  rain: ["ฝนเริ่มตกทั่วเมือง ใครขาดน้ำสะอาดนี่คือโอกาส แต่ทางเดินจะลื่นและเหนื่อยกว่าเดิม", "ฝนกำลังเทลงมา ระวังพื้นลื่นระหว่างเดินทาง"],
+  fog: ["หมอกหนาลงปกคลุมเมือง มองได้ไม่ไกล ระวังซอมบี้ที่โผล่มากะทันหัน", "รายงานหมอกจัด ทัศนวิสัยต่ำมาก ซอมบี้อาจเข้าใกล้โดยไม่รู้ตัว"],
+  storm: ["เตือนพายุเข้า! ฟ้าผ่าและฝนตกหนัก ค้นหาข้างนอกเสี่ยงกว่าปกติ หาที่หลบถ้าทำได้", "พายุรุนแรงกำลังเข้าเมือง ฝูงซอมบี้จะเคลื่อนไหวมากขึ้นในเสียงฟ้าร้อง"]
+};
+function wxFlavor(kind) {   // kind: "lead" | "empty" | "amb"
+  const w = wxNow().type, ts = timeSlot(), ni = state.zone === "safe" ? { lvl: 0 } : noiseInfo(state.zone), pool = [];
+  const add = (a, n) => { if (a) for (let i = 0; i < n; i++) pool.push(...a); };
+  if (kind === "empty") { add(LEAD_EMPTY[w] || LEAD_EMPTY.clear, 3); add(LEAD_EMPTY.clear, 1); }
+  else if (kind === "amb") { add(AMB_WX[w], w === "clear" ? 1 : 4); if (ni.lvl >= 2) add(AMB_NZ, 3); }
+  else {
+    add(LEAD.clear, w === "clear" && ts === "day" ? 3 : 1);
+    if (w !== "clear") add(LEAD[w], 4);
+    if (ts !== "day") add(LEAD[ts], ts === "night" ? 3 : 2);
+    if (ni.lvl >= 2) add(LEAD.loud, 3); else if (state.zone !== "safe" && ni.lvl === 0 && ni.others === 0) add(LEAD.quiet, 1);
+  }
+  const fresh = pool.filter((t) => t !== state["wxL" + kind]), L = fresh.length ? fresh : pool, t = L[Math.floor(Math.random() * L.length)] || "คุณค้นหา…";
+  state["wxL" + kind] = t; return t;
+}
+const srchLead = () => wxFlavor("lead");
+const srchEmpty = () => wxFlavor("empty");
+/* ---- แสดงผล ---- */
+function wxStyle() {
+  if ($("wx-style")) return;
+  const st = document.createElement("style"); st.id = "wx-style";
+  st.textContent = ".time-line.wx{opacity:.95}.chat-head #zone-weather{font-size:12px;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chat-head.open #zone-weather{white-space:normal}"
+    + ".nz-chip{display:inline-block;margin-left:6px;padding:0 6px;border-radius:8px;background:rgba(255,255,255,.08);font-size:.9em}";
+  document.head.append(st);
+}
+function wxRender(zArg) {
+  const tEl = $("zone-time"); if (!tEl) return;
+  wxStyle();
+  let el = $("zone-weather"); if (!el) { el = mk("p", "time-line wx"); el.id = "zone-weather"; tEl.after(el); }
+  const w = wxNow(), W = WX[w.type], z = zArg || state.zone, mins = Math.max(1, Math.ceil((w.end - serverNow()) / 60000));
+  const ni = z && z !== "safe" ? noiseInfo(z) : null;
+  const nz = ni ? (ni.lvl >= 2 ? " • 🔊 เสียงดัง ซอมบี้ได้ยิน" : ni.lvl === 1 ? " • 🔉 ค่อนข้างเสียงดัง" : " • 🤫 เงียบ") : "";
+  el.textContent = `${W.icon} ${W.name}${w.forced ? " (ฟ้าลิขิต)" : ""} — ${w.type === "clear" ? "" : `อีก ~${mins} นาทีจะเปลี่ยน`}${nz}`.replace(/ — (?= •|$)/, "");
+  el.title = `${W.name}: ${WX_TIP[w.type]}${ni ? ` • คนอื่นในโซน ${ni.others} • การต่อสู้ล่าสุด ${ni.fights} • ซอมบี้ ×${ni.mul.toFixed(2)} จากเสียง` : ""}`;
+}
+let wxSeen = null;
+function wxTick() {
+  if (!state.profile) return;
+  const w = wxNow();
+  if (wxSeen !== null && wxSeen !== w.type) {
+    const L = WX_RADIO[w.type], line = L[rdHash("wxr", Math.floor(serverNow() / WX_BLOCK)) % L.length];
+    radioPush(`📻 [พยากรณ์อากาศ] ${WX[w.type].icon} ${line}`, serverNow(), true);
+    try { logLine(`${WX[w.type].icon} ${WX[w.type].name} — ${WX_TIP[w.type]}`, "info"); } catch { /* ข้าม */ }
+  }
+  wxSeen = w.type;
+  try { wxRender(); if (state.zone) renderZoneDanger(state.zone); } catch { /* ข้าม */ }
+}
+function wxWorldRows(box) {
+  box.append(mk("div", "hub-day", "🌦️ สภาพอากาศ"));
+  const now = serverNow(), w = wxNow(now), W = WX[w.type], row = mk("div", "world-row evt-live");
+  row.append(mk("div", "", `${W.icon} ${W.name}${w.forced ? " (กำหนดโดยเจ้าของ)" : ""} • ${WX_TIP[w.type]}`), mk("div", "muted", w.type === "clear" ? "ฟ้าโปร่งต่อไปอีกสักพัก" : `เปลี่ยนในอีก ~${Math.max(1, Math.ceil((w.end - now) / 60000))} นาที`));
+  box.append(row);
+  const nx = []; for (let t = w.end, i = 0; i < 3; i++) { const ty = wxNow(t).type; nx.push(`${WX[ty].icon} ${WX[ty].name}`); t += WX_BLOCK; }
+  if (!w.forced && T("wx_on", 1)) box.append(mk("div", "muted", "ช่วงถัดไปคาดว่า: " + nx.join(" → ")));
+  if (state.zone && state.zone !== "safe") { const ni = noiseInfo(state.zone); box.append(mk("div", "muted", `🔊 เสียงในโซนนี้: ${ni.lvl >= 2 ? "ดังมาก" : ni.lvl === 1 ? "พอได้ยิน" : "เงียบ"} (คนอื่น ${ni.others} • ต่อสู้ล่าสุด ${ni.fights}) — ซอมบี้ ×${ni.mul.toFixed(2)} ถ้าอยากเงียบให้แยกกันค้นคนละโซน`)); }
+}
+function wxListen() {
+  if (state.wxOn || !state.uid) return; state.wxOn = true; state.wxForce = {};
+  onValue(ref(db, "wxForce"), (snap) => { state.wxForce = snap.val() || {}; try { wxTick(); worldRefresh(); } catch { /* ข้าม */ } }, (e) => console.warn("wxForce", e?.code || e));
+  wxTick(); setInterval(wxTick, 10000);
+}
+function wxForceRows(box) {
+  box.append(mk("div", "hub-day", "🌦️ สั่งอากาศ (เจ้าของ)"));
+  box.append(mk("div", "muted", "ทุกเครื่องเปลี่ยนตรงกันทันที พร้อมประกาศวิทยุ — ใช้เปิดฉากเนื้อเรื่อง เช่นสั่งพายุ"));
+  const row = mk("div", "world-row tune-row"), ctl = mk("div", "tune-ctl");
+  const ty = mk("select"); Object.entries(WX).forEach(([k, v]) => { const o = mk("option", "", `${v.icon} ${v.name}`); o.value = k; ty.append(o); });
+  const mins = mk("input"); mins.type = "number"; mins.min = 5; mins.max = 180; mins.value = 30; mins.inputMode = "numeric";
+  const go = btn("🚀 เปลี่ยนเลย", async () => {
+    const m = Math.round(Number(mins.value)); if (!(m >= 5 && m <= 180)) return toast("ใส่เวลา 5–180 นาที");
+    const now = serverNow(), k = "w" + now.toString(36);
+    try { await set(ref(db, "wxForce/" + k), { type: ty.value, start: now, end: now + m * 60000 }); toast("เปลี่ยนอากาศแล้ว"); } catch (e) { toast(errMsg(e)); }
+  }, "btn primary mini");
+  ctl.append(ty, mins, mk("span", "muted", "นาที"), go); row.append(ctl); box.append(row);
+  const now = serverNow();
+  Object.entries(state.wxForce || {}).filter(([, f]) => f && f.end > now).forEach(([k, f]) => {
+    const r = mk("div", "world-row"), W = WX[f.type];
+    r.append(mk("div", "", `${W?.icon || "🌦️"} ${W?.name || f.type}`), mk("div", "muted", `${f.start > now ? "เริ่มอีก" : "เหลือ"} ~${Math.max(1, Math.ceil(((f.start > now ? f.start : f.end) - now) / 60000))} นาที`));
+    r.append(btn("หยุดตอนนี้", async () => { try { await update(ref(db, "wxForce/" + k), { end: Math.max(f.start + 1, serverNow()) }); toast("หยุดแล้ว"); } catch (e) { toast(errMsg(e)); } }, "btn danger mini"));
+    box.append(r);
+  });
+  Object.entries(state.wxForce || {}).forEach(([k, f]) => { if (f && f.end < now - 86400000) remove(ref(db, "wxForce/" + k)).catch(() => {}); });
+}
 
 /* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
@@ -6678,7 +6858,7 @@ function achApplyTune() {
 }
 function tuneListen() {
   if (state.tuneOn || !state.uid) return; state.tuneOn = true; let last = null;
-  evtForceListen();
+  evtForceListen(); wxListen();
   statStyle(); statupListen();
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
@@ -6703,11 +6883,15 @@ function tuneDefs() {
     rows.push(["od_free", "ค่าพิษที่ยังกินได้ปลอดภัย (ค่าพิษ +1 ต่อเม็ด ลดลง 1 ทุก 12 ชม.)", 2, 0, 10, g]);
     rows.push(["od_step", "โอกาสโอเวอร์โดสที่เพิ่มต่อค่าพิษที่เกิน (%)", 20, 0, 100, g]);
     rows.push(["od_max", "โอกาสโอเวอร์โดสสูงสุด (%)", 70, 0, 100, g]); }
+  { const g = "🌦️ อากาศ & 🔊 เสียงดึงซอมบี้";
+    rows.push(["wx_on", "สภาพอากาศสุ่ม (1 = เปิด, 0 = ฟ้าโปร่งตลอด • สั่งอากาศเองยังใช้ได้)", 1, 0, 1, g]);
+    rows.push(["wx_str", "ความแรงของผลอากาศ (% • 100 = เดิม, 0 = ไม่มีผลต่อการเล่น)", 100, 0, 200, g]);
+    rows.push(["noise_str", "ความแรงของเสียงดึงซอมบี้ (% • 100 = เดิม, 0 = ปิด)", 100, 0, 300, g]); }
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
 function tuneRender(box) {
-  try { evtForceRows(box); } catch (e) { console.warn("evtForceRows", e); }
+  try { evtForceRows(box); wxForceRows(box); } catch (e) { console.warn("evtForceRows", e); }
   box.append(mk("div", "muted", "ปรับแล้วทุกเครื่องได้ค่าใหม่ทันที ไม่ต้องรีเฟรช • ช่องว่าง/รีเซ็ต = กลับไปใช้ค่าตั้งต้น • ผลของเป้าหมาย/ภารกิจที่เริ่มแล้วจะใช้ยอดใหม่ทันที"));
   let grp = "";
   const order = []; tuneDefs().forEach((r) => { if (!order.includes(r[5])) order.push(r[5]); });
