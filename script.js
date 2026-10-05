@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1414";
+const APP_VERSION = "2026-10-05.1425";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4145,6 +4145,7 @@ function gachaRefresh() {
 async function gachaPull() {
   const p = state.profile, fac = p?.faction, cost = GACHA_COST[fac];
   if (!cost || state.gaBusy || state.gaTicket || !mktGuard()) return;
+  if (HAS_DOM && (document.querySelector(".ga-spin") || Date.now() < (state.gaCool || 0))) return;   // กันกดรัวทะลุจากปุ่ม ข้าม/รับของ ลงมาโดนปุ่มหมุน
   { const cap = Math.round(T("gacha_cap", 0)); if (cap > 0 && gachaToday() >= cap) return toast(`วันนี้หมุนครบ ${cap} ครั้งแล้ว พรุ่งนี้ค่อยมาใหม่`); }
   const keys = Object.keys(state.gaMeta || {});
   if (!keys.length) return toast("ตู้กาชาว่างแล้ว รอแอดมินเติมของ");
@@ -4235,8 +4236,8 @@ function gachaSpinAnim(prize) {
   wrap.append(box); document.body.append(wrap);
   let done = false, timer = 0, tick = 0;
   const end = () => {
-    if (done) { wrap.remove(); return; }
-    done = true; clearTimeout(timer); clearInterval(tick);
+    if (done) { state.gaCool = Date.now() + 1200; wrap.remove(); return; }
+    done = true; state.gaCool = Date.now() + 1200; clearTimeout(timer); clearInterval(tick);
     track.style.transition = "none"; track.style.transform = `translateX(${-(WIN * CW) + (view.clientWidth / 2 - CW / 2)}px)`;
     res.textContent = ""; res.append(mk("div", "ga-tier", `✨ ${T[1]}`), mk("div", "ga-nm", `${mktLabel(prize.id)} ×${prize.qty}`));
     box.classList.add("ga-done", "ga-t" + t); ok.textContent = "รับของ"; sfx(t >= 2 ? "boss" : "low"); finish(true);
