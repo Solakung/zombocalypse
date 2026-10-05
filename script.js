@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.1450";
+const APP_VERSION = "2026-10-05.1512";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -668,6 +668,8 @@ function openGuide() {
     `ทุบครบทุก ${SMASH_EVERY} ครั้งได้ 🥩+1 • คนทุบจนพังได้ 🥩+${SMASH_BREAK_BONUS} • แชมป์ทุบสูงสุดประจำสัปดาห์ (อย่างน้อย ${PRIZE_MIN} ครั้ง) รับ 🥩+${PRIZE_MEAT} ได้สัปดาห์ถัดไป`,
     "🌍 เป้าหมายโลกประจำวัน: ทุกวันมี 3 ข้อสุ่มตามโลกวันนั้น (เทศกาล/ดวงจันทร์/ฤดูกาล) ทำข้อไหนสำเร็จได้ 🍀 โชคประจำวัน +15 นาที (ค้นแล้วว่างเปล่าน้อยลง 12% ของหายากออกง่ายขึ้น 20%) ครบ 3 ข้อนับเป็น 1 วันของฉายา • ดูได้ในปุ่ม 📅 • ในนั้นมี 📜 บันทึกประจำฤดูกาล (เหรียญ เทศกาล ผลเป้าหมายร่วม) และ 🏅 ฉายาที่ใกล้ปลดล็อก • สมุดสะสมซิงค์ข้ามเครื่องแล้ว",
     "🎁 เยี่ยมบ้าน/ฝากของ: กดชื่อเพื่อนเพื่อเปิดประวัติ จะเห็นห้องและขั้นบ้านจริงของเขา • ฝากน้ำ/อาหาร/ผ้าพันแผล/มอส/ผลไม้ให้เพื่อนฝั่งเดียวกันได้ทีละ 1 ชิ้น (ตอนอยู่ Safe Zone) เขาไปรับที่ 📬 ตลาด • ฝากค้างได้ 1 ชิ้นต่อคน จนกว่าเขาจะรับ",
+    "🌳 ต้นไม้ทักษะ: ทำสายไหนบ่อย สายนั้นได้แต้มทักษะ (ดูที่ 📅 → 🌍 → เส้นทางอาชีพ) ใช้เรียนทักษะเสริมของสายนั้น 5 ขั้น แล้วเลือกปลายสาย 1 จาก 2 • เรียนแล้วเปลี่ยนไม่ได้ ได้โบนัสเล็ก ๆ เหมือนโบนัสอื่น ๆ ในเกม",
+    "🧭 ทีมสำรวจ (ปุ่ม 🏠 ที่พัก): ที่พักขั้น 1+ ส่งทีมออกนอกค่าย 4 ชั่วโมง จ่ายเสบียงเล็กน้อย กลับมารับของตามโซนที่ส่งไป แม้ไม่ได้ออนไลน์ • ทีละ 1 ทีม",
     "🎮 มินิเกมก่อนค้นลึก: จำรหัสวิทยุ 📻 หรือลำดับเสียงป่า 🌲 ให้ถูกครบ = ค้นครั้งนั้นเจอของว่างเปล่าน้อยลง 40% ของหายากออกง่ายขึ้น 50% ซอมบี้น้อยลง 15% (ผิดตัวเดียวได้โบนัสครึ่งหนึ่ง) • กด ข้าม ได้ตลอด หรือปิดด้วยปุ่ม 🎮 ข้างปุ่มค้นลึก",
     "เจอซอมบี้พวกเดียวกันตอนค้นหา = ตามรอยไปเจอซาก ได้เนื้อเน่า (ฝูงบุกและกำแพงพังทำให้ซากเยอะขึ้น) และค้นลึกจะได้เนื้อเน่าเพิ่ม ×2"
   ]);
@@ -6000,6 +6002,7 @@ const ACH_FAM = [
   ["wgd", "🌍", "world", "", "ทำเป้าหมายโลกครบทั้ง 3 ข้อในวันเดียว", "วัน", [3, 10, 30, 60], ["ใส่ใจโลกใบนี้", "นักสำรวจประจำวัน", "ผู้รับใช้เมืองร้าง", "ไม่เคยปล่อยให้วันผ่านไปเปล่า"]],
   ["vis", "🏡", "social", "", "เยี่ยมบ้านเพื่อน (คนละ 1 ครั้ง/วัน)", "ครั้ง", [3, 15, 50, 150], ["แวะทักทาย", "แขกประจำ", "เพื่อนบ้านทั้งเมือง", "ผู้ไม่เคยลืมใคร"]],
   ["gft", "🎁", "social", "", "ฝากของให้เพื่อน", "ชิ้น", [1, 5, 20, 60], ["น้ำใจแรก", "คนใจดี", "ซานต้ากลางป่า", "ผู้ให้ไม่รู้จบ"]],
+  ["expd", "🧭", "explore", "", "ทีมสำรวจกลับมารับของสำเร็จ", "ครั้ง", [1, 5, 20, 60], ["ส่งทีมแรก", "หัวหน้าทีมสำรวจ", "เจ้าของเส้นทางเสบียง", "ผู้ไม่เคยให้ค่ายอดอยาก"]],
   ["book", "📖", "world", "", "บันทึกลงสมุดสะสม", "รายการ", [10, 25, 45, 70], ["นักจดบันทึก", "นักสะสมตัวยง", "ผู้รอบรู้เมืองร้าง", "สารานุกรมเดินได้"]],
   ["pjd", "🏗️", "world", "", "ร่วมสร้างโปรเจกต์จนเสร็จ", "โปรเจกต์", [1, 3, 6], ["ฟันเฟืองของค่าย", "คนสร้างถิ่น", "ตำนานผู้ก่อตั้ง"]],
   ["zwar", "⚔️", "world", "", "สะสมแต้มศึกชิงโซน", "แต้ม", [50, 300, 1000, 3000], ["ทหารแนวหน้า", "นักรบชิงโซน", "ผู้คุมสมรภูมิ", "ขุนศึกแห่งเมืองร้าง"]],
@@ -6901,25 +6904,27 @@ function careerOf() {
 let fxCareerMemo = { t: 0, v: null };
 function careerNow() { const n = Date.now(); if (n - fxCareerMemo.t > 4000) fxCareerMemo = { t: n, v: careerOf() }; return fxCareerMemo.v; }
 function careerCheck() {
+  try { skNotify(); } catch { /* ข้าม */ }
   const c = careerOf(); if (!c) return;
   const last = fxGet("career", ""), cur = c.k + c.L;
   if (last !== cur) { fxSet("career", cur); if (last) { toast(`🧭 เส้นทางอาชีพ: ${c.def.icon} ${c.title}`); logLine(`🧭 คุณก้าวสู่ ${c.def.icon} ${c.title} (${c.def.name} ขั้น ${c.L}) — ${c.def.tip(c.L, state.profile?.faction === "zombie")}`, "system"); } }
 }
-const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
+const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
 let fxMemo = { k: "", v: null };
 function fxMods(z) {
-  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0].join(",");
+  const nowS = Math.floor(Date.now() / 2500), k = z + "|" + nowS + "|" + (state.profile?.faction || "") + "|" + state.offset + "|" + [T("fest_on", 1), T("fest_str", 100), T("fest_force", 0), T("career_on", 1), duoBuffLeft() > 0 ? 1 : 0, typeof skEff === "function" ? skEff.s || "" : ""].join(",");
   if (fxMemo.k === k) return fxMemo.v;
   const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0, it: {} }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
   festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
   const c = careerNow();
   if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
   if (duoBuffLeft() > 0) m.a *= 1.1;
+  if (typeof skApply === "function") skApply(m);
   if (typeof fxCampMods === "function") fxCampMods(m, z);
   if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
   if (typeof fxNpcMods === "function") fxNpcMods(m, z);
@@ -7019,6 +7024,7 @@ function fxWorldRows(box) {
     else b.append(mk("div", "muted", "ยังไม่มีเส้นทางเด่นชัด — เล่นไปเรื่อย ๆ สายที่ทำบ่อยที่สุดจะกลายเป็นอาชีพของคุณ"));
     Object.entries(CAREER).forEach(([k, d]) => { const sc = d.score(c), L = CAREER_LV.filter((v) => sc >= v).length, nx = CAREER_LV[Math.min(3, L)]; const r = mk("div", "world-row"); r.append(mk("div", "", `${d.icon} ${d.name}${L ? ` • ขั้น ${L}` : ""}`), worldBar(L >= 4 ? 1 : sc / nx, `${Math.round(sc)}/${L >= 4 ? Math.round(sc) : nx}`)); b.append(r); });
     b.append(mk("div", "muted", "อาชีพหลัก = สายที่แต้มสูงสุด ได้โบนัสเล็ก ๆ ตามขั้น (แต้มคำนวณจากตัวนับความสำเร็จเดิม)"));
+    try { if (skOn()) b.append(btn(`🌳 ต้นไม้ทักษะ${skFreeAll() ? ` (แต้มว่าง ${skFreeAll()})` : ""}`, skOpen, "btn primary mini")); } catch { /* ข้าม */ }
   }, false);
   try { if (typeof fxWorldRows2 === "function") fxWorldRows2(box); } catch (e) { console.warn("fx rows2", e); }
   try { if (typeof fxWorldRows3 === "function") fxWorldRows3(box); } catch (e) { console.warn("fx rows3", e); }
@@ -7258,14 +7264,15 @@ function baseUnits(rec, now = serverNow()) {
   if (!rec || !BASE_P[rec.k] || typeof rec.t !== "number") return 0;
   return Math.max(0, Math.min(BASE_CAP[rec.k], Math.floor((now - rec.t) / BASE_P[rec.k])));
 }
-const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); try { n += benchDone(); } catch { /* ข้าม */ } return n; };
+const baseReady = () => { let n = 0; for (let i = 1; i <= baseSlots(); i++) n += baseUnits(state.base?.["s" + i]); try { n += benchDone(); } catch { /* ข้าม */ } try { if (expReady()) n += 1; } catch { /* ข้าม */ } return n; };
 const baseHm = (ms) => { const m = Math.max(1, Math.ceil(ms / 60000)); return m >= 60 ? `${Math.floor(m / 60)} ชม. ${m % 60} นาที` : `${m} นาที`; };
 let baseLastTx = 0;
 function baseInit() {
   if (state.baseOn || !state.uid) return; state.baseOn = true; state.base = {};
   const b = btn("🏠 ที่พัก", openBase, "btn ghost mini"); b.id = "btn-base"; const pr = $("btn-profile"); if (pr) pr.before(b);
   onValue(ref(db, "base/" + state.uid), (s) => { state.base = s.val() || {}; baseBadge(); baseAgain(); }, (e) => console.warn("base", e?.code || e));
-  setInterval(() => { baseBadge(); baseAgain(); baseNotice(); }, 20000); setTimeout(baseNotice, 8000);
+  try { expInit(); } catch (e) { console.warn("exp init", e); }
+  setInterval(() => { baseBadge(); baseAgain(); baseNotice(); try { expNotice(); } catch { /* ข้าม */ } }, 20000); setTimeout(baseNotice, 8000);
 }
 function baseBadge() { const b = $("btn-base"); if (!b) return; const n = baseOn() ? baseReady() : 0; b.textContent = n > 0 ? `🏠 ที่พัก (${n})` : "🏠 ที่พัก"; b.classList.toggle("hidden", !baseOn()); }
 function baseNotice() {   // เตือนเบา ๆ ครั้งละไม่เกินชั่วโมงละหน เมื่อมีผลผลิตรอเก็บ
@@ -7374,7 +7381,7 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
-  try { benchRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+  try { benchRows(body); expRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
 }
 
 /* =========================================================
@@ -8151,6 +8158,193 @@ function gftSeen(pay) {   // แจ้งเตือนของขวัญท
 }
 
 /* =========================================================
+   45) 🌳 ต้นไม้ทักษะสายอาชีพ — ไม่ต้องแก้ rules
+   - แต้มทักษะแยกตามสาย = floor(√(แต้มสายนั้น ÷ 6)) (ใช้แต้มสายเดิมของ CAREER) ใช้ได้เฉพาะในสายนั้น
+   - เรียนแล้วถาวร (เก็บเป็นบิตลงตัวนับ ach: skte/skth/skm/sktt — ซิงก์ข้ามเครื่อง) ปลายสายเลือกได้ 1 จาก 2
+   - ผลเป็นโบนัสเล็ก ๆ ผ่านจุดเดิม (fxMods / ทนสถานะ / อาวุธทน) • ปรับได้ที่ sk_on, sk_str
+   ========================================================= */
+const SK_KEY = { explorer: "skte", hunter: "skth", medic: "sktm", trader: "sktt" };
+const SK = {
+  explorer: [
+    { n: "เท้าเบา", c: 1, d: "ค้นแล้วว่างเปล่าน้อยลง 3%", e: { n: 0.97 } },
+    { n: "จำทางได้", c: 1, d: "เจอซอมบี้น้อยลง 4%", e: { z: 0.96 } },
+    { n: "ตาจับของหายาก", c: 2, d: "ของหายากออกง่ายขึ้น 6%", e: { r: 1.06 } },
+    { n: "แผนที่ในหัว", c: 2, d: "ว่างเปล่าน้อยลงอีก 3% • อาหารเจอมากขึ้น 4%", e: { n: 0.97, f: 1.04 } },
+    { n: "ผู้ชำนาญซอกหลืบ", c: 3, d: "ของหายาก +5% • เศษวัสดุ +5%", e: { r: 1.05, sc: 1.05 } },
+    { n: "นักล่าขุมทรัพย์", c: 4, d: "ของหายากออกง่ายขึ้นอีก 10%", e: { r: 1.10 }, cap: 1 },
+    { n: "เงาเงียบ", c: 4, d: "เจอซอมบี้น้อยลงอีก 12%", e: { z: 0.88 }, cap: 1 }
+  ],
+  hunter: [
+    { n: "มือหนัก", c: 1, d: "อาวุธทนขึ้น 3% • (ซอมบี้) เนื้อเน่า +3%", e: { wear: 0.03, rm: 1.03 } },
+    { n: "ผิวด้าน", c: 1, d: "ทนสถานะผิดปกติ +3%", e: { cut: 0.03 } },
+    { n: "รู้จุดอ่อน", c: 2, d: "อาวุธทน +4% • เนื้อเน่า +4%", e: { wear: 0.04, rm: 1.04 } },
+    { n: "นักสู้ผ่านศึก", c: 2, d: "ทนสถานะผิดปกติ +4%", e: { cut: 0.04 } },
+    { n: "ช่างใจเย็น", c: 3, d: "อาวุธทน +5% • เนื้อเน่า +5%", e: { wear: 0.05, rm: 1.05 } },
+    { n: "นักล่าตลอดกาล", c: 4, d: "อาวุธทน +8% • เนื้อเน่า +8%", e: { wear: 0.08, rm: 1.08 }, cap: 1 },
+    { n: "เหล็กไหล", c: 4, d: "ทนสถานะผิดปกติ +10%", e: { cut: 0.10 }, cap: 1 }
+  ],
+  medic: [
+    { n: "ผ้าพันแผลเก่า", c: 1, d: "เจอผ้าพันแผลมากขึ้น 10%", e: { it: { bandage: 1.10 } } },
+    { n: "มือนิ่ง", c: 1, d: "ทนสถานะผิดปกติ +3%", e: { cut: 0.03 } },
+    { n: "ตำรามอส", c: 2, d: "มอส +12% • ยาแก้พิษ +10%", e: { it: { moss: 1.12, antidote: 1.10 } } },
+    { n: "ใจเย็นกลางเลือด", c: 2, d: "ทนสถานะผิดปกติ +4%", e: { cut: 0.04 } },
+    { n: "หมอประจำค่าย", c: 3, d: "ชุดปฐมพยาบาล +15% • เซรั่ม +12%", e: { it: { medkit: 1.15, serum: 1.12 } } },
+    { n: "ผู้ช่วยชีวิต", c: 4, d: "ของรักษาทุกชนิดเจอมากขึ้นอีก 15%", e: { it: { bandage: 1.15, medkit: 1.15, antidote: 1.15, serum: 1.15 } }, cap: 1 },
+    { n: "ภูมิต้านทาน", c: 4, d: "ทนสถานะผิดปกติ +10%", e: { cut: 0.10 }, cap: 1 }
+  ],
+  trader: [
+    { n: "ตาพ่อค้า", c: 1, d: "เศษวัสดุเจอมากขึ้น 4%", e: { sc: 1.04 } },
+    { n: "รู้ราคาเสบียง", c: 1, d: "อาหารเจอมากขึ้น 4%", e: { f: 1.04 } },
+    { n: "คลังน้ำ", c: 2, d: "น้ำดื่มเจอมากขึ้น 6%", e: { w: 1.06 } },
+    { n: "สายส่งวัสดุ", c: 2, d: "เศษวัสดุ +5% • สารเคมี +8%", e: { sc: 1.05, it: { chem: 1.08 } } },
+    { n: "นักต่อรอง", c: 3, d: "อาหาร +5% • น้ำ +5%", e: { f: 1.05, w: 1.05 } },
+    { n: "เจ้าพ่อวัสดุ", c: 4, d: "เศษวัสดุ +10% • สารเคมี +10%", e: { sc: 1.10, it: { chem: 1.10 } }, cap: 1 },
+    { n: "พ่อค้าเสบียง", c: 4, d: "อาหาร +8% • น้ำ +8%", e: { f: 1.08, w: 1.08 }, cap: 1 }
+  ]
+};
+const skOn = () => T("sk_on", 1) === 1;
+const skMask = (b) => Math.floor(state.ach?.c?.[SK_KEY[b]] || 0) & 127;
+const skHas = (b, i) => (skMask(b) >> i) & 1;
+const skSpent = (b) => SK[b].reduce((t, n, i) => t + (skHas(b, i) ? n.c : 0), 0);
+const skEarned = (b) => Math.floor(Math.sqrt(Math.max(0, CAREER[b].score(state.ach?.c || {})) / 6));
+const skFree = (b) => Math.max(0, skEarned(b) - skSpent(b));
+const skFreeAll = () => Object.keys(SK).reduce((t, b) => t + skFree(b), 0);
+function skCan(b, i) {   // → "" = เรียนได้ ไม่งั้นเหตุผล
+  const n = SK[b]?.[i]; if (!n) return "ไม่มีทักษะนี้";
+  if (skHas(b, i)) return "เรียนแล้ว";
+  if (i >= 1 && i <= 4 && !skHas(b, i - 1)) return "ต้องเรียนขั้นก่อนหน้าก่อน";
+  if (n.cap) { if (!skHas(b, 4)) return "ต้องเรียนครบ 5 ขั้นก่อน"; if (SK[b].some((x, j) => x.cap && j !== i && skHas(b, j))) return "เลือกปลายสายไปแล้ว (เลือกได้ 1 จาก 2)"; }
+  if (skFree(b) < n.c) return `ต้องใช้ ${n.c} แต้ม (ว่าง ${skFree(b)})`;
+  return "";
+}
+function skLearn(b, i) {
+  if (!skOn() || !state.ach?.loaded) return false;
+  const why = skCan(b, i); if (why) { toast(why); return false; }
+  const n = SK[b][i];
+  if (!confirm(`เรียน "${n.n}" (${n.c} แต้ม)?\n${n.d}\nเรียนแล้วเปลี่ยนไม่ได้${n.cap ? " • ปลายสายเลือกได้แค่ 1 จาก 2" : ""}`)) return false;
+  achSet(SK_KEY[b], skMask(b) | (1 << i)); fxMemo.k = ""; fxCareerMemo.t = 0;
+  toast(`🌳 เรียนแล้ว: ${n.n}`); try { logLine(`🌳 เรียนทักษะ ${CAREER[b].icon} ${n.n}: ${n.d}`, "system"); sfx("boss"); } catch { /* ข้าม */ }
+  return true;
+}
+function skEff() {   // รวมผลของทักษะที่เรียนแล้ว (เมโมไซส์ด้วย mask)
+  const sig = Object.keys(SK).map(skMask).join(",") + "|" + T("sk_str", 100) + "|" + skOn();
+  if (skEff.s === sig) return skEff.v; const s = Math.max(0, T("sk_str", 100)) / 100;
+  const o = { n: 1, z: 1, r: 1, f: 1, w: 1, sc: 1, rm: 1, cut: 0, wear: 0, it: {} };
+  if (skOn() && s) Object.keys(SK).forEach((b) => SK[b].forEach((nd, i) => { if (!skHas(b, i)) return; const e = nd.e;
+    ["n", "z", "r", "f", "w", "sc", "rm"].forEach((q) => { if (e[q]) o[q] *= Math.pow(e[q], s); }); if (e.cut) o.cut += e.cut * s; if (e.wear) o.wear += e.wear * s;
+    if (e.it) Object.entries(e.it).forEach(([id, v]) => { o.it[id] = (o.it[id] || 1) * Math.pow(v, s); }); }));
+  skEff.s = sig; skEff.v = o; return o;
+}
+function skApply(m) {
+  const o = skEff(); ["n", "z", "r", "f", "w", "sc", "rm"].forEach((q) => { if (o[q] !== 1) m[q] *= o[q]; });
+  Object.entries(o.it).forEach(([id, v]) => { m.it[id] = (m.it[id] || 1) * v; });
+}
+const skCut = () => skEff().cut, skWear = () => skEff().wear;
+function skNotify() {
+  if (!skOn() || !state.ach?.loaded) return;
+  const free = skFreeAll(), last = fxGet("sk_free", null);
+  if (last === null) { fxSet("sk_free", free); return; }
+  if (free > last) { toast(`🌳 ได้แต้มทักษะใหม่! (ว่างรวม ${free}) — ดูที่ 🧭 เส้นทางอาชีพ`); try { logLine(`🌳 แต้มทักษะว่างรวม ${free} แต้ม — กดต้นไม้ทักษะที่ปุ่ม 📅 → โลก → เส้นทางอาชีพ`, "system"); } catch { /* ข้าม */ } }
+  if (free !== last) fxSet("sk_free", free);
+}
+function skRender() {
+  const body = $("sk-body"); if (!body) return; body.innerHTML = "";
+  if (!skOn()) return body.append(mk("div", "muted", "ปิดอยู่ชั่วคราว"));
+  if (!state.ach?.loaded) return body.append(mk("div", "muted", "กำลังโหลด…"));
+  body.append(mk("div", "muted", "แต้มทักษะได้จากการเล่นสายนั้น ๆ (ยิ่งทำสายไหนมาก สายนั้นยิ่งได้แต้ม) • ใช้ได้เฉพาะในสายตัวเอง • เรียนแล้วเปลี่ยนไม่ได้ • ปลายสายเลือก 1 จาก 2"));
+  const zom = state.profile?.faction === "zombie";
+  Object.keys(SK).forEach((b) => {
+    const d = CAREER[b], c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+    c.append(mk("b", "", `${d.icon} ${d.name} — แต้มว่าง ${skFree(b)} (ใช้ไป ${skSpent(b)}/${skEarned(b)})`));
+    SK[b].forEach((n, i) => {
+      const r = mk("div"); r.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:8px";
+      const has = skHas(b, i), why = skCan(b, i);
+      const hz = (b === "hunter" && zom) ? "" : "";
+      r.append(mk("span", has ? "" : "muted", `${has ? "✅" : n.cap ? "⭐" : "▫️"} ${n.n} (${n.c}) — ${n.d}${hz}`));
+      if (!has) { const bt = btn("เรียน", () => { if (skLearn(b, i)) skRender(); }, "btn primary mini"); bt.disabled = !!why; if (why) bt.title = why; r.append(bt); }
+      c.append(r);
+    });
+    body.append(c);
+  });
+  body.append(mk("div", "muted", "หมายเหตุ: ทักษะสายนักล่า ลดการสึกของอาวุธ (มนุษย์) / เพิ่มเนื้อเน่า (ซอมบี้)"));
+}
+function skOpen() {
+  if (!$("sk-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "sk-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🌳 ต้นไม้ทักษะ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "sk-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  skRender(); $("sk-modal").classList.remove("hidden");
+}
+
+/* =========================================================
+   46) 🧭 ทีมสำรวจ — ส่งทีมออกนอกค่าย 4 ชั่วโมง กลับมารับของ (ต้องใช้ rules v36: exp/{uid})
+   - ต้องมีที่พักขั้น 1 ขึ้นไป • จ่ายเสบียงตอนส่ง (มนุษย์: อาหารกระป๋อง+น้ำ ฝั่งละ 1 • ซอมบี้: เนื้อเน่า 2)
+   - รางวัลคงที่ตามโซนที่ส่งไป (rules ตรวจตรง ๆ) • ทีละ 1 ทีม • รับได้เมื่อครบเวลา ตอนอยู่ Safe Zone
+   ========================================================= */
+const EXP_MS = 14400000;
+const EXP_ZONES = ["ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel"];
+const EXP_H = { ruins: ["canned_food", 3], mall: ["bread", 3], hospital: ["bandage", 3], police: ["scrap", 4], forest: ["moss", 3], factory: ["chem", 2], port: ["water_jug", 1], base: ["army_meal", 1], tunnel: ["energy_drink", 2] };
+const EXP_Z = { ruins: 2, mall: 2, hospital: 3, police: 3, forest: 3, factory: 2, port: 3, base: 3, tunnel: 4 };
+const expOn = () => T("exp_on", 1) === 1;
+const expZom = () => state.profile?.faction === "zombie";
+const expReward = (z) => expZom() ? ["rotten_meat", EXP_Z[z]] : EXP_H[z];
+const expCost = () => expZom() ? [["rotten_meat", 2]] : [["canned_food", 1], ["water", 1]];
+const expLeft = () => state.exp?.t ? Math.max(0, state.exp.t + EXP_MS - serverNow()) : 0;
+const expReady = () => !!state.exp?.t && expLeft() <= 0;
+function expInit() {
+  if (state.expOn || !state.uid) return; state.expOn = true; state.exp = null;
+  onValue(ref(db, "exp/" + state.uid), (s) => { state.exp = s.val() || null; try { baseBadge(); baseAgain(); } catch { /* ข้าม */ } }, (e) => console.warn("exp", e?.code || e));
+}
+function expCan() { return baseCan() && baseLv() >= 1 && expOn(); }
+async function expStart(z) {
+  if (!expCan() || state.exp || state.expBusy || !EXP_ZONES.includes(z)) return;
+  const need = expCost().filter(([id, n]) => mktHave(id) < n); if (need.length) return toast(`เสบียงไม่พอ — ต้องใช้ ${expCost().map(([id, n]) => `${ITEMS[id].name} ×${n}`).join(" + ")}`);
+  const [rid, rn] = expReward(z);
+  if (!confirm(`ส่งทีมสำรวจไป ${ZONES[z].name}?\nจ่ายเสบียง ${expCost().map(([id, n]) => `${ITEMS[id].icon} ${ITEMS[id].name} ×${n}`).join(" + ")}\nกลับมาใน 4 ชั่วโมง ได้ ${ITEMS[rid].icon} ${ITEMS[rid].name} ×${rn}`)) return;
+  state.expBusy = true;
+  const u = { [`exp/${state.uid}`]: { t: serverTimestamp(), z } }; expCost().forEach(([id, n]) => mktDebit(u, id, n));
+  try { await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]); toast(`🧭 ส่งทีมสำรวจไป ${ZONES[z].name} แล้ว — กลับมาใน 4 ชั่วโมง`); try { logLine(`🧭 ส่งทีมสำรวจไป ${ZONES[z].name} (กลับมาใน 4 ชั่วโมง ได้ ${ITEMS[rid].name} ×${rn})`, "system"); } catch { /* ข้าม */ } }
+  catch (e) { console.error("exp start", e?.code || e, JSON.stringify(u)); toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : "ส่งทีมไม่สำเร็จ — ต้องอยู่ Safe Zone มีที่พักขั้น 1 และเสบียงครบ [exp]"); }
+  finally { state.expBusy = false; }
+}
+async function expClaim() {
+  if (!state.exp || !expReady() || !baseCan() || state.expBusy) return;
+  const z = state.exp.z, [id, n] = expReward(z); state.expBusy = true;
+  try {
+    let slot = null; try { slot = (await get(ref(db, `inventory/${state.uid}/${id}`))).val(); } catch { slot = state.inv?.[id] || null; }
+    const have = slot?.qty || 0; if (have + n > 99) return toast(`${ITEMS[id].name} ในกระเป๋าจะเกิน 99 — ใช้ก่อนแล้วค่อยรับ`);
+    const u = { [`exp/${state.uid}`]: null, [`inventory/${state.uid}/${id}`]: { id, qty: have + n } };
+    await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
+    achBump("expd"); toast(`🧭 ทีมสำรวจกลับมาแล้ว! ได้ ${ITEMS[id].icon} ${ITEMS[id].name} ×${n}`); try { logLine(`🧭 ทีมสำรวจจาก ${ZONES[z].name} กลับมา ได้ ${ITEMS[id].name} ×${n}`, "system"); sfx("boss"); } catch { /* ข้าม */ }
+  } catch (e) { console.error("exp claim", e?.code || e); toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : "รับของทีมสำรวจไม่สำเร็จ [exp]"); }
+  finally { state.expBusy = false; }
+}
+function expNotice() {   // ทีมกลับมาแล้ว → แจ้งครั้งเดียวต่อทริป
+  if (!expOn() || !expReady()) return; const k = "exp_n_" + state.exp.t; if (fxGet(k, 0)) return; fxSet(k, 1);
+  try { toast("🧭 ทีมสำรวจกลับมาแล้ว — รับของที่ 🏠 ที่พัก"); logLine(`🧭 ทีมสำรวจจาก ${ZONES[state.exp.z]?.name || state.exp.z} กลับมาแล้ว รอรับที่ที่พัก (ใน Safe Zone)`, "system"); } catch { /* ข้าม */ }
+}
+function expRows(body) {
+  if (!expOn()) return;
+  const can = expCan(), c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
+  c.append(mk("b", "", "🧭 ทีมสำรวจ"));
+  if (baseLv() < 1) { c.append(mk("span", "muted", "ต้องอัปเกรดที่พักถึงขั้น 1 ก่อน จึงจะส่งทีมสำรวจได้")); return body.append(c); }
+  if (state.exp?.t) {
+    const z = state.exp.z, [id, n] = expReward(z), left = expLeft();
+    c.append(mk("span", "", `ไปที่ ${ZONES[z]?.icon || ""} ${ZONES[z]?.name || z} — ${left > 0 ? `กลับมาใน ~${baseHm(left)}` : "กลับมาแล้ว!"}`), worldBar(Math.min(1, 1 - left / EXP_MS), left > 0 ? `${Math.round((1 - left / EXP_MS) * 100)}%` : "พร้อมรับ"));
+    const b = btn(`รับของ (${ITEMS[id].icon} ${ITEMS[id].name} ×${n})`, expClaim, "btn primary mini"); b.disabled = !baseCan() || left > 0; c.append(b);
+  } else {
+    c.append(mk("span", "muted", `ส่งทีมออกนอกค่าย 4 ชั่วโมง (จ่ายเสบียง ${expCost().map(([id, n]) => `${ITEMS[id].icon}×${n}`).join(" ")}) กลับมารับของได้ แม้ไม่ได้ออนไลน์ • ทีละ 1 ทีม`));
+    const row = mk("div"); row.style.cssText = "display:flex;flex-wrap:wrap;gap:6px";
+    EXP_ZONES.forEach((z) => { const [id, n] = expReward(z), b = btn(`${ZONES[z].icon} ${ZONES[z].name} → ${ITEMS[id].icon}×${n}`, () => expStart(z), "btn ghost mini"); b.disabled = !can; row.append(b); });
+    c.append(row);
+  }
+  body.append(c);
+}
+
+/* =========================================================
    33) 🪧 ป้ายประกาศประจำโซน (sign/{zone}/{uid}) + ⚡ เจ้าของสั่งอีเวนต์ทันที (evtForce/)
    ผู้เล่นฝากข้อความสั้นๆ (≤60 ตัว) ไว้ที่โซนที่ตัวเองยืนอยู่ ได้คนละ 1 ป้ายต่อโซน (เขียนใหม่ทับได้ทุก 60 วิ) • คนที่อยู่โซนนั้นเห็น ป้ายอายุ 24 ชม.
    ========================================================= */
@@ -8452,6 +8646,9 @@ function tuneDefs() {
   rows.push(["wg_str", "ความแรงของ 🍀 โชคประจำวัน (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🌍 เป้าหมายโลก"]);
   rows.push(["wg_scale", "จำนวนที่ต้องทำของเป้าหมายโลก (% • 100 = เดิม)", 100, 10, 500, "🌍 เป้าหมายโลก"]);
   rows.push(["gft_on", "ฝากของให้เพื่อน (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🎁 เยี่ยมบ้าน/ฝากของ"]);
+  rows.push(["sk_on", "ต้นไม้ทักษะสายอาชีพ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🌳 ทักษะอาชีพ"]);
+  rows.push(["sk_str", "ความแรงของทักษะ (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🌳 ทักษะอาชีพ"]);
+  rows.push(["exp_on", "ทีมสำรวจ (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🧭 ทีมสำรวจ"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
