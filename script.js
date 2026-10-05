@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0902";
+const APP_VERSION = "2026-10-05.0909";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -6518,7 +6518,7 @@ function evtForceRows(box) {
 
 /* =========================================================
    34) 🧪 แคปซูลสเตตัส + 🔓 แกนทะลุขีดจำกัด (อัปสเตตัสถาวรจากไอเทม)
-   - ราคาขั้นบันได: แต้มจาก v → v+1 ใช้ max(1, ⌈(v−6)/2⌉) เม็ด (นับจากค่ารวมของสเตตัส) • ความคืบหน้าเก็บที่ statUp/{uid}/{สเตตัส}
+   - ราคาขั้นบันได: แต้มจาก v → v+1 ใช้ max(1, ⌈(v−6)/2⌉) เม็ด (นับจากค่ารวมของสเตตัส) • ความคืบหน้าเก็บที่ statUp/{uid}/{สเตตัส}={c,ts}
    - เพดานปกติ 17 (พละกำลัง 13) อ่านจาก tune • แกนทะลุขีดจำกัด +2 ต่อครั้ง (สูงสุด 4 ครั้ง / พละกำลัง 2 ครั้ง) ราคา 1,2,3,4 ชิ้น เก็บที่ statBrk/{uid}/{สเตตัส}={b,c}
    - ห้ามทิ้ง/ซื้อขาย (rules กันที่ตลาดและกองของพื้น) • ราคา/เพดาน/การหักไอเทม rules บังคับ • โอเวอร์โดส (สุ่มฝั่งเครื่อง) เป็นความเสี่ยงที่ผู้เล่นเลือกเอง
    ========================================================= */
@@ -6529,7 +6529,7 @@ const statBrkOf = (k) => state.statBrk?.[k] || { b: 0, c: 0 };
 const statCeil = (k) => statNat(k) + STATUP_STEP * (statBrkOf(k).b || 0);
 const statCapCost = (v) => (v <= 8 ? 1 : Math.ceil((v - 6) / 2));
 const statLimCost = (b) => b + 1;
-const statUpOf = (k) => (typeof state.statUp?.[k] === "number" ? state.statUp[k] : 0);
+const statUpOf = (k) => { const x = state.statUp?.[k]; return typeof x === "number" ? x : typeof x?.c === "number" ? x.c : 0; };   // statUp/{uid}/{k} = {c, ts}
 const invQty = (id) => state.inv?.[id]?.id === id ? state.inv[id].qty || 0 : 0;
 function toxNow() {
   const o = LS.get(lsKey("tox"), { n: 0, ts: 0 }), el = Math.max(0, serverNow() - (o.ts || 0));
@@ -6621,10 +6621,10 @@ async function statUse(k) {
     u[`users/${uid}/stamina`] = 0; u[`users/${uid}/staminaTs`] = serverTimestamp();
     msg = "💀 โอเวอร์โดส! แคปซูลเสียเปล่า HP เหลือครึ่ง พลังงานหมด";
   } else if (c + 1 >= need) {
-    u[`stats/${uid}/${k}`] = v + 1; u[`statUp/${uid}/${k}`] = 0;
+    u[`stats/${uid}/${k}`] = v + 1; u[`statUp/${uid}/${k}`] = { c: 0, ts: serverTimestamp() };
     msg = `✨ ${STAT_LABEL[k]} เพิ่มเป็น ${v + 1}`;
   } else {
-    u[`statUp/${uid}/${k}`] = c + 1;
+    u[`statUp/${uid}/${k}`] = { c: c + 1, ts: serverTimestamp() };
     msg = `🧪 สะสมแล้ว ${c + 1}/${need} เม็ดสำหรับแต้มถัดไปของ ${STAT_LABEL[k]}`;
   }
   try {
