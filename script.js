@@ -31,7 +31,7 @@ const db = getDatabase(app);
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-05.0909";
+const APP_VERSION = "2026-10-05.0931";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -4013,8 +4013,8 @@ function bmRender(body, card, row) {
    ========================================================= */
 const GACHA_COST = { human: { id: "scrap", qty: 5 }, zombie: { id: "rotten_meat", qty: 2 } };
 const GACHA_ITEMS = {
-  human: ["canned_food", "water", "bandage", "medkit", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar"],
-  zombie: ["water", "water_jug", "bandage", "medkit", "moss", "energy_drink", "stim_shot", "antidote", "trauma_kit", "rotten_meat"]
+  human: ["canned_food", "water", "bandage", "medkit", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "stat_cap", "stat_lim"],
+  zombie: ["water", "water_jug", "bandage", "medkit", "moss", "energy_drink", "stim_shot", "antidote", "trauma_kit", "rotten_meat", "stat_cap", "stat_lim"]
 };
 const GACHA_QTY_MAX = 5;
 // กองเริ่มต้น 100 ช่องต่อฝั่ง [id, qty ต่อช่อง, จำนวนช่อง] — มนุษย์คืนมูลค่า ~67% ของราคา / ซอมบี้ ~86% (เนื้อเน่ามีค่าสูงกว่า scrap จริง จึงตั้งให้คืนมากกว่า)
