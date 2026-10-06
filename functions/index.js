@@ -6,6 +6,8 @@ const { logger } = require("firebase-functions");
 const admin = require("firebase-admin");
 const { makeBase } = require("./base");
 const { makeMarket } = require("./market");
+const { makePass } = require("./pass");
+const { makeEvents } = require("./events");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -29,4 +31,18 @@ const marketSys = makeMarket(admin.database());
 exports.marketAct = onCall(async (req) => {
   try { return await marketSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("marketAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🎟️ Season Pass: ภารกิจรายวัน/รายสัปดาห์ + รางวัล 30 ระดับ (โหนด pass/{uid} เขียนได้เฉพาะฟังก์ชันนี้ — ไม่มีใน rules)
+const passSys = makePass(admin.database());
+exports.passAct = onCall(async (req) => {
+  try { return await passSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("passAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🎭 เหตุการณ์สุ่มแบบเลือกทางระหว่างค้นหา (โหนด enc/{uid} เขียนได้เฉพาะฟังก์ชันนี้ — ไม่มีใน rules)
+const eventSys = makeEvents(admin.database());
+exports.eventAct = onCall(async (req) => {
+  try { return await eventSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("eventAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

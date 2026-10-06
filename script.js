@@ -29,13 +29,15 @@ const db = getDatabase(app);
 const fns = getFunctions(app, "asia-southeast1");   // Cloud Functions: ระบบที่ย้ายตรรกะตรวจสอบจาก rules ไปไว้ฝั่งเซิร์ฟเวอร์ (ตอนนี้: ที่พัก 🏠)
 const baseCall = (data) => httpsCallable(fns, "baseAct")(data).then((r) => r.data);
 const marketCall = (data) => httpsCallable(fns, "marketAct")(data).then((r) => r.data);   // ตลาด/ตลาดมืด/ฝากของ (functions/market.js)
+const passCall = (data) => httpsCallable(fns, "passAct")(data).then((r) => r.data);   // 🎟️ ภารกิจซีซัน (functions/pass.js)
+const eventCall = (data) => httpsCallable(fns, "eventAct")(data).then((r) => r.data);   // 🎭 เหตุการณ์สุ่มเลือกทาง (functions/events.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1500";
+const APP_VERSION = "2026-10-06.2200";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -710,6 +712,8 @@ function openGuide() {
   ]);
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
+    "🎟️ ปุ่ม “🎟️ n” บนแถบบน: ภารกิจซีซัน — ภารกิจรายวัน 3 ข้อ/รายสัปดาห์ 4 ข้อ ได้ XP สะสมปลดรางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน) กดรับเองก่อนซีซันจบ",
+    "🎭 เหตุการณ์สุ่ม: ระหว่างค้นหานอก Safe Zone มีโอกาสเจอสถานการณ์ให้เลือกทาง (บางทางต้องใช้ของ) ผลลัพธ์สุ่ม อาจได้ของหรือเสีย HP แต่จะไม่ทำให้ตาย",
     "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
     "🔥 ปุ่ม “🔥 n/28” บนแถบบน: ปฏิทินเช็กอินประจำซีซัน (28 วัน) นับสะสมวันที่เข้าเล่น ไม่ต้องติดกัน มีรางวัลวันที่ 3/7/14/21/28 กดรับเอง — รางวัลซีซันเก่ารับได้จนกว่าจะเริ่มนับซีซันใหม่",
     "🎁 ห่างไปเกิน 3 ชั่วโมง จะมีสรุปว่าระหว่างที่ไม่อยู่มีอะไรรอคุณ • ห่างไปเกิน 7 วัน รับของขวัญต้อนรับกลับได้หนึ่งครั้ง",
@@ -1963,6 +1967,7 @@ async function scavengeOnce() {
     }
     questBump("search"); stat("search");
     try { evtSearchHook(); fxSearchHook(); } catch { /* ข้าม */ }
+    try { if (!hcFind && found !== "zombie" && found !== "boss") encAfterSearch(); } catch { /* ข้าม */ }
   }
 }
 
@@ -9231,6 +9236,7 @@ function mwRender() {
 }
 function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
+  try { passTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
   const b = $("btn-ck"); if (!b) return;
   const show = ckOn() && state.ck !== undefined || cbPending();
@@ -9244,6 +9250,134 @@ function mTick() {
     const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
     if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
   }
+}
+
+/* =========================================================
+   49.5) 🎟️ ภารกิจซีซัน (Season Pass) + 🎭 เหตุการณ์สุ่มแบบเลือกทาง
+   ทั้งสองระบบทำงานผ่าน Cloud Functions (passAct / eventAct — functions/pass.js, functions/events.js) ไม่แตะ rules
+   - Season Pass: ภารกิจรายวัน 3 + รายสัปดาห์ 4 นับจากตัวนับความสำเร็จเดิม → XP → รางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน)
+   - เหตุการณ์สุ่ม: หลังค้นหานอก Safe Zone มีโอกาสเจอสถานการณ์ให้เลือกทาง (เซิร์ฟเวอร์ทอยผล • HP ไม่ลดต่ำกว่า 1)
+   ========================================================= */
+function fnErr(e) {
+  const c = String(e?.code || "");
+  if (c.startsWith("functions/")) return /internal|unavailable|deadline|unknown/.test(c) ? "เซิร์ฟเวอร์ไม่ตอบสนอง ลองใหม่อีกครั้ง" : (e.message || "ทำรายการไม่สำเร็จ");
+  return "ทำรายการไม่สำเร็จ";
+}
+const passMs = (t) => { const s = Math.max(0, Math.floor(t / 1000)), d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d} วัน ${h} ชม.` : h ? `${h} ชม. ${m} นาที` : `${m} นาที`; };
+function passDot() { const P = state.pass; if (!P) return false; return [...P.d, ...P.w].some((m) => m.done && !m.got) || (P.rew || []).some((_, i) => P.xp >= (i + 1) * P.tierXp && !P.tc[i + 1]); }
+async function passSync(a = { a: "sync" }) {
+  try { await achFlush(); } catch { /* ข้าม */ }
+  const r = await passCall(a); state.pass = r; state.passAt = Date.now(); return r;
+}
+function passTick() {
+  if (!state.profile || !state.ach?.loaded) return;
+  const now = Date.now();
+  if (!state.passAt && !state.passBusy || (state.passAt && now - state.passAt > 300000 && !document.hidden && !state.passBusy)) {
+    state.passAt = now; state.passBusy = true;
+    passSync().catch(() => { /* ข้าม */ }).finally(() => { state.passBusy = false; try { passBtn(); passRender(); } catch { /* ข้าม */ } });
+  }
+  if (!state.encPeeked) {   // กลับเข้าเกมแล้วมีเหตุการณ์ค้างอยู่ → เด้งให้ตัดสินใจต่อ
+    state.encPeeked = true;
+    eventCall({ a: "peek" }).then((r) => { if (r.enc) encShow(r.enc); }).catch(() => { /* ข้าม */ });
+  }
+  passBtn();
+}
+function passBtn() {
+  let b = $("btn-pass");
+  if (!b) { const ck = $("btn-ck") || $("btn-profile"); if (!ck) return; b = btn("🎟️", passOpen, "btn ghost mini"); b.id = "btn-pass"; b.title = "ภารกิจซีซัน"; ck.before(b); }
+  b.classList.toggle("btn-dot", passDot());
+  b.textContent = state.pass ? `🎟️ ${Math.min(state.pass.tiers, Math.floor(state.pass.xp / state.pass.tierXp))}` : "🎟️";
+}
+function passOpen() {
+  if (!$("pass-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "pass-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎟️ ภารกิจซีซัน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "pass-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("pass-modal").classList.remove("hidden"); passRender();
+  if (!state.passBusy) { state.passBusy = true; passSync().catch((e) => toast(fnErr(e))).finally(() => { state.passBusy = false; passBtn(); passRender(); }); }
+}
+function passRender() {
+  const m = $("pass-modal"), body = $("pass-body"); if (!m || !body || m.classList.contains("hidden")) return; body.innerHTML = "";
+  const P = state.pass, card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
+  const d = seaDef(); if (!P) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const tier = Math.min(P.tiers, Math.floor(P.xp / P.tierXp)), inTier = P.xp % P.tierXp;
+  const h = card(); h.append(mk("div", "", `${d.icon} ${d.name} • ระดับ ${tier}/${P.tiers} • XP ${P.xp}`), mk("div", "muted", tier >= P.tiers ? "ปลดรางวัลครบทุกระดับแล้ว 🎉" : `อีก ${P.tierXp - inTier} XP ถึงระดับ ${tier + 1}`));
+  { const bar = mk("div"); bar.style.cssText = "height:8px;border-radius:4px;background:var(--panel-2,#1c2128);margin:6px 0;overflow:hidden"; const i = mk("div"); i.style.cssText = `height:100%;width:${tier >= P.tiers ? 100 : inTier}%;background:var(--accent,#e0a030)`; bar.append(i); h.append(bar); }
+  h.append(mk("div", "muted", `ซีซันนี้เหลือ ${passMs(P.sEnd - serverNow())} • ภารกิจนับจากตอนที่เปิดภารกิจครั้งแรกของวัน/สัปดาห์ — รางวัลที่ไม่กดรับก่อนซีซันจบจะหายไป`));
+  const sect = (title, list, kind, end) => {
+    const c = card(); c.append(mk("div", "", `${title} • รีเซ็ตใน ${passMs(end - serverNow())}`));
+    list.forEach((x) => {
+      const r = mk("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px";
+      const t = mk("div", x.got ? "muted" : "", `${x.got ? "✅" : x.done ? "🎯" : "⬜"} ${x.t} — ${x.v}/${x.n} (+${x.xp} XP)`);
+      r.append(t); if (x.done && !x.got) r.append(btn("รับ XP", () => passClaim({ a: "claimMission", p: kind, id: x.id }), "btn primary mini"));
+      c.append(r);
+    });
+  };
+  sect("📅 ภารกิจวันนี้", P.d, "d", P.dEnd); sect("🗓️ ภารกิจสัปดาห์นี้", P.w, "w", P.wEnd);
+  const tc = card(); tc.append(mk("div", "", "🎁 รางวัลตามระดับ"));
+  P.rew.forEach((rw, i) => {
+    const t = i + 1, got = !!P.tc[t], ok = P.xp >= t * P.tierXp, r = mk("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:5px";
+    r.append(mk("div", got ? "muted" : ok ? "" : "muted", `${got ? "✅" : ok ? "🎯" : "🔒"} ระดับ ${t}: ${mRew(rw)}`));
+    if (ok && !got) r.append(btn("รับ", () => passClaim({ a: "claimTier", t }), "btn primary mini"));
+    tc.append(r);
+  });
+}
+async function passClaim(a) {
+  if (state.passBusy) return; state.passBusy = true;
+  try {
+    const r = await passSync(a);
+    if (r.rewarded) { toast(`🎁 ได้รับ ${mRew(r.rewarded)}`); logLine(`🎟️ รับรางวัลซีซัน: ${mRew(r.rewarded)}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }
+    else toast("🎟️ ได้รับ XP แล้ว");
+  } catch (e) { toast(fnErr(e)); try { await passSync(); } catch { /* ข้าม */ } }
+  finally { state.passBusy = false; passBtn(); passRender(); }
+}
+
+// ---- เหตุการณ์สุ่ม ----
+function encAfterSearch() {
+  if (state.encBusy || state.enc || !state.profile || state.profile.hp <= 0 || state.zone === "safe" || state.boss) return;
+  state.encBusy = true;
+  eventCall({ a: "roll" }).then((r) => { if (r.enc) encShow(r.enc); }).catch(() => { /* ข้าม: ไม่ให้กระทบการค้นหา */ }).finally(() => { state.encBusy = false; });
+}
+const encHave = (id) => Object.values(state.inv || {}).filter((x) => x && x.id === id).reduce((s, x) => s + (x.qty || 0), 0);
+function encShow(enc) {
+  if (!enc || state.boss || document.querySelector(".modal:not(.hidden):not(#enc-modal)")) return;   // ชนกับหน้าต่างอื่น → ปล่อยไว้ (เซิร์ฟเวอร์เก็บไว้ 30 นาที ค้นหาครั้งหน้าจะเด้งใหม่)
+  state.enc = enc;
+  if (!$("enc-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "enc-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "440px";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "")); head.firstChild.id = "enc-title";
+    const body = mk("div"); body.id = "enc-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.6";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("enc-title").textContent = `🎭 ${enc.t}`;
+  const body = $("enc-body"); body.innerHTML = ""; body.append(mk("div", "", enc.d));
+  enc.o.forEach((o) => {
+    const need = o.need, lack = need && encHave(need[0]) < need[1];
+    const b = btn(o.l + (lack ? " — ของไม่พอ" : ""), () => encChoose(o.i), "btn primary"); b.disabled = !!lack; b.style.textAlign = "left"; body.append(b);
+  });
+  $("enc-modal").classList.remove("hidden");
+}
+async function encChoose(i) {
+  if (state.encBusy) return; state.encBusy = true;
+  const body = $("enc-body"); body.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  try {
+    const r = await eventCall({ a: "choose", i });
+    achBump("enc"); state.enc = null;
+    body.innerHTML = "";
+    const lines = [r.x]; if (r.paid) lines.push(`ใช้ ${mRew([r.paid])}`);
+    if (r.hp) lines.push(r.hp > 0 ? `❤️ ฟื้น +${r.hp} HP` : `💔 เสีย ${-r.hp} HP`);
+    if (r.got && r.got.length) lines.push(`🎒 ได้ ${mRew(r.got)}`);
+    body.append(mk("div", "", lines[0])); lines.slice(1).forEach((t) => body.append(mk("div", "muted", t)));
+    body.append(btn("ตกลง", () => $("enc-modal").classList.add("hidden"), "btn ghost"));
+    logLine(`🎭 ${lines.join(" • ")}`, r.hp < 0 ? "combat" : "info");
+    if (r.got?.length) stat("found", r.got.reduce((s, g) => s + g[1], 0));
+  } catch (e) {
+    toast(fnErr(e)); state.enc = null;
+    try { const p = await eventCall({ a: "peek" }); if (p.enc) { state.encBusy = false; encShow(p.enc); } else $("enc-modal").classList.add("hidden"); } catch { $("enc-modal").classList.add("hidden"); }
+  } finally { state.encBusy = false; }
 }
 
 /* =========================================================
