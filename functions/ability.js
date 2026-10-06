@@ -10,17 +10,19 @@ const CAREER_SCORE = {
   medic: (c) => 0.5 * (c.use || 0) + 3 * (c.heal || 0) + 15 * (c.cure || 0),
   trader: (c) => 4 * (c.mkt || 0) + 2 * (c.craft || 0) + (c.gacha || 0) + (c.dclaim || 0)
 };
-const CAREER_LV = [60, 250, 800, 2500];
+const CAREER_LV = [60, 250, 800, 2500, 6000, 15000];   // ต้องตรงกับ script.js (ขั้น 5–6)
+const Le = (L) => (L <= 4 ? L : 4 + (L - 4) * 0.5);   // ขั้น 5+ (อาชีพขั้น 5–6 / มิวเตชันซอมบี้) ให้ผลครึ่งหนึ่งของขั้นปกติ กันแรงเกิน
 const careerOf = (c) => {
   const best = Object.keys(CAREER_SCORE).map((k) => [k, CAREER_SCORE[k](c)]).sort((a, b) => b[1] - a[1])[0];
   if (!best || best[1] < CAREER_LV[0]) return null;
   return { k: best[0], L: CAREER_LV.filter((v) => best[1] >= v).length };
 };
-const evoLine = (e) => {
+const evoLine = (e, m = {}) => {
   const t = { hunter: Number(e.h) || 0, giant: Number(e.g) || 0, shade: Number(e.s) || 0 }, max = Math.max(t.hunter, t.giant, t.shade);
   if (max < 1) return null;
   const pref = { hunter: "h", giant: "g", shade: "s" }, k = [e.line, "hunter", "giant", "shade"].find((x) => x && t[x] === max && (x !== e.line || t[e.line] === max));
-  return { k: k || "hunter", L: Math.min(4, max) };
+  const kk = k || "hunter", mt = max >= 4 ? Math.min(4, Number(m[pref[kk]]) || 0) : 0;   // มิวเตชัน (mutate.js) เพิ่มขั้นต่อจากขั้น 4 ได้อีก 4 ขั้น
+  return { k: kk, L: Math.min(4, max) + mt };
 };
 // ความสามารถ: n=ชื่อ i=ไอคอน d=คำอธิบาย cost=[ไอเทม, จำนวน] eff(L)=ตัวคูณ/โบนัส (ฝั่งเกมนำไปใช้) heal(L)=รักษาทันที
 const ABIL = {
@@ -33,17 +35,17 @@ const ABIL = {
   shadez: { f: "z", i: "🕷️", n: "ซุ่มเงียบ", d: "ค้นแล้วว่างเปล่าน้อยลง ของหายากออกง่ายขึ้น", cost: ["rotten_meat", 2], eff: (L) => ({ n: 1 - 0.10 * L, r: 1 + 0.06 * L }) }
 };
 const ZMAP = { hunter: "hunterz", giant: "giantz", shade: "shadez" };
-const dur = (L) => (8 + 2 * L) * 60000;                 // 10/12/14/16 นาที
-const cdOf = (id, L) => (ABIL[id].cd || (100 - 10 * L)) * 60000;   // ปกติ 90/80/70/60 นาที (หมอ 45 นาที)
+const dur = (L) => (8 + 2 * Le(L)) * 60000;                 // 10/12/14/16 นาที
+const cdOf = (id, L) => (ABIL[id].cd || (100 - 10 * Le(L))) * 60000;   // ปกติ 90/80/70/60 นาที (หมอ 45 นาที)
 const AID_DAY = 5, AID_REW = [["herb_bundle", 1]];
 
 function makeAbility(db) {
   const col = (x) => (x && typeof x === "object" ? x : {});
   async function who(uid) {
-    const [pS, aS, eS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`ach/${uid}/c`).get(), db.ref(`evo/${uid}`).get()]);
+    const [pS, aS, eS, mS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`ach/${uid}/c`).get(), db.ref(`evo/${uid}`).get(), db.ref(`mut/${uid}`).get()]);
     const p = pS.val(); if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
     const zom = p.faction === "zombie";
-    if (zom) { const l = evoLine(col(eS.val())); return { p, zom, id: l ? ZMAP[l.k] : null, L: l ? l.L : 0, line: l && l.k }; }
+    if (zom) { const l = evoLine(col(eS.val()), col(mS.val())); return { p, zom, id: l ? ZMAP[l.k] : null, L: l ? l.L : 0, line: l && l.k }; }
     const c = careerOf(col(aS.val())); return { p, zom, id: c ? c.k : null, L: c ? c.L : 0, line: c && c.k };
   }
   async function run(uid, data, now = Date.now()) {
@@ -52,8 +54,8 @@ function makeAbility(db) {
     return withLock(db, uid, now, async () => {
       const w = await who(uid), st = col((await db.ref(`abil/${uid}`).get()).val());
       const A = w.id ? ABIL[w.id] : null, on = col(st.on), cd = col(st.cd), di = dayIdx(now), aid = st.ad === di ? st.an || 0 : 0;
-      const live = on.id && on.until > now ? { id: on.id, until: on.until, L: on.L, eff: ABIL[on.id] && ABIL[on.id].eff ? ABIL[on.id].eff(on.L) : null } : null;
-      const view = (extra) => Object.assign({ ok: true, has: !!A, id: w.id, L: w.L, zom: w.zom, i: A && A.i, n: A && A.n, d: A && A.d, cost: A && A.cost, dur: A && A.eff ? Math.round(dur(w.L) / 60000) : 0, heal: A && A.heal ? A.heal(w.L) : 0, cdLeft: A ? Math.max(0, (Number(cd[w.id]) || 0) - now) : 0, live, aidLeft: Math.max(0, AID_DAY - aid), end: dayEnd(now) }, extra || {});
+      const live = on.id && on.until > now ? { id: on.id, until: on.until, L: on.L, eff: ABIL[on.id] && ABIL[on.id].eff ? ABIL[on.id].eff(Le(on.L)) : null } : null;
+      const view = (extra) => Object.assign({ ok: true, has: !!A, id: w.id, L: w.L, zom: w.zom, i: A && A.i, n: A && A.n, d: A && A.d, cost: A && A.cost, dur: A && A.eff ? Math.round(dur(w.L) / 60000) : 0, heal: A && A.heal ? A.heal(Le(w.L)) : 0, cdLeft: A ? Math.max(0, (Number(cd[w.id]) || 0) - now) : 0, live, aidLeft: Math.max(0, AID_DAY - aid), end: dayEnd(now) }, extra || {});
       if (a === "state") return view();
       if (a !== "use") fail("invalid-argument", "ไม่รู้จักคำสั่ง");
       if (!A) fail("failed-precondition", w.zom ? "ยังไม่ได้เลือกสายวิวัฒนาการ (ลงแต้ม DNA อย่างน้อย 1 ขั้น)" : "ยังไม่มีอาชีพ (สะสมคะแนนจากการเล่นให้ถึงขั้นแรกก่อน)");
@@ -71,7 +73,7 @@ function makeAbility(db) {
         if (!(tp.hp > 0)) fail("failed-precondition", "รักษาไม่ได้");
         if (!(await takeItem(db, uid, A.cost[0], A.cost[1]))) fail("failed-precondition", "ของไม่พอสำหรับใช้ความสามารถ");
         let gained = 0;
-        await db.ref(`users/${to}/hp`).transaction((cur) => { if (typeof cur !== "number") return cur; const cap = Math.max(cur, 100), nx = Math.min(cap, cur + A.heal(w.L)); gained = nx - cur; return nx; });
+        await db.ref(`users/${to}/hp`).transaction((cur) => { if (typeof cur !== "number") return cur; const cap = Math.max(cur, 100), nx = Math.min(cap, cur + A.heal(Le(w.L))); gained = nx - cur; return nx; });
         await db.ref(`abil/${uid}`).update({ [`cd/${w.id}`]: now + cdOf(w.id, w.L), ...(self ? {} : { ad: di, an: aid + 1 }) });
         cd[w.id] = now + cdOf(w.id, w.L);
         let rew = null; if (!self && (await grantAll(db, uid, AID_REW))) rew = AID_REW;
@@ -81,7 +83,7 @@ function makeAbility(db) {
       const until = now + dur(w.L);
       await db.ref(`abil/${uid}`).update({ on: { id: w.id, until, L: w.L, at: now }, [`cd/${w.id}`]: now + cdOf(w.id, w.L) });
       on.id = w.id; on.until = until; on.L = w.L; cd[w.id] = now + cdOf(w.id, w.L);
-      return view({ used: true, live: { id: w.id, until, L: w.L, eff: A.eff(w.L) }, cdLeft: cdOf(w.id, w.L) });
+      return view({ used: true, live: { id: w.id, until, L: w.L, eff: A.eff(Le(w.L)) }, cdLeft: cdOf(w.id, w.L) });
     });
   }
   return { run };
