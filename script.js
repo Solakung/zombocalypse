@@ -58,7 +58,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0633";
+const APP_VERSION = "2026-10-06.0635";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -9985,10 +9985,11 @@ function casinoRender() {
   const body = $("casino-body"), m = $("casino-modal"); if (!body || !m || m.classList.contains("hidden")) return; body.innerHTML = "";
   const D = state.csD; if (!D || D.chips === undefined) { body.append(mk("div", "muted", "กำลังโหลด…")); return; }
   const busy = !!state.csBusy, row = (...c) => { const d = mk("div", "world-row"); c.forEach((x) => x && d.append(x)); return d; };
-  const hdr = mk("div", "casino-stat"); hdr.append(mk("b", "", `🪙 ${D.chips} ชิป`), mk("span", "muted", ` • เสียสุทธิวันนี้ ${D.lossToday}/${D.cap}`));
+  const hdr = mk("div", "casino-stat"); hdr.append(mk("b", "", `🪙 ${D.chips} ชิป`), mk("span", "muted", ` • เสียสุทธิวันนี้ ${D.lossToday}/${D.cap}`), mk("span", "muted", D.winCap ? ` • ชนะวันนี้ ${D.winToday || 0}/${D.winCap}` : ""));
   if (D.debt) { const left = Math.max(0, D.debt.due - serverNow()); hdr.append(mk("div", "casino-debt", `💸 หนี้ ${D.debt.a} ชิป • ครบกำหนดใน ${Math.ceil(left / 3600000)} ชม. (ไม่จ่าย = ยึดของในกระเป๋า + หัก HP)`)); }
   if (D.lockLeft > 0) hdr.append(mk("div", "muted", `😴 พักตัวอยู่ อีก ${Math.ceil(D.lockLeft / 3600000)} ชม.`));
   if (D.capLeft <= 0) hdr.append(mk("div", "casino-debt", "วันนี้เสียถึงเพดานแล้ว — พักก่อนนะ"));
+  else if (D.winCap && (D.winToday || 0) >= D.winCap) hdr.append(mk("div", "casino-debt", "วันนี้ชนะเกมเดี่ยวครบเพดานแล้ว — พรุ่งนี้ค่อยมาใหม่"));
   body.append(hdr);
   if (!D.inZone) body.append(mk("div", "casino-debt", "ต้องอยู่ที่คาสิโนเถื่อนก่อนถึงจะเล่นได้"));
   const tabs = mk("div", "casino-tabs"); [["game", "🎰 เกม"], ["slave", "🃏 สลาฟ"], ["ex", "💱 แลกชิป"], ["shop", "🛍️ ร้านแลก"], ["more", "⚙️ อื่นๆ"]].forEach(([k, l]) => { const b = btn(l, () => { state.csTab = k; casinoRender(); if (k === "slave") slOpen(); }, "btn mini " + (state.csTab === k ? "primary" : "ghost")); tabs.append(b); }); body.append(tabs);
@@ -10021,7 +10022,7 @@ function casinoRender() {
     body.append(row(mk("b", "", "📋 กติกาของบ่อน"), mk("div", "muted", `เดิมพันครั้งละ ${D.min}–${D.max} ชิป • เสียสุทธิต่อวันไม่เกิน ${D.cap} ชิป • สล็อตคืน ~${D.slotRtp ?? 95}% ในระยะยาว (เสียเปรียบเสมอ) • เกมที่ค้างนาน 10 นาทีถือว่าแพ้ • ห้ามต่อสู้ในบ่อน`)));
   } else {
     const gs = mk("div", "casino-tabs"); CS_GAMES.forEach(([k, ic, n]) => gs.append(btn(`${ic} ${n}`, () => { state.csGame = k; state.csRes = null; casinoRender(); }, "btn mini " + (state.csGame === k ? "primary" : "ghost")))); body.append(gs);
-    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, g === "slots" ? (D.slotMax || 100) : D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0, panel = mk("div", "world-row");
+    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, g === "slots" ? (D.slotMax || 100) : D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0 && !(D.winCap && (D.winToday || 0) >= D.winCap), panel = mk("div", "world-row");
     const betRow = () => { const r = mk("div", "casino-bets"); CS_BETS.filter((n) => g !== "slots" || n <= (D.slotMax || 100)).forEach((n) => { const b = btn(String(n), () => { state.csBet = n; casinoRender(); }, "btn mini " + (n === bet ? "primary" : "ghost")); b.style.minHeight = "40px"; r.append(b); }); return r; };
     const act = (label, data, cls) => { const b = btn(label, () => casinoGo(data), cls || "btn primary"); b.disabled = !can; b.style.cssText = "min-height:48px;margin-top:8px"; return b; };
     const res = state.csRes && state.csRes.game === g ? state.csRes : null, resTxt = (r) => r.ret !== undefined ? `${r.net > 0 ? "🎉 ชนะ" : r.net === 0 ? "เสมอ" : "💸 แพ้"} • ได้คืน ${r.ret} • สุทธิ ${r.net > 0 ? "+" : ""}${r.net}` : "";
