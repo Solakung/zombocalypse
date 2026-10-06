@@ -46,7 +46,7 @@ const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.1200";
+const APP_VERSION = "2026-10-07.1500";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -7611,7 +7611,14 @@ function renderBase() {
   if (!baseOn()) return body.append(mk("div", "muted", "ที่พักปิดอยู่ชั่วคราว"));
   const can = baseCan(), fac = state.profile?.faction === "zombie";
   body.append(mk("div", "muted", `${fac ? "รังของคุณ" : "ที่พักของคุณในค่าย"} — วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ ผลผลิตสะสมได้จำกัด (เต็มแล้วหยุดผลิต) ${can ? "" : "• ตอนนี้ไม่ได้อยู่ Safe Zone จึงดูได้อย่างเดียว"}`));
-  { const sc = mk("div"); sc.id = "base-scene"; body.append(sc); try { baseSceneFill(sc, baseSceneOwn()); } catch (e) { console.warn("scene", e); } }
+  { const tabs = mk("div", "subtabs"); tabs.style.paddingTop = "0";
+    [["in", "🏠 ห้องข้างใน"], ["yard", "🌱 ลานหน้าบ้าน"]].forEach(([k, l]) => tabs.append(btn(l, () => { state.baseView = k; renderBase(); }, "btn mini " + ((state.baseView || "in") === k ? "primary" : "ghost"))));
+    body.append(tabs);
+    const sc = mk("div"); sc.id = "base-scene"; body.append(sc);
+    try {
+      if (state.baseView === "yard") { const D = state.gardenD, spent = Date.now() - (state.gardenAt || Date.now()); sc.innerHTML = baseYardSvg(baseLv(), fac, D ? D.plots : [], spent, state.uid); if (!D && !state.gardenBusy && !state.gardenLoad) { state.gardenLoad = true; gardenGo("state").finally(() => { state.gardenLoad = false; }); } }
+      else baseSceneFill(sc, baseSceneOwn());
+    } catch (e) { console.warn("scene", e); } }
   const slots = baseSlots(); let total = 0;
   for (let i = 1; i <= 5; i++) {
     const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
@@ -8133,7 +8140,7 @@ function baseSceneSvg(o) {
     const x = 22 + i * 22;
     if (s.locked) { P.push(`<rect x="${x - 8}" y="104" width="16" height="14" rx="3" fill="none" stroke="#fff" stroke-opacity=".25" stroke-dasharray="3 2"/>`); return; }
     if (!s.k) { P.push(`<rect x="${x - 8}" y="104" width="16" height="14" rx="3" fill="#000" opacity=".18"/>`); return; }
-    P.push(t(x, 117, 16, kinds[s.k] || "📦"));
+    P.push(kinds[s.k] ? scnStn(s.k, x, z) : t(x, 117, 16, "📦"));
     if (s.u > 0) P.push(`<text x="${x + 8}" y="104" font-size="9" text-anchor="middle" class="sp">✨</text>`, `<text x="${x}" y="127.5" font-size="7" text-anchor="middle" fill="#fff">${s.u}/${s.cap}</text>`);
   });
   // โต๊ะงาน (ขวา)
@@ -9275,6 +9282,114 @@ async function gardenGo(a, x, ok) {
   catch (e) { toast(fnErr(e)); try { state.gardenD = await gardenCall({ a: "state" }); state.gardenAt = Date.now(); } catch { /* ข้าม */ } }
   finally { state.gardenBusy = false; try { baseAgain(); } catch { /* ข้าม */ } }
 }
+/* ---------- 🎨 กราฟิกแปลงปลูก/ลานหน้าบ้าน (SVG วาดในโค้ด — เบา ปรับสีตามฤดู/เวลา ไม่ต้องมีไฟล์รูป) ---------- */
+// a = รูปแบบการวาด • c = สีต้น/ใบ • f = สีผล/ดอก (ตอนพร้อมเก็บ)
+const CROP_ART = {
+  herb: { a: "leaf", c: "#5fae4e", f: "#f3f0d8" }, mossb: { a: "moss", c: "#6e9e4a", f: "#a9d86e" }, aloe: { a: "aloe", c: "#7fc46a", f: "#ffd27a" },
+  tomato: { a: "fruit", c: "#4f9d45", f: "#e0432f" }, pumpkin: { a: "pumpkin", c: "#4f9d45", f: "#e08a2a" }, wheat: { a: "grain", c: "#7fae4a", f: "#e1bf4c" },
+  shroom: { a: "shroom", c: "#a58a5e", f: "#e8d9b0" }, glow: { a: "flower", c: "#3f9a8a", f: "#8fe8ff" },
+  fungus: { a: "shroom", c: "#6b7a42", f: "#a9bf4f" }, maggot: { a: "worm", c: "#d8c8a8", f: "#f3e6c8" }, bog: { a: "pool", c: "#34503f", f: "#7fb89a" }, bloodroot: { a: "root", c: "#6a1f2a", f: "#e0432f" }
+};
+// st: 1 = งอก, 2 = โต, 3 = พร้อมเก็บ (วาดที่ 0,0 = พื้นดิน, ต้นสูงขึ้นไปทางลบ y)
+function gPlant(cid, st) {
+  const A = CROP_ART[cid] || { a: "leaf", c: "#5fae4e", f: "#fff" }, c = A.c, f = A.f, rd = st >= 3, o = [];
+  if (st <= 1 && A.a !== "worm" && A.a !== "pool") return `<path d="M0 0 Q-2 -8 -7 -11 M0 0 Q2 -9 8 -13" stroke="${c}" fill="none" stroke-width="2.4" stroke-linecap="round"/><ellipse cx="-7" cy="-11" rx="3" ry="2" fill="${c}"/><ellipse cx="8" cy="-13" rx="3.2" ry="2.1" fill="${c}"/>`;
+  switch (A.a) {
+    case "leaf": [-52, -26, 0, 26, 52].forEach((a, i) => o.push(`<ellipse cx="0" cy="-13" rx="${3.6 + (i % 2)}" ry="${st >= 2 ? 12 : 8}" fill="${c}" transform="rotate(${a})"/>`)); if (rd) for (let i = 0; i < 5; i++) o.push(`<circle cx="${-12 + i * 6}" cy="${-22 - (i % 2) * 5}" r="2" fill="${f}"/>`); break;
+    case "moss": [[-9, -4, 6], [0, -7, 8], [9, -4, 6], [-4, -12, 5], [5, -12, 5]].forEach(([x, y, r]) => o.push(`<circle cx="${x}" cy="${y}" r="${r}" fill="${c}"/>`)); if (rd) [[-6, -10], [4, -15], [10, -6]].forEach(([x, y]) => o.push(`<circle cx="${x}" cy="${y}" r="2" fill="${f}"/>`)); break;
+    case "aloe": [-40, -18, 0, 18, 40].forEach((a) => o.push(`<path d="M0 0 L-4 -24 L1 -8 Z" fill="${c}" transform="rotate(${a})"/>`)); if (rd) o.push(`<line x1="0" y1="-6" x2="0" y2="-34" stroke="${c}" stroke-width="2"/><circle cx="0" cy="-35" r="3.5" fill="${f}"/>`); break;
+    case "fruit": o.push(`<path d="M0 0 L0 -30" stroke="${c}" stroke-width="2.6"/>`); [[-9, -22], [9, -16], [-7, -10]].forEach(([x, y]) => o.push(`<ellipse cx="${x}" cy="${y}" rx="6" ry="3" fill="${c}"/>`)); [[-9, -27], [8, -22], [-3, -15]].forEach(([x, y]) => o.push(`<circle cx="${x}" cy="${y}" r="${st >= 2 ? 4.5 : 2.5}" fill="${rd ? f : "#78b552"}"/>`)); break;
+    case "pumpkin": o.push(`<ellipse cx="0" cy="-9" rx="${st >= 2 ? 14 : 8}" ry="${st >= 2 ? 10 : 6}" fill="${rd ? f : c}"/>`, `<path d="M-5 -18 Q-7 -9 -5 -1 M5 -18 Q7 -9 5 -1" stroke="#0004" fill="none" stroke-width="1.6"/>`, `<rect x="-1.5" y="-24" width="3" height="7" rx="1.5" fill="#4b7a2c"/>`, `<path d="M0 -20 Q14 -26 18 -16" stroke="${c}" fill="none" stroke-width="2"/>`); break;
+    case "grain": [-12, -6, 0, 6, 12].forEach((x, i) => { const h = 26 + (i % 2) * 6; o.push(`<path d="M${x} 0 Q${x + 2} ${-h / 2} ${x} ${-h}" stroke="${rd ? "#caa73a" : c}" fill="none" stroke-width="2"/><ellipse cx="${x}" cy="${-h - 3}" rx="2.6" ry="6" fill="${rd ? f : "#9ac45a"}"/>`); }); break;
+    case "shroom": { const n = rd ? 3 : st >= 2 ? 2 : 1; [[0, 0, 1], [-11, 2, 0.7], [11, 3, 0.62]].slice(0, n).forEach(([x, y, k]) => o.push(`<g transform="translate(${x} ${y}) scale(${k})"><rect x="-3.5" y="-14" width="7" height="14" rx="3" fill="${f}"/><path d="M-13 -13 Q0 -34 13 -13 Z" fill="${c}"/>${rd ? '<circle cx="-4" cy="-19" r="1.6" fill="#fff8"/><circle cx="4" cy="-22" r="1.3" fill="#fff8"/>' : ""}</g>`)); break; }
+    case "flower": o.push(`<path d="M0 0 Q-3 -16 0 -28" stroke="${c}" fill="none" stroke-width="2.6"/><ellipse cx="-7" cy="-9" rx="6" ry="2.6" fill="${c}" transform="rotate(-25 -7 -9)"/><ellipse cx="7" cy="-14" rx="6" ry="2.6" fill="${c}" transform="rotate(25 7 -14)"/>`); if (st >= 2) { for (let a = 0; a < 6; a++) o.push(`<ellipse cx="0" cy="-35" rx="3.2" ry="7" fill="${rd ? f : "#6fb6a4"}" transform="rotate(${a * 60} 0 -29)"/>`); o.push(`<circle cx="0" cy="-29" r="3" fill="${rd ? "#fff" : "#cde"}"/>`); } else o.push(`<ellipse cx="0" cy="-30" rx="3.6" ry="5.5" fill="#6fb6a4"/>`); break;
+    case "worm": o.push(`<ellipse cx="0" cy="-3" rx="19" ry="7" fill="#2a1d15"/>`); [[-8, -4, 0], [5, -3, 1], [-1, -6, 2]].slice(0, rd ? 3 : st >= 2 ? 2 : 1).forEach(([x, y, i]) => o.push(`<path class="gwg" style="animation-delay:${i * 0.4}s" d="M${x - 7} ${y} q3.5 -9 7 0 t7 0" stroke="${f}" fill="none" stroke-width="3.2" stroke-linecap="round"/>`)); break;
+    case "pool": o.push(`<ellipse cx="0" cy="-3" rx="21" ry="8" fill="${c}"/><ellipse cx="0" cy="-3" rx="15" ry="5" fill="#27402f"/><ellipse class="gwg" cx="-3" cy="-3" rx="6" ry="1.8" fill="none" stroke="${f}" stroke-width="1"/>`); if (st >= 2) o.push(`<circle cx="7" cy="-8" r="2.4" fill="${f}" opacity=".8"/>`); if (rd) o.push(`<circle cx="-8" cy="-11" r="3" fill="${f}" opacity=".85"/><circle cx="2" cy="-15" r="2" fill="${f}" opacity=".7"/>`); break;
+    case "root": [-30, -12, 8, 28].forEach((a) => o.push(`<path d="M0 0 Q-3 -9 ${-1 + a / 12} -18" stroke="${rd ? f : c}" fill="none" stroke-width="3" stroke-linecap="round" transform="rotate(${a / 2})"/>`)); o.push(`<ellipse cx="0" cy="-3" rx="9" ry="5" fill="${c}"/>`); if (rd) o.push(`<circle cx="0" cy="-3" r="5" fill="${f}" opacity=".75"/>`); break;
+  }
+  return o.join("");
+}
+const gStage = (pl, left) => (!pl.c ? 0 : left <= 0 ? 3 : pl.total && 1 - left / pl.total >= 0.34 ? 2 : 1);
+const GS_SEASON = [
+  { gr: ["#2c4a34", "#3a5c3f"], w: "rain" }, { gr: ["#31402f", "#44553a"], w: "fog" }, { gr: ["#4a4a2a", "#5f5c30"], w: "gold" }, { gr: ["#5a6a70", "#738087"], w: "snow" }
+];
+const gStyle = '<style>.gpu{animation:gpu 1.8s ease-in-out infinite}.gsp{animation:gsp 1.3s ease-in-out infinite}.gwg{animation:gwg 2.2s ease-in-out infinite;transform-box:fill-box;transform-origin:center}.grn{animation:grn .9s linear infinite}.gsn{animation:gsn 4s linear infinite}.gp{cursor:pointer}@keyframes gpu{0%,100%{opacity:.35}50%{opacity:.85}}@keyframes gsp{0%,100%{opacity:.2;transform:scale(.6)}50%{opacity:1;transform:scale(1.15)}}@keyframes gwg{0%,100%{transform:translateX(0)}50%{transform:translateX(2.5px)}}@keyframes grn{from{transform:translate(0,-12px)}to{transform:translate(-5px,60px)}}@keyframes gsn{from{transform:translateY(-10px)}to{transform:translateY(70px)}}@keyframes gsm{from{transform:translateY(0);opacity:.4}to{transform:translateY(-22px) translateX(6px);opacity:0}}@media (prefers-reduced-motion:reduce){.gpu,.gsp,.gwg,.grn,.gsn{animation:none}}</style>';
+let gGid = 0;   // id ของ gradient ต้องไม่ซ้ำกันระหว่างภาพหลายใบในหน้าเดียว
+function gardenSceneSvg(D, sel, spent, zom) {
+  const q = ++gGid, n = D.plots.length, cols = Math.min(4, Math.ceil(n / 2)), rows = Math.ceil(n / cols), cw = 320 / cols, H = 66 + rows * 64 + 6, S = GS_SEASON[D.season % 4], sky = scnSky(), o = [];
+  const gr = zom ? ["#2a2433", "#352d3f"] : S.gr;
+  o.push(`<svg viewBox="0 0 320 ${H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="แปลงปลูก" style="width:100%;height:auto;border-radius:12px;display:block;background:#0f1216">${gStyle}`);
+  o.push(`<defs><linearGradient id="gsky${q}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${zom ? "#1a1230" : sky.top}"/><stop offset="1" stop-color="${zom ? "#3a2a50" : sky.bot}"/></linearGradient><radialGradient id="ggl${q}"><stop offset="0" stop-color="#fff6b0" stop-opacity=".95"/><stop offset="1" stop-color="#fff6b0" stop-opacity="0"/></radialGradient><linearGradient id="gfog${q}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b6d89a" stop-opacity="0"/><stop offset="1" stop-color="#b6d89a" stop-opacity=".35"/></linearGradient></defs>`);
+  o.push(`<rect width="320" height="70" fill="url(#gsky${q})"/>`);
+  if (sky.night || zom) { for (let i = 0; i < 12; i++) o.push(`<circle cx="${(i * 53 + 17) % 320}" cy="${6 + (i * 29) % 40}" r="1" fill="#fff" opacity=".8"/>`); o.push(`<text x="270" y="30" font-size="18" text-anchor="middle">${sky.moon}</text>`); } else o.push(`<text x="270" y="30" font-size="20" text-anchor="middle">☀️</text>`);
+  o.push(`<path d="M0 62 Q50 40 100 58 T210 52 T320 60 L320 72 L0 72 Z" fill="${zom ? "#221b2c" : "#27382c"}"/>`);
+  o.push(`<rect y="64" width="320" height="${H - 64}" fill="${gr[0]}"/>`);
+  for (let y = 70; y < H; y += 14) o.push(`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="${gr[1]}" stroke-width="2" opacity=".7"/>`);
+  if (!zom) for (let x = 6; x < 320; x += 20) o.push(`<rect x="${x}" y="52" width="3" height="14" fill="#3c2a1b"/>`), o.push(`<line x1="0" y1="58" x2="320" y2="58" stroke="#3c2a1b" stroke-width="2"/>`);
+  D.plots.forEach((pl, k) => {
+    const r = Math.floor(k / cols), cc = k % cols, cx = cw * cc + cw / 2, by = 66 + r * 64 + 44, left = Math.max(0, (pl.left || 0) - spent), st = gStage(pl, left), dry = !pl.w;
+    o.push(`<g class="gp" data-i="${pl.i}"><rect x="${cx - cw / 2 + 2}" y="${by - 52}" width="${cw - 4}" height="62" fill="transparent"/>`);
+    if (sel === pl.i) o.push(`<ellipse cx="${cx}" cy="${by + 2}" rx="${Math.min(36, cw / 2 - 3)}" ry="12" fill="none" stroke="#e0a030" stroke-width="2" stroke-dasharray="4 3"/>`);
+    o.push(`<ellipse cx="${cx}" cy="${by + 3}" rx="${Math.min(31, cw / 2 - 6)}" ry="9.5" fill="${pl.w ? "#33261a" : "#4a3320"}"/><ellipse cx="${cx}" cy="${by + 1}" rx="${Math.min(25, cw / 2 - 10)}" ry="6.5" fill="${pl.w ? "#3d2e20" : "#5a4028"}"/>`);
+    if (st === 3) o.push(`<circle class="gpu" cx="${cx}" cy="${by - 16}" r="26" fill="url(#ggl${q})"/>`);
+    if (st > 0) o.push(`<g transform="translate(${cx} ${by})">${gPlant(pl.c, st)}</g>`);
+    else o.push(`<text x="${cx}" y="${by + 1}" font-size="9" text-anchor="middle" fill="#fff" opacity=".35">${pl.i}</text>`);
+    if (st === 3) { o.push(`<text class="gsp" x="${cx + 16}" y="${by - 30}" font-size="11" text-anchor="middle">✨</text><text class="gsp" style="animation-delay:.5s" x="${cx - 18}" y="${by - 20}" font-size="9" text-anchor="middle">✨</text>`); }
+    if (pl.w && st > 0 && st < 3) o.push(`<text x="${cx - 24}" y="${by - 26}" font-size="9">💧</text>`);
+    if (pl.f && st > 0) o.push(`<text x="${cx + 18}" y="${by + 8}" font-size="8">🧪</text>`);
+    o.push(`</g>`);
+  });
+  if (S.w === "rain" && !zom) for (let i = 0; i < 22; i++) o.push(`<line class="grn" style="animation-delay:${(i * 0.13).toFixed(2)}s" x1="${(i * 29) % 320}" y1="0" x2="${(i * 29) % 320 - 3}" y2="9" stroke="#bfe3ff" stroke-width="1" opacity=".55"/>`);
+  if (S.w === "snow" && !zom) for (let i = 0; i < 24; i++) o.push(`<circle class="gsn" style="animation-delay:${(i * 0.17).toFixed(2)}s" cx="${(i * 37) % 320}" cy="0" r="1.6" fill="#fff" opacity=".85"/>`);
+  if (S.w === "fog" || zom) o.push(`<rect y="40" width="320" height="${H - 40}" fill="url(#gfog${q})"/>`);
+  if (S.w === "gold" && !zom) o.push(`<rect width="320" height="${H}" fill="#ffcf6b" opacity=".07"/>`);
+  o.push(`</svg>`); return o.join("");
+}
+// ---- ลานหน้าบ้าน: ตัวบ้านตามระดับ (0–3) + แปลงที่โตตามสถานะจริง ----
+function baseYardSvg(lv, zom, plots, spent, uid) {
+  const q = ++gGid, sky = scnSky(), night = sky.night, o = [], lit = night ? "#ffd27a" : "#cfe6f2", h = scnHash(uid) % 3;
+  o.push(`<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ลานหน้าบ้าน" style="width:100%;height:auto;border-radius:12px;display:block;background:#0f1216">${gStyle}`);
+  o.push(`<defs><linearGradient id="ysky${q}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${zom ? "#1a1230" : sky.top}"/><stop offset="1" stop-color="${zom ? "#3a2a50" : sky.bot}"/></linearGradient><radialGradient id="ggl${q}"><stop offset="0" stop-color="#fff6b0" stop-opacity=".9"/><stop offset="1" stop-color="#fff6b0" stop-opacity="0"/></radialGradient></defs><rect width="320" height="120" fill="url(#ysky${q})"/>`);
+  if (night || zom) { for (let i = 0; i < 14; i++) o.push(`<circle cx="${(i * 47 + 9) % 320}" cy="${6 + (i * 31) % 70}" r="1" fill="#fff" opacity=".8"/>`); o.push(`<text x="40" y="34" font-size="18" text-anchor="middle">${sky.moon}</text>`); } else o.push(`<text x="40" y="36" font-size="20" text-anchor="middle">☀️</text>`);
+  o.push(`<path d="M0 108 Q60 84 120 104 T250 98 T320 106 L320 124 L0 124 Z" fill="${zom ? "#221b2c" : "#27382c"}"/><rect y="116" width="320" height="84" fill="${zom ? "#2a2433" : "#3a4a32"}"/>`);
+  for (let y = 126; y < 200; y += 14) o.push(`<line x1="0" y1="${y}" x2="320" y2="${y}" stroke="${zom ? "#352d3f" : "#44563a"}" stroke-width="2" opacity=".7"/>`);
+  if (zom) {   // รัง: เนินดิน + ตาแดง + กระดูก
+    o.push(`<path d="M30 124 Q36 56 110 54 Q190 56 196 124 Z" fill="#17121f"/><path d="M${60 + lv * 4} 124 Q${66 + lv * 4} 82 110 80 Q154 82 ${160 - lv * 4} 124 Z" fill="#0b0912"/>`);
+    o.push(`<circle cx="98" cy="104" r="3.4" fill="#d33" class="gpu"/><circle cx="118" cy="104" r="3.4" fill="#d33" class="gpu"/>`);
+    for (let i = 0; i < lv; i++) o.push(`<path d="M${44 + i * 66} 70 L${52 + i * 66} 46 L${60 + i * 66} 70 Z" fill="#2a2036"/>`);
+    o.push(`<text x="40" y="128" font-size="13">🦴</text><text x="190" y="126" font-size="12">🕸️</text><text x="210" y="140" font-size="12" class="gpu">🍄</text>`);
+  } else if (lv === 0) {   // เต็นท์ผ้าใบ
+    o.push(`<path d="M40 126 L112 54 L184 126 Z" fill="#6d7a5a"/><path d="M112 54 L112 126" stroke="#3b4430" stroke-width="2"/><path d="M92 126 L112 84 L132 126 Z" fill="#171a14"/><path d="M40 126 L184 126" stroke="#2b3322" stroke-width="3"/>`);
+  } else {
+    const wall = lv === 1 ? "#6b4a2d" : lv === 2 ? "#7a5a38" : "#59606a", roof = lv === 1 ? "#3c2a1b" : lv === 2 ? "#5a2f24" : "#2e343c", w = 100 + lv * 14, x0 = 112 - w / 2;
+    o.push(`<rect x="${x0}" y="${126 - 54 - lv * 6}" width="${w}" height="${54 + lv * 6}" fill="${wall}"/>`);
+    for (let x = x0 + 8; x < x0 + w; x += 14) o.push(`<line x1="${x}" y1="${126 - 54 - lv * 6}" x2="${x}" y2="126" stroke="#0003" stroke-width="2"/>`);
+    o.push(`<path d="M${x0 - 8} ${126 - 54 - lv * 6} L112 ${126 - 92 - lv * 8} L${x0 + w + 8} ${126 - 54 - lv * 6} Z" fill="${roof}"/>`);
+    o.push(`<rect x="${112 - 8}" y="${126 - 34}" width="18" height="34" rx="2" fill="#2b1d12"/><circle cx="${112 + 6}" cy="${126 - 16}" r="1.6" fill="#e0b84a"/>`);
+    o.push(`<rect x="${x0 + 12}" y="${126 - 44}" width="20" height="18" rx="2" fill="${lit}" stroke="#2b1d12" stroke-width="3"/>${lv >= 2 ? `<rect x="${x0 + w - 32}" y="${126 - 44}" width="20" height="18" rx="2" fill="${lit}" stroke="#2b1d12" stroke-width="3"/>` : ""}`);
+    if (night) o.push(`<circle class="gpu" cx="${x0 + 22}" cy="${126 - 35}" r="22" fill="url(#ggl${q})"/>`);
+    if (lv >= 2) { o.push(`<rect x="${x0 + w - 24}" y="${126 - 100}" width="10" height="26" fill="#3a2a1d"/>`); for (let i = 0; i < 3; i++) o.push(`<circle class="gsn" style="animation-delay:${i * 1.2}s;animation-name:gsm" cx="${x0 + w - 19}" cy="${126 - 104 - i * 8}" r="${3 + i}" fill="#ddd" opacity=".35"/>`); }
+    if (lv >= 3) { o.push(`<rect x="${x0 - 22}" y="${126 - 70}" width="14" height="70" fill="#59606a"/><rect x="${x0 - 26}" y="${126 - 82}" width="22" height="14" fill="#2e343c"/><circle class="gpu" cx="${x0 - 15}" cy="${126 - 75}" r="3" fill="#ffd27a"/>`); for (let i = 0; i < 5; i++) o.push(`<ellipse cx="${x0 + w + 12 + (i % 3) * 10}" cy="${122 - Math.floor(i / 3) * 7}" rx="7" ry="4" fill="#9a8a62"/>`); }
+    if (h === 0 && lv >= 1) o.push(`<text x="${x0 - 6}" y="124" font-size="13">🪵</text>`);
+  }
+  // แถวแปลงหน้าบ้าน (สถานะจริง)
+  const n = Math.min(8, plots.length); const gap = 300 / Math.max(1, n);
+  for (let k = 0; k < n; k++) {
+    const pl = plots[k], cx = 10 + gap * (k + 0.5), by = 176, left = Math.max(0, (pl.left || 0) - spent), st = gStage(pl, left);
+    o.push(`<ellipse cx="${cx}" cy="${by + 3}" rx="${Math.min(20, gap / 2 - 2)}" ry="6" fill="${pl.w ? "#33261a" : "#4a3320"}"/>`);
+    if (st === 3) o.push(`<circle class="gpu" cx="${cx}" cy="${by - 9}" r="15" fill="url(#ggl${q})"/>`);
+    if (st > 0) o.push(`<g transform="translate(${cx} ${by}) scale(.62)">${gPlant(pl.c, st)}</g>`);
+  }
+  if (!n) o.push(`<text x="160" y="178" font-size="10" text-anchor="middle" fill="#fff" opacity=".45">ยังไม่มีแปลงปลูก — อัปเกรดที่พักเป็นขั้น 1</text>`);
+  o.push(`</svg>`); return o.join("");
+}
+// สถานีผลิตบนเคาน์เตอร์ (แทน emoji): w=น้ำ m=มอส t=อาหาร/เนื้อ
+function scnStn(k, x, z) {
+  if (k === "w") return `<g><rect x="${x - 6}" y="104" width="12" height="14" rx="3" fill="#3d8fd0"/><rect x="${x - 3}" y="100" width="6" height="5" rx="1.5" fill="#cfe9ff"/><rect x="${x - 4}" y="108" width="8" height="3" fill="#fff" opacity=".35"/></g>`;
+  if (k === "m") return `<g><path d="M${x - 7} 111 L${x + 7} 111 L${x + 5} 118 L${x - 5} 118 Z" fill="#8a5a3a"/><circle cx="${x - 4}" cy="107" r="4.4" fill="#6e9e4a"/><circle cx="${x + 3}" cy="105" r="5" fill="#7fb05a"/><circle cx="${x}" cy="109" r="3.6" fill="#5a8a3a"/></g>`;
+  return z ? `<g><ellipse cx="${x}" cy="111" rx="8" ry="6" fill="#a8483f"/><ellipse cx="${x - 2}" cy="109" rx="3" ry="2" fill="#d9776a"/><circle cx="${x + 6}" cy="108" r="2" fill="#efe"/></g>` : `<g><rect x="${x - 7}" y="104" width="14" height="14" rx="2.5" fill="#c9cdd2"/><rect x="${x - 7}" y="108" width="14" height="6" fill="#d9573f"/><rect x="${x - 7}" y="104" width="14" height="2.5" fill="#8d949b"/></g>`;
+}
+
 function gardenRows(body) {
   const D = state.gardenD, can = baseCan(), box = mk("div"); box.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
   box.append(mk("b", "", "🌱 แปลงปลูก"));
@@ -9282,38 +9397,40 @@ function gardenRows(body) {
   if (!D) { box.append(mk("span", "muted", "กำลังโหลด…")); return body.append(box); }
   if (D.n < 1) { box.append(mk("span", "muted", "อัปเกรดที่พักเป็นขั้น 1 ก่อนถึงจะเริ่มปลูกได้")); return body.append(box); }
   const spent = Date.now() - state.gardenAt, zom = state.profile?.faction === "zombie";
-  box.append(mk("span", "muted", `${zom ? "บ่อบ่มเชื้อ" : "สวนลับในค่าย"} ${D.n} แปลง • ${SEASON_TH[D.season]} (ฤดูกาลมีผลกับเวลาโต) • รดน้ำเร็วขึ้น 25% • ปุ๋ย +1 ผลผลิต/กันศัตรูพืช`));
-  if (D.daily) box.append(btn("🎁 รับเมล็ดฟรีวันนี้", () => gardenGo("daily", null, (r) => { toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เมล็ดฟรีรายวัน: ${mRew(r.got)}`, "system"); }), "btn primary mini"));
-  const seeds = Object.entries(D.seeds);
-  const sb = mk("div"); sb.style.cssText = "display:grid;gap:4px"; sb.append(mk("span", "", `🌰 เมล็ดที่มี: ${seeds.length ? seeds.map(([c, q]) => `${D.crops[c]?.i || "🌱"}${D.crops[c]?.n || c} ×${q}`).join(" • ") : "ไม่มี"}`));
-  const shop = Object.entries(D.crops).filter(([, c]) => c.buy);
-  if (shop.length) { const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap"; shop.forEach(([c, v]) => { const b = btn(`ซื้อ ${v.i}${v.n} (${mRew([v.buy])})`, () => gardenGo("buy", { c, q: 1 }, () => toast(`🌱 ซื้อเมล็ด${v.n}แล้ว`)), "btn ghost mini"); b.disabled = !can; row.append(b); }); sb.append(row); }
-  box.append(sb);
-  let ready = 0;
-  D.plots.forEach((pl) => {
-    const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;gap:6px";
-    if (!pl.c) {
-      c.append(mk("b", "", `แปลงที่ ${pl.i} (ว่าง)`));
-      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap";
-      const have = seeds.filter(([k, q]) => q > 0 && D.crops[k]);
-      if (!have.length) c.append(mk("span", "muted", "ไม่มีเมล็ด — รับฟรี/ซื้อ/ได้จากหีบและพ่อค้าเร่"));
-      have.forEach(([k, q]) => { const v = D.crops[k], b = btn(`${v.i} ปลูก${v.n} (${baseHm(v.g)})`, () => gardenGo("plant", { i: pl.i, c: k }), "btn ghost mini"); b.disabled = !can; row.append(b); }); c.append(row);
-    } else {
-      const v = D.crops[pl.c] || { i: "🌱", n: pl.c, y: ["", 0] }, left = Math.max(0, pl.left - spent), done = left <= 0; if (done) ready++;
-      c.append(mk("b", "", `${v.i} ${v.n} (แปลง ${pl.i})${pl.w ? " 💧" : ""}${pl.f ? " 🧪" : ""}`));
-      c.append(worldBar(pl.total ? 1 - left / pl.total : 1, done ? "พร้อมเก็บเกี่ยว!" : `อีก ~${baseHm(left)}`));
-      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;align-items:center";
-      row.append(mk("span", "muted", `ผลผลิต ${mRew([[v.y[0], v.y[1] + (pl.f ? 1 : 0)]])}`));
-      if (done) { const b = btn("เก็บเกี่ยว", () => gardenGo("harvest", { i: pl.i }, gardenDone), "btn primary mini"); b.disabled = !can; row.append(b); }
-      else {
-        const w = btn(pl.w ? "รดน้ำแล้ว" : `💧 รดน้ำ (${mRew([D.water])})`, () => gardenGo("water", { i: pl.i }), "btn ghost mini"), f = btn(pl.f ? "ใส่ปุ๋ยแล้ว" : `🧪 ปุ๋ย (${mRew([D.fert])})`, () => gardenGo("fert", { i: pl.i }), "btn ghost mini");
-        w.disabled = !can || pl.w; f.disabled = !can || pl.f; row.append(w, f);
-      }
-      c.append(row);
+  const leftOf = (pl) => Math.max(0, (pl.left || 0) - spent);
+  if (!D.plots.some((p) => p.i === state.gardenSel)) state.gardenSel = (D.plots.find((p) => p.c && leftOf(p) <= 0) || D.plots.find((p) => !p.c) || D.plots[0]).i;
+  box.append(mk("span", "muted", `${zom ? "บ่อบ่มเชื้อ" : "สวนลับในค่าย"} ${D.n} แปลง • ${SEASON_TH[D.season]} (ฤดูกาลมีผลกับเวลาโต) • แตะแปลงในภาพเพื่อเลือก`));
+  if (D.daily) box.append(btn("🎁 รับเมล็ดฟรีวันนี้", () => gardenGo("daily", null, (r) => { toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เมล็ดฟรีรายวัน: ${mRew(r.got)}`, "system"); }), "btn primary"));
+  const scn = mk("div"); scn.innerHTML = gardenSceneSvg(D, state.gardenSel, spent, zom);
+  scn.onclick = (e) => { const g = e.target.closest && e.target.closest("[data-i]"); if (g) { state.gardenSel = Number(g.getAttribute("data-i")); try { baseAgain(); } catch { /* ข้าม */ } } };
+  box.append(scn);
+  const seeds = Object.entries(D.seeds).filter(([c, q]) => q > 0 && D.crops[c]);
+  const pl = D.plots.find((p) => p.i === state.gardenSel), c = mk("div"); c.style.cssText = "border:1px solid var(--hazard);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--panel-2)";
+  if (!pl.c) {
+    c.append(mk("b", "", `แปลงที่ ${pl.i} (ว่าง) — เลือกเมล็ดที่จะปลูก`));
+    if (!seeds.length) c.append(mk("span", "muted", "ไม่มีเมล็ด — รับฟรีรายวัน / ซื้อด้านล่าง / ได้จากหีบ พ่อค้าเร่ ดิ่งลึก"));
+    const row = mk("div"); row.style.cssText = "display:grid;gap:6px";
+    seeds.forEach(([k, q]) => { const v = D.crops[k], b = btn(`${v.i} ปลูก${v.n} ×${q} • โต ${baseHm(v.g)} • ได้ ${mRew([v.y])}`, () => gardenGo("plant", { i: pl.i, c: k }), "btn primary"); b.disabled = !can; b.style.textAlign = "left"; row.append(b); });
+    c.append(row);
+  } else {
+    const v = D.crops[pl.c] || { i: "🌱", n: pl.c, y: ["", 0] }, left = leftOf(pl), done = left <= 0;
+    c.append(mk("b", "", `${v.i} ${v.n} (แปลง ${pl.i})${pl.w ? " 💧" : ""}${pl.f ? " 🧪" : ""}`), worldBar(pl.total ? 1 - left / pl.total : 1, done ? "พร้อมเก็บเกี่ยว!" : `อีก ~${baseHm(left)}`), mk("span", "muted", `ผลผลิต ${mRew([[v.y[0], v.y[1] + (pl.f ? 1 : 0)]])}`));
+    const row = mk("div"); row.style.cssText = "display:grid;gap:6px";
+    if (done) { const b = btn("🧺 เก็บเกี่ยว", () => gardenGo("harvest", { i: pl.i }, gardenDone), "btn primary"); b.disabled = !can; row.append(b); }
+    else {
+      const w = btn(pl.w ? "💧 รดน้ำแล้ว" : `💧 รดน้ำ (${mRew([D.water])}) — เร็วขึ้น 25%`, () => gardenGo("water", { i: pl.i }), "btn ghost"), f = btn(pl.f ? "🧪 ใส่ปุ๋ยแล้ว" : `🧪 ใส่ปุ๋ย (${mRew([D.fert])}) — +1 ผลผลิต กันศัตรูพืช`, () => gardenGo("fert", { i: pl.i }), "btn ghost");
+      w.disabled = !can || pl.w; f.disabled = !can || pl.f; row.append(w, f);
     }
-    box.append(c);
-  });
-  if (ready > 1) { const b = btn(`เก็บเกี่ยวทั้งหมด (${ready} แปลง)`, () => gardenGo("harvest", { i: "all" }, gardenDone), "btn primary"); b.disabled = !can; box.append(b); }
+    c.append(row);
+  }
+  box.append(c);
+  const ready = D.plots.filter((p) => p.c && leftOf(p) <= 0).length;
+  if (ready > 1) { const b = btn(`🧺 เก็บเกี่ยวทั้งหมด (${ready} แปลง)`, () => gardenGo("harvest", { i: "all" }, gardenDone), "btn primary"); b.disabled = !can; box.append(b); }
+  const shop = Object.entries(D.crops).filter(([, v]) => v.buy);
+  const sb = mk("details"); sb.append(mk("summary", "", `🌰 เมล็ดที่มี: ${seeds.length ? seeds.map(([k, q]) => `${D.crops[k].i}×${q}`).join(" ") : "ไม่มี"} • ซื้อเมล็ด`));
+  if (shop.length) { const row = mk("div"); row.style.cssText = "display:grid;gap:6px;margin-top:8px"; shop.forEach(([k, v]) => { const b = btn(`ซื้อ ${v.i}${v.n} (${mRew([v.buy])})`, () => gardenGo("buy", { c: k, q: 1 }, () => toast(`🌱 ซื้อเมล็ด${v.n}แล้ว`)), "btn ghost"); b.disabled = !can; row.append(b); }); sb.append(row); }
+  sb.open = !!state.gardenShop; sb.addEventListener("toggle", () => { state.gardenShop = sb.open; });
+  box.append(sb);
   body.append(box);
 }
 function gardenDone(r) {
