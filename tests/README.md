@@ -26,3 +26,5 @@ curl -X PUT -H "Authorization: Bearer owner" --data-binary @database_rules.json 
 
 ## เทสต์หน้าจอมือถือ (`tests/ui/`) — Playwright, ดึงโค้ดบางช่วงของ `script.js` มารันในหน้าเปล่า (ฟังก์ชัน callable ถูกจำลอง)
 `node uicasino.js`, `uislave.js`, `uimut.js`, `uihub.js` ฯลฯ — พิมพ์ผล JSON และ `errors: []`
+
+> หมายเหตุ: `ruleparity.js` (เทียบการคราฟต์แบบเขียนตรง) ล้าสมัยโดยตั้งใจ — คราฟต์ทุกสูตรย้ายไป `forgeAct` แล้ว ใช้ `craftrules.js` (เทียบ rules เก่า/ใหม่ของ `inventory`) แทน; `usediff.js`/`use.js`/`userules.js` ครอบคลุมระบบใช้ไอเทม

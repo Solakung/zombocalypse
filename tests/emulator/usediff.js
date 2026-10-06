@@ -38,7 +38,8 @@ const rej = async (p, m) => { try { await p; } catch (e) { if (m && !String(e.me
   assert.deepStrictEqual(cons.map(([k]) => k).sort(), Object.keys(CONSUMABLES).sort(), "consumable ids");
   for (const [k, d] of cons) { const { type, icon, ...rest } = d; assert.deepStrictEqual(CONSUMABLES[k], rest, "consumable " + k); }
   const use = makeUse(dbA, admin), CASES = Number(process.env.CASES || 700); let applied = 0, rejected = 0, confirmed = 0, byId = {};
-  const std = Object.keys(CONSUMABLES);
+  // ไคลเอนต์เดิมใช้ผล s_*/b_*/e_*/c_* ได้เฉพาะ custom_food → เทียบเฉพาะไอเทมมาตรฐานที่ไม่มีฟิลด์เหล่านั้น (ชุดที่ 2 ที่มีผลพิเศษทดสอบใน use.js)
+  const std = Object.keys(CONSUMABLES).filter((k) => !Object.keys(CONSUMABLES[k]).some((f) => /^(s_|b_|e_|c_)|^(bmin|emin)$/.test(f)));
   for (let n = 0; n < CASES; n++) {
     const NOW = Date.now(), fac = pick(["human", "zombie"]);
     const slotKey = pick(["s1", "s2", "bandage"]);
