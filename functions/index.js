@@ -8,6 +8,9 @@ const { makeBase } = require("./base");
 const { makeMarket } = require("./market");
 const { makePass } = require("./pass");
 const { makeEvents } = require("./events");
+const { makeDaily } = require("./daily");
+const { makeCamp } = require("./camp");
+const { makeWorld } = require("./world");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -45,4 +48,25 @@ const eventSys = makeEvents(admin.database());
 exports.eventAct = onCall(async (req) => {
   try { return await eventSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("eventAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🎁 หีบรายวัน + 🎯 ล่าค่าหัว (โหนด crate, hunt — ไม่มีใน rules)
+const dailySys = makeDaily(admin.database());
+exports.dailyAct = onCall(async (req) => {
+  try { return await dailySys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("dailyAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🏕️ ต้นไม้อัปเกรดค่าย + 🐾 ระดับสัตว์เลี้ยง (โหนด camp, pet2 — ไม่มีใน rules)
+const campSys = makeCamp(admin.database());
+exports.campAct = onCall(async (req) => {
+  try { return await campSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("campAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🌍 อีเวนต์โลกรายสัปดาห์ (โหนด world — ไม่มีใน rules)
+const worldSys = makeWorld(admin.database());
+exports.worldAct = onCall(async (req) => {
+  try { return await worldSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("worldAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

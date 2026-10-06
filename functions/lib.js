@@ -32,4 +32,30 @@ async function addItem(db, uid, id, qty) {
   if (!res.committed) fail("failed-precondition", "ช่องกระเป๋านี้ใช้ไม่ได้");
 }
 
-module.exports = { fail, withLock, takeItem, addItem };
+// เพิ่มของแบบไม่ทะลุเพดาน 99 ต่อช่อง (rules ฝั่งกระเป๋า) — เต็ม/ช่องใช้ไม่ได้ → คืน false (ไม่เขียนอะไร)
+async function addCapped(db, uid, id, qty) {
+  const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
+    if (!cur) return { id, qty };
+    if (cur.id !== id || !(cur.qty > 0) || cur.qty + qty > 99) return undefined;
+    return { ...cur, qty: cur.qty + qty };
+  });
+  return res.committed;
+}
+// แจกของหลายชิ้น: ถ้าชิ้นใดไม่สำเร็จจะคืนชิ้นก่อนหน้า (ไม่ค้างครึ่งทาง) และคืน false
+async function grantAll(db, uid, list) {
+  const done = [];
+  for (const [id, q] of list) {
+    if (!(await addCapped(db, uid, id, q))) {
+      for (const [rid, rq] of done) await db.ref(`inventory/${uid}/${rid}`).transaction((x) => (x && x.qty > rq ? { ...x, qty: x.qty - rq } : null));
+      return false;
+    }
+    done.push([id, q]);
+  }
+  return true;
+}
+const TZ = 25200000, DAY = 86400000;
+const dayIdx = (now) => Math.floor((now + TZ) / DAY);
+const dayEnd = (now) => (dayIdx(now) + 1) * DAY - TZ;
+function rng(seed) { let a = (seed * 2654435761) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+module.exports = { fail, withLock, takeItem, addItem, addCapped, grantAll, dayIdx, dayEnd, rng, TZ, DAY };
