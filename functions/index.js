@@ -11,6 +11,10 @@ const { makeEvents } = require("./events");
 const { makeDaily } = require("./daily");
 const { makeCamp } = require("./camp");
 const { makeWorld } = require("./world");
+const { makeDive } = require("./dive");
+const { makeNemesis } = require("./nemesis");
+const { makeRadio } = require("./radio");
+const { makeCaravan } = require("./caravan");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -69,4 +73,32 @@ const worldSys = makeWorld(admin.database());
 exports.worldAct = onCall(async (req) => {
   try { return await worldSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("worldAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🕳️ ดิ่งลึก (โหนด dive, dive2 — ไม่มีใน rules)
+const diveSys = makeDive(admin.database());
+exports.diveAct = onCall(async (req) => {
+  try { return await diveSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("diveAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 👹 ศัตรูคู่อาฆาต (โหนด nem — ไม่มีใน rules)
+const nemSys = makeNemesis(admin.database());
+exports.nemAct = onCall(async (req) => {
+  try { return await nemSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("nemAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 📻 ปริศนาวิทยุ (โหนด radio — ไม่มีใน rules)
+const radioSys = makeRadio(admin.database());
+exports.radioAct = onCall(async (req) => {
+  try { return await radioSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("radioAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🐪 ขบวนพ่อค้าเร่ (โหนด caravan — ไม่มีใน rules)
+const caravanSys = makeCaravan(admin.database());
+exports.caravanAct = onCall(async (req) => {
+  try { return await caravanSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("caravanAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

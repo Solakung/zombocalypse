@@ -34,13 +34,17 @@ const eventCall = (data) => httpsCallable(fns, "eventAct")(data).then((r) => r.d
 const dailyCall = (data) => httpsCallable(fns, "dailyAct")(data).then((r) => r.data);   // 🎁 หีบรายวัน/🎯 ล่าค่าหัว (functions/daily.js)
 const campCall = (data) => httpsCallable(fns, "campAct")(data).then((r) => r.data);   // 🏕️ ต้นไม้ค่าย/🐾 สัตว์เลี้ยง (functions/camp.js)
 const worldCall = (data) => httpsCallable(fns, "worldAct")(data).then((r) => r.data);   // 🌍 อีเวนต์โลกรายสัปดาห์ (functions/world.js)
+const diveCall = (data) => httpsCallable(fns, "diveAct")(data).then((r) => r.data);   // 🕳️ ดิ่งลึก (functions/dive.js)
+const nemCall = (data) => httpsCallable(fns, "nemAct")(data).then((r) => r.data);   // 👹 ศัตรูคู่อาฆาต (functions/nemesis.js)
+const radioCall = (data) => httpsCallable(fns, "radioAct")(data).then((r) => r.data);   // 📻 ปริศนาวิทยุ (functions/radio.js)
+const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) => r.data);   // 🐪 ขบวนพ่อค้าเร่ (functions/caravan.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0100";
+const APP_VERSION = "2026-10-07.0300";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -715,6 +719,7 @@ function openGuide() {
   ]);
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
+    "🎲 ปุ่ม “🎲” บนแถบบน: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
     "🎁 ปุ่ม “🎁” บนแถบบน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
     "🎟️ ปุ่ม “🎟️ n” บนแถบบน: ภารกิจซีซัน — ภารกิจรายวัน 3 ข้อ/รายสัปดาห์ 4 ข้อ ได้ XP สะสมปลดรางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน) กดรับเองก่อนซีซันจบ",
     "🎭 เหตุการณ์สุ่ม: ระหว่างค้นหานอก Safe Zone มีโอกาสเจอสถานการณ์ให้เลือกทาง (บางทางต้องใช้ของ) ผลลัพธ์สุ่ม อาจได้ของหรือเสีย HP แต่จะไม่ทำให้ตาย",
@@ -1971,7 +1976,7 @@ async function scavengeOnce() {
     }
     questBump("search"); stat("search");
     try { evtSearchHook(); fxSearchHook(); } catch { /* ข้าม */ }
-    try { if (!hcFind && found !== "zombie" && found !== "boss") encAfterSearch(); } catch { /* ข้าม */ }
+    try { if (!hcFind && found !== "zombie" && found !== "boss") { encAfterSearch(); nemAfterSearch(); } } catch { /* ข้าม */ }
   }
 }
 
@@ -9243,6 +9248,7 @@ function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
   try { passTick(); } catch { /* ข้าม */ }
   try { actTick(); } catch { /* ข้าม */ }
+  try { advTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
   const b = $("btn-ck"); if (!b) return;
   const show = ckOn() && state.ck !== undefined || cbPending();
@@ -9485,6 +9491,148 @@ function fxPerkMods(m) {
 const fxPerkCut = () => (acs.camp ? acs.camp.perks.reduce((a, p) => a + ((p.eff.cut || 0) * p.lv), 0) : 0);
 async function petBonusAfterClaim() {
   try { await achFlush(); const r = await actSync("camp", "petBonus"); if (r.bonus) { toast(`🐾 ของแถมจากสัตว์เลี้ยง: ${mRew(r.bonus)}`); logLine(`🐾 สัตว์เลี้ยง (ระดับ ${r.lvl}) หาของแถมมาให้: ${mRew(r.bonus)}`, "info"); } } catch { /* ข้าม */ }
+}
+
+/* =========================================================
+   49.7) 🎲 ผจญภัย — 🕳️ ดิ่งลึก • 👹 ศัตรูคู่อาฆาต • 📻 ปริศนาวิทยุ • 🐪 ขบวนพ่อค้าเร่
+   ทุกระบบทำงานผ่าน Cloud Functions (diveAct / nemAct / radioAct / caravanAct — functions/dive.js, nemesis.js, radio.js, caravan.js) ไม่แตะ rules
+   ========================================================= */
+const adv = (state.adv = state.adv || { tab: "dive" });
+const advTabs = [["dive", "🕳️ ดิ่งลึก"], ["nem", "👹 คู่อาฆาต"], ["radio", "📻 วิทยุ"], ["caravan", "🐪 พ่อค้าเร่"]];
+const advCalls = { dive: (a, x) => diveCall({ a, ...(x || {}) }), nem: (a, x) => nemCall({ a, ...(x || {}) }), radio: (a, x) => radioCall({ a, ...(x || {}) }), caravan: (a, x) => caravanCall({ a, ...(x || {}) }) };
+async function advSync(tab, a = "state", x) { const r = await advCalls[tab](a, x); adv[tab] = r; adv[tab + "At"] = Date.now(); return r; }
+function advDot() { const c = adv.caravan, r = adv.radio; return !!(c && c.open && c.here) || !!(r && !r.heard && !r.solved && state.zone === r.zone); }
+function advBtn() {
+  let b = $("btn-adv");
+  if (!b) { const ref = $("btn-act") || $("btn-pass") || $("btn-profile"); if (!ref) return; b = btn("🎲", advOpen, "btn ghost mini"); b.id = "btn-adv"; b.title = "ผจญภัย"; ref.before(b); }
+  b.classList.toggle("btn-dot", advDot());
+}
+function advTick() {
+  if (!state.profile || !state.ach?.loaded) return;
+  const now = Date.now();
+  if (!state.advPeek) { state.advPeek = true; nemCall({ a: "peek" }).then((r) => { adv.nemHist = r.history; if (r.nem) nemShow(r.nem); }).catch(() => { /* ข้าม */ }); }
+  ["caravan", "radio"].forEach((t) => {   // รีเฟรชทุก 5 นาที (ใช้ทำจุดแจ้งเตือน)
+    if (adv[t + "Busy"] || (adv[t + "At"] && now - adv[t + "At"] < 300000) || document.hidden) return;
+    adv[t + "Busy"] = true; adv[t + "At"] = now;
+    advSync(t).catch(() => { /* ข้าม */ }).finally(() => { adv[t + "Busy"] = false; try { advBtn(); advRender(); } catch { /* ข้าม */ } });
+  });
+  advBtn();
+}
+function advOpen() {
+  if (!$("adv-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "adv-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎲 ผจญภัย"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const tabs = mk("div"); tabs.id = "adv-tabs"; tabs.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px";
+    const body = mk("div"); body.id = "adv-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, tabs, body); m.append(box); document.body.append(m);
+  }
+  $("adv-modal").classList.remove("hidden"); advRender(); advRefresh();
+}
+function advRefresh() { const t = adv.tab; if (adv[t + "Busy"]) return; adv[t + "Busy"] = true; advSync(t).catch((e) => toast(fnErr(e))).finally(() => { adv[t + "Busy"] = false; advBtn(); advRender(); }); }
+const advGo = async (tab, a, x, ok) => {   // เรียกคำสั่ง → อัปเดตสถานะ → แสดงผล
+  if (adv.busy) return; adv.busy = true;
+  try { const r = await advSync(tab, a, x); if (ok) ok(r); } catch (e) { toast(fnErr(e)); try { await advSync(tab); } catch { /* ข้าม */ } }
+  finally { adv.busy = false; advBtn(); advRender(); }
+};
+const advLeft = (t) => passMs(t - serverNow());
+function advRender() {
+  const m = $("adv-modal"), body = $("adv-body"); if (!m || !body || m.classList.contains("hidden")) return;
+  const tabs = $("adv-tabs"); tabs.innerHTML = "";
+  advTabs.forEach(([k, l]) => tabs.append(btn(l, () => { adv.tab = k; advRender(); advRefresh(); }, "btn mini " + (adv.tab === k ? "primary" : "ghost"))));
+  body.innerHTML = ""; const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; }, t = adv.tab, D = adv[t];
+  const row = (c, left, right) => { const r = mk("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px"; r.append(left); if (right) r.append(right); c.append(r); };
+  if (t === "nem") {
+    const c = card(), h = adv.nemHist;
+    c.append(mk("div", "", "👹 ศัตรูคู่อาฆาต"), mk("div", "muted", "ระหว่างค้นหานอก Safe Zone มีโอกาสเจอศัตรูที่มีชื่อ จำคุณได้ ยิ่งหนีหรือแพ้มันยิ่งแข็งแกร่งขึ้นและกลับมาเอง ล้มมันได้ของดี (เลเวลสูง = ของหายาก)"));
+    c.append(mk("div", "", h ? `ตอนนี้มี: ${h.name} เลเวล ${h.lv} (คุณหนีรอด ${h.esc} ครั้ง) ยังตามหาคุณอยู่` : "ตอนนี้ไม่มีศัตรูที่ตามหาคุณ"));
+    return;
+  }
+  if (!D) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
+  if (t === "dive") {
+    const c = card(D.on ? " evt-live" : "");
+    c.append(mk("div", "", "🕳️ ดิ่งลึก"), mk("div", "muted", `ลงชั้นใต้ดินของอุโมงค์/ห้องแล็บ สูงสุด ${D.max} ชั้น ของที่เก็บได้ยังไม่ปลอดภัยจนกว่าจะ "ขึ้นจากหลุม" — หมดสติ = เสียของทั้งรอบ`), mk("div", "muted", `สถิติสูงสุด: ชั้น ${D.best} • เหลือ ${D.runsLeft} รอบวันนี้`));
+    if (adv.msg) c.append(mk("div", "", adv.msg));
+    if (!D.on) {
+      const inZone = state.zone === "tunnel" || state.zone === "lab";
+      c.append(mk("div", "muted", `ค่าเตรียมตัว ${mRew([D.entry])} • ต้องอยู่ที่อุโมงค์หรือห้องแล็บ${D.cd > 0 ? ` • พักอีก ${passMs(D.cd)}` : ""}`));
+      const b = btn("เริ่มดิ่ง", () => advGo("dive", "start", null, () => { adv.msg = ""; try { achBump("dive"); } catch { /* ข้าม */ } }), "btn primary"); b.disabled = !inZone || D.runsLeft <= 0 || D.cd > 0; c.append(b);
+    } else {
+      const bar = mk("div"); bar.style.cssText = "height:8px;border-radius:4px;background:var(--panel-2,#1c2128);margin:6px 0;overflow:hidden"; const i = mk("div"); i.style.cssText = `height:100%;width:${Math.max(0, D.stab)}%;background:${D.stab > 50 ? "#4caf50" : D.stab > 25 ? "#e0a030" : "#d9534f"}`; bar.append(i);
+      c.append(mk("div", "", `ชั้น ${D.fl}/${D.max} • เสถียรภาพ ${D.stab}/100`), bar, mk("div", "muted", D.loot.length ? `ของที่เก็บมา: ${mRew(D.loot)}` : "ยังไม่ได้เก็บของ"));
+      D.opts.forEach((o) => { const b = btn(`${o.icon} ${o.l}${o.p === null ? " (ฟื้น +30)" : ` — สำเร็จ ${o.p}% • ของ ×${o.r}`}`, () => advGo("dive", "pick", { i: o.i }, (r) => { adv.msg = r.dead ? `💀 ${r.msg}` : r.cleared ? `🏆 ${r.msg}` : `${r.msg}${r.got ? ` (+${mRew(r.got)})` : ""}${r.lost ? ` เสียเสถียรภาพ −${r.lost}` : ""}${r.firstReward ? ` 🎁 รางวัลครั้งแรกถึงชั้นนี้: ${mRew(r.firstReward)}` : ""}`; if (r.cashed) toast(`🎁 ได้ ${mRew(r.cashed)}`); if (r.dead || r.cleared) logLine(`🕳️ ${adv.msg}`, r.dead ? "combat" : "system"); }), "btn primary"); b.style.textAlign = "left"; c.append(b); });
+      c.append(btn(`⬆️ ขึ้นจากหลุม (เก็บของ ${D.loot.length ? mRew(D.loot) : "ไม่มี"})`, () => advGo("dive", "cashout", null, (r) => { adv.msg = r.cashed.length ? `ขึ้นมาถึงชั้น ${r.fl} ได้ ${mRew(r.cashed)}` : "ขึ้นมามือเปล่า"; toast(adv.msg); logLine(`🕳️ ${adv.msg}`, "system"); }), "btn ghost"));
+    }
+  } else if (t === "radio") {
+    const c = card(); c.append(mk("div", "", "📻 ปริศนาวิทยุประจำสัปดาห์"), mk("div", "muted", `สัญญาณลึกลับซ่อนรหัส 4 หลัก • ฟังสัญญาณได้วันละครั้งที่โซนที่กำหนด จะได้เบาะแส 1 หลัก (เปลี่ยนทุกวัน) — แชร์เบาะแสกันในแชตแล้วส่งรหัสเปิดคลังลับ • เปลี่ยนใน ${advLeft(D.end)}`));
+    if (D.solved) c.append(mk("div", "", "✅ คุณเปิดคลังสัปดาห์นี้แล้ว"));
+    else {
+      c.append(mk("div", "", `วันนี้ต้องไปที่ ${D.zoneTh} เพื่อฟังเบาะแส${D.slot}`));
+      const b = btn(D.heard ? "ฟังวันนี้แล้ว ✅" : "📡 ฟังสัญญาณ", () => advGo("radio", "listen", null, (r) => { toast(`📻 ${r.got}`); logLine(`📻 เบาะแส${D.slot}: ${r.got}`, "system"); }), "btn primary"); b.disabled = D.heard || state.zone !== D.zone; c.append(b);
+    }
+    const cl = card(); cl.append(mk("div", "", "🗒️ เบาะแสที่คุณได้สัปดาห์นี้"));
+    if (!D.clues.length) cl.append(mk("div", "muted", "ยังไม่มี")); D.clues.forEach((x) => cl.append(mk("div", "muted", `${x.slot}: ${x.text}`)));
+    if (!D.solved) {
+      const g = card(), inp = document.createElement("input"); inp.type = "text"; inp.inputMode = "numeric"; inp.maxLength = 4; inp.placeholder = "รหัส 4 หลัก"; inp.style.cssText = "width:100%;box-sizing:border-box;margin:6px 0";
+      g.append(mk("div", "", `🔐 ส่งรหัส (ทายได้อีก ${D.guessesLeft} ครั้งวันนี้ • ผู้แก้แล้ว ${D.solvers} คน • ชุดใหญ่เหลือ ${D.bigLeft} ที่)`), inp);
+      if (adv.hint !== undefined) g.append(mk("div", "muted", `รอบก่อนถูกตำแหน่ง ${adv.hint}/4 หลัก`));
+      g.append(btn("ส่งรหัส", () => advGo("radio", "guess", { code: inp.value.trim() }, (r) => { if (r.right) { toast(`🎉 รหัสถูกต้อง! ได้ ${mRew(r.rewarded)}`); logLine(`📻 เปิดคลังลับสำเร็จ (ลำดับที่ ${r.order}): ${mRew(r.rewarded)}`, "system"); try { achBump("radio"); } catch { /* ข้าม */ } adv.hint = undefined; } else { adv.hint = r.hint; toast("รหัสไม่ถูกต้อง"); } }), "btn primary"));
+    }
+  } else if (t === "caravan") {
+    const c = card();
+    c.append(mk("div", "", "🐪 ขบวนพ่อค้าเร่"));
+    if (!D.open) c.append(mk("div", "muted", `ตอนนี้ขบวนพักอยู่ — รอบหน้าอีก ${advLeft(D.next)}`));
+    else if (!D.here) c.append(mk("div", "", `มีขบวนพ่อค้ามาแล้ว! ใบ้: ${D.hint}`), mk("div", "muted", `ตามหาให้เจอแล้วไปยืนที่โซนนั้น • อยู่อีก ${advLeft(D.until)}`));
+    else {
+      c.append(mk("div", "muted", `${D.who} เปิดร้านอยู่อีก ${advLeft(D.until)} • ซื้อได้คนละ 1 ชิ้นต่อรายการ ของจำกัดทั้งเซิร์ฟเวอร์`));
+      D.goods.forEach((g) => {
+        const b = btn(g.bought ? "ซื้อแล้ว" : g.left <= 0 ? "หมด" : "ซื้อ", () => advGo("caravan", "buy", { key: g.key }, (r) => { toast(`🐪 ได้ ${mRew([r.bought])}`); logLine(`🐪 ซื้อจากขบวนพ่อค้า: ${mRew([r.bought])}`, "system"); try { achBump("cbuy"); } catch { /* ข้าม */ } }), "btn primary mini"); b.disabled = g.bought || g.left <= 0;
+        row(c, mk("div", "", `${mRew([[g.id, g.q]])} — แลกด้วย ${mRew(g.cost)} (เหลือ ${g.left})`), b);
+      });
+    }
+  }
+}
+// ---- ศัตรูคู่อาฆาต: หน้าต่างปะทะ ----
+function nemAfterSearch() {
+  if (state.nemBusy || state.nemOn || state.enc || !state.profile || state.profile.hp <= 0 || state.zone === "safe" || state.boss) return;
+  state.nemBusy = true;
+  nemCall({ a: "roll" }).then((r) => { if (r.nem) nemShow(r.nem, r.again); }).catch(() => { /* ข้าม */ }).finally(() => { state.nemBusy = false; });
+}
+function nemShow(n, again) {
+  if (!n || state.boss || document.querySelector(".modal:not(.hidden):not(#nem-modal)")) return;
+  state.nemOn = true;
+  if (!$("nem-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "nem-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "440px";
+    const head = mk("div", "modal-head"); const h = mk("h2", ""); h.id = "nem-title"; head.append(h);
+    const body = mk("div"); body.id = "nem-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.6";
+    box.append(head, body); m.append(box); document.body.append(m);
+  }
+  $("nem-title").textContent = `👹 ${n.name} (เลเวล ${n.lv})`;
+  const body = $("nem-body"); body.innerHTML = "";
+  body.append(mk("div", "", again ? `มันกลับมาแล้ว… และแข็งแกร่งขึ้น! ${n.name} จำกลิ่นคุณได้` : `${n.name} ปรากฏตัวขึ้นตรงหน้าคุณ`), mk("div", "muted", `นิสัย: ${n.trait} — ${n.tip} • ที่ผ่านมาคุณล้มมันได้ ${n.kills} ครั้ง หนีรอด ${n.esc} ครั้ง`));
+  const w = (() => { try { const q = equippedWeapon(); return q ? weaponBonus(q.def) : 0; } catch { return 0; } })();
+  n.opts.forEach((o) => {
+    const lack = o.need && encHave(o.need[0]) < o.need[1];
+    const b = btn(`${o.l}${o.need ? ` (ใช้ ${mRew([o.need])})` : ""} — ชนะประมาณ ${Math.min(95, o.p + (o.k === "flee" ? 0 : w * 6))}%${lack ? " • ของไม่พอ" : ""}`, () => nemChoose(o.k, w), "btn primary"); b.disabled = !!lack; b.style.textAlign = "left"; body.append(b);
+  });
+  $("nem-modal").classList.remove("hidden");
+}
+async function nemChoose(k, wb) {
+  if (state.nemBusy) return; state.nemBusy = true;
+  const body = $("nem-body"); body.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+  try {
+    const r = await nemCall({ a: "choose", k, wb });
+    state.nemOn = false; adv.nemHist = r.again ? { name: r.name, lv: Math.min(8, r.win ? r.lv : r.lv + 1), esc: 0 } : null;
+    body.innerHTML = ""; const lines = [r.msg]; if (r.paid) lines.push(`ใช้ ${mRew([r.paid])}`); if (r.hp) lines.push(`💔 เสีย ${-r.hp} HP`); if (r.loot && r.loot.length) lines.push(`🎒 ได้ ${mRew(r.loot)}`);
+    body.append(mk("div", "", lines[0])); lines.slice(1).forEach((x) => body.append(mk("div", "muted", x)));
+    body.append(btn("ตกลง", () => $("nem-modal").classList.add("hidden"), "btn ghost"));
+    logLine(`👹 ${lines.join(" • ")}`, r.win ? "info" : "combat");
+    if (r.win && k !== "flee") { try { achBump("nemk"); } catch { /* ข้าม */ } }
+  } catch (e) {
+    toast(fnErr(e)); state.nemOn = false;
+    try { const p = await nemCall({ a: "peek" }); if (p.nem) { state.nemBusy = false; nemShow(p.nem); } else $("nem-modal").classList.add("hidden"); } catch { $("nem-modal").classList.add("hidden"); }
+  } finally { state.nemBusy = false; }
 }
 
 /* =========================================================
