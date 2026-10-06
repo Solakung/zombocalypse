@@ -15,6 +15,8 @@ const { makeDive } = require("./dive");
 const { makeNemesis } = require("./nemesis");
 const { makeRadio } = require("./radio");
 const { makeCaravan } = require("./caravan");
+const { makeGarden } = require("./garden");
+const { makeCol } = require("./col");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -101,4 +103,18 @@ const caravanSys = makeCaravan(admin.database());
 exports.caravanAct = onCall(async (req) => {
   try { return await caravanSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("caravanAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🌱 แปลงปลูกในที่พัก (โหนด garden — ไม่มีใน rules)
+const gardenSys = makeGarden(admin.database());
+exports.gardenAct = onCall(async (req) => {
+  try { return await gardenSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("gardenAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 📖 สมุดสะสมแบบชุด + ความสมบูรณ์ของผู้รอดชีวิต (โหนด col — ไม่มีใน rules)
+const colSys = makeCol(admin.database());
+exports.colAct = onCall(async (req) => {
+  try { return await colSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("colAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

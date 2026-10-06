@@ -24,13 +24,13 @@ const TEXT = {
 const LOOT = {
   human: {
     1: [["scrap", 3], ["bandage", 1], ["water", 1], ["canned_food", 1], ["rusty_nails", 2], ["duct_tape", 1], ["cloth_roll", 1]],
-    2: [["medkit", 1], ["steel_plate", 1], ["copper_wire", 1], ["gunpowder", 1], ["army_meal", 1], ["battery_pack", 1], ["antidote", 1], ["fuel_can", 1]],
-    3: [["trauma_kit", 1], ["circuit_board", 1], ["chem_catalyst", 1], ["serum", 1], ["data_chip", 1], ["lab_sample", 1], ["gold_watch", 1], ["survivor_badge", 1]]
+    2: [["medkit", 1], ["steel_plate", 1], ["copper_wire", 1], ["gunpowder", 1], ["army_meal", 1], ["battery_pack", 1], ["antidote", 1], ["fuel_can", 1], ["seed_wheat", 1]],
+    3: [["trauma_kit", 1], ["circuit_board", 1], ["chem_catalyst", 1], ["serum", 1], ["data_chip", 1], ["lab_sample", 1], ["gold_watch", 1], ["survivor_badge", 1], ["seed_glow", 1], ["seed_shroom", 1]]
   },
   zombie: {
     1: [["rotten_meat", 3], ["moss", 2], ["water", 1], ["rotten_meat", 2], ["energy_drink", 1]],
-    2: [["serum", 1], ["mutant_gland", 1], ["chem", 2], ["rotten_meat", 6], ["medkit", 1]],
-    3: [["serum", 2], ["mutant_gland", 2], ["chem_catalyst", 1], ["lab_sample", 1], ["survivor_badge", 1]]
+    2: [["serum", 1], ["mutant_gland", 1], ["chem", 2], ["rotten_meat", 6], ["medkit", 1], ["seed_maggot", 1]],
+    3: [["serum", 2], ["mutant_gland", 2], ["chem_catalyst", 1], ["lab_sample", 1], ["survivor_badge", 1], ["seed_bloodroot", 1]]
   }
 };
 const tierOf = (fl) => (fl <= 3 ? 1 : fl <= 7 ? 2 : 3);

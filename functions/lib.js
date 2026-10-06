@@ -33,7 +33,14 @@ async function addItem(db, uid, id, qty) {
 }
 
 // เพิ่มของแบบไม่ทะลุเพดาน 99 ต่อช่อง (rules ฝั่งกระเป๋า) — เต็ม/ช่องใช้ไม่ได้ → คืน false (ไม่เขียนอะไร)
+// id ขึ้นต้น "seed_" = เมล็ดพันธุ์ของแปลงปลูก → เก็บเป็นตัวนับที่ garden/{uid}/seed/{พืช} (ไม่ใช่ไอเทมในกระเป๋า ไม่เกี่ยวกับ rules)
+const isSeed = (id) => /^seed_[a-z]{3,10}$/.test(id);
+const itemRef = (db, uid, id) => (isSeed(id) ? db.ref(`garden/${uid}/seed/${id.slice(5)}`) : db.ref(`inventory/${uid}/${id}`));
 async function addCapped(db, uid, id, qty) {
+  if (isSeed(id)) {
+    const r = await itemRef(db, uid, id).transaction((cur) => { const n = Number(cur) || 0; return n + qty > 99 ? undefined : n + qty; });
+    return r.committed;
+  }
   const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
     if (!cur) return { id, qty };
     if (cur.id !== id || !(cur.qty > 0) || cur.qty + qty > 99) return undefined;
@@ -46,7 +53,10 @@ async function grantAll(db, uid, list) {
   const done = [];
   for (const [id, q] of list) {
     if (!(await addCapped(db, uid, id, q))) {
-      for (const [rid, rq] of done) await db.ref(`inventory/${uid}/${rid}`).transaction((x) => (x && x.qty > rq ? { ...x, qty: x.qty - rq } : null));
+      for (const [rid, rq] of done) {
+        if (isSeed(rid)) await itemRef(db, uid, rid).transaction((x) => Math.max(0, (Number(x) || 0) - rq) || null);
+        else await db.ref(`inventory/${uid}/${rid}`).transaction((x) => (x && x.qty > rq ? { ...x, qty: x.qty - rq } : null));
+      }
       return false;
     }
     done.push([id, q]);
@@ -58,4 +68,4 @@ const dayIdx = (now) => Math.floor((now + TZ) / DAY);
 const dayEnd = (now) => (dayIdx(now) + 1) * DAY - TZ;
 function rng(seed) { let a = (seed * 2654435761) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-module.exports = { fail, withLock, takeItem, addItem, addCapped, grantAll, dayIdx, dayEnd, rng, TZ, DAY };
+module.exports = { fail, withLock, takeItem, addItem, addCapped, grantAll, isSeed, dayIdx, dayEnd, rng, TZ, DAY };
