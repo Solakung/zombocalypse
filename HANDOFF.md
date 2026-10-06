@@ -5,7 +5,7 @@
 ## 1) ภาพรวมระบบ
 - ฝั่งเกม: `index.html` + `script.js` (**~1.15 MB รวมไว้ไฟล์เดียว** มีหัวข้อ `/* ===== NN) ... */` ~130 จุด ใช้ `grep -n "^   [0-9]*[.)]" script.js` หาตำแหน่ง) + `style.css` (ต่อท้ายไฟล์ทุกฟีเจอร์) + `sw.js` + `version.json` — **ทุกครั้งที่แก้เกมต้องรัน `node bump.js` (เลขเวอร์ชัน)** ไม่งั้นผู้เล่นได้แคชเก่า
 - ฝั่งเซิร์ฟเวอร์: `functions/` (Node 22, region `asia-southeast1`, Admin SDK ข้าม rules) — ไฟล์ละระบบ: `base market pass events daily camp world dive nemesis radio caravan garden col home profile learn ability war casino slave mutate hc zwar`; ลงทะเบียนใน `functions/index.js` (ล่าสุดเพิ่ม `zwar` แต้มศึกชิงโซน, `forge` คราฟต์อาวุธ, `use` ใช้ไอเทม — แผนต่อ: `PLAN_ITEMS_FN.md`) (รูปแบบ `onCall` + ล็อก error เหมือนกันทุกตัว)
-- ข้อมูล: `database_rules.json` (**197 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc zwrl`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
+- ข้อมูล: `database_rules.json` (**198 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc zwrl`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
 - เอกสารรายระบบ: `MIGRATION.md` (หัวข้อต่อระบบ: ข้อมูล/กติกา/ข้อควรระวัง/วิธีทดสอบ) • ออกแบบไอเทมชุดต่อไป: `ITEMS_DESIGN.md` + `items.draft.json` • บทพูด NPC: `npc-*.json`
 
 ## 2) ขั้นตอน deploy (ลำดับสำคัญ)
@@ -20,7 +20,7 @@
 - แจกของด้วย `lib.grantAll/addCapped` (คืนของถ้าล้มครึ่งทาง) รองรับ id พิเศษ: `seed_<พืช>` → สวน, `deco_<x>`/`theme_<x>` → ห้อง; ไอเทมปกติต้องอยู่ใน whitelist ของ rules ช่อง `inventory` (regex) และมีใน `ITEMS` ของ `script.js`
 - Admin `transaction()` รอบแรกอาจส่ง `null` มา: ต้อง `if (cur === null) return cur` แล้วใช้ flag ตัดสินผล • RTDB ทิ้ง `{}`/`[]` ว่าง → normalize หลังอ่าน • `orderByValue` ต้องมี `.indexOn` → อ่านทั้งหมดแล้วเรียงในหน่วยความจำ
 - ฝั่งเกม: เรียกฟังก์ชันผ่านตัวห่อ `xxxCall` ใกล้ต้นไฟล์; UI มือถือก่อน (ปุ่ม ≥44px, แผ่นล่าง `.modal.sheet`); ตัวคูณโบนัสต่อเข้า `fxMods` (`fxAbilMods` ฯลฯ); ค่าปรับแต่งรันไทม์ผ่าน `tune/{key}` (ฟังก์ชัน `T(k, default)`) แก้ในแท็บแอดมิน
-- สัญญาข้อมูลที่ rules ตรวจอยู่ (**ห้ามแก้ฝั่งเกมอย่างเดียว**): วิวัฒนาการซอมบี้ `evo/{uid}` (ขั้น/DNA/HP/แรงกัด ~28 จุด), อาวุธ/ดาเมจ/การซ่อม/รื้อ, การโจมตี, ดวล, สต็อกช่องกระเป๋า — แก้ต้องแก้ rules พร้อมกันและเทสต์เทียบกฎเก่า/ใหม่ (ดู `tests/emulator/*parity*.js`)
+- สัญญาข้อมูลที่ rules ตรวจอยู่ (**ห้ามแก้ฝั่งเกมอย่างเดียว**): วิวัฒนาการซอมบี้ `evo/{uid}` (ขั้น/DNA/HP/แรงกัด ~28 จุด), อาวุธ/ดาเมจ/การซ่อม/รื้อ, การโจมตี (มี `users/{uid}/lastTgt` พักแรงต่อเป้าหมายคนเดิม 30 วินาที), ดวล, สต็อกช่องกระเป๋า — แก้ต้องแก้ rules พร้อมกันและเทสต์เทียบกฎเก่า/ใหม่ (ดู `tests/emulator/*parity*.js`)
 
 ## 4) สถานะล่าสุด
 - PR #7–#20 merge แล้ว, **#21 ยังเปิด** (ภารกิจ HC: ค้นพบธาราทั้งเซิร์ฟเวอร์ + ส่ง DNA ผ่านฟังก์ชัน + รางวัลผู้ค้นพบ + rules) — ต้อง deploy functions → merge → เผยแพร่ rules
