@@ -52,6 +52,7 @@ const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data)
 const hcCall = (data) => httpsCallable(fns, "hcAct")(data).then((r) => r.data);   // 📡 ภารกิจ HC: ค้นพบธารา/ส่ง DNA (functions/hc.js)
 const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data);   // ⚔️ แต้มศึกชิงโซนรายสัปดาห์ (functions/zwar.js)
 const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.data);   // 🔨 คราฟต์อาวุธระดับต้น–กลาง (functions/forge.js)
+const useCall = (data) => httpsCallable(fns, "useAct")(data).then((r) => r.data);   // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ (functions/use.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -59,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0640";
+const APP_VERSION = "2026-10-06.0723";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1821,80 +1822,21 @@ async function equip(slot, isEquipped) {
 }
 
 async function useItem(slot) {
+  // ผลของไอเทมคำนวณ/เขียนที่ฝั่งเซิร์ฟเวอร์ (functions/use.js `useAct`) — ที่นี่แค่ตรวจเบื้องต้น เรียกฟังก์ชัน แล้วทำของฝั่งไคลเอนต์ต่อ (เควสต์/ความสำเร็จ/มื้อ/ภูมิต้านพิษ)
   const it = state.inv[slot], def = it && defOf(it), p = state.profile;
   if (p.hp <= 0) return;
   if (!def || def.type !== "consumable") return;
-  // ซอมบี้ได้อาหารจากการกัดเท่านั้น (ยกเว้นเสบียงพิเศษ/อาหาร custom ของแอดมิน) แต่ยังใช้ส่วนน้ำ/HP/พลังงานของไอเทมได้
   if (def.zombieOnly && p.faction !== "zombie") return toast("เนื้อเน่า… มีแต่ซอมบี้เท่านั้นที่กินลง");
-  const zombieNoFood = p.faction === "zombie" && def.food > 0 && !def.gmOnly && !def.zombieOnly && it.id !== "custom_food";
-  const foodGain = zombieNoFood ? 0 : (def.food || 0);
-  const fd = curFood(), wt = curWater(), cur = curStamina();
-  const u = {}, msgs = [];
-
-  // ค่าบวก = เติม / ค่าลบ = ลด (HP ลดได้ต่ำสุด 1 ไม่ถึงตาย)
-  if (def.heal > 0 && p.hp < maxHp()) { const n = Math.min(maxHp(), p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`ฟื้น ${n - p.hp} HP`); }
-  if (def.heal < 0 && p.hp > 1) { const n = Math.max(1, p.hp + def.heal); u[`users/${state.uid}/hp`] = n; msgs.push(`เสีย ${p.hp - n} HP`); }
-  if (foodGain > 0 && fd < 100) { const g = Math.min(100 - fd, foodGain); hungerShift(u, "food", g); msgs.push(`อาหาร +${g}`); }
-  if (foodGain < 0 && fd > 0) { const g = Math.min(fd, -foodGain); hungerShift(u, "food", -g); msgs.push(`อาหาร −${g}`); }
-  if (def.water > 0 && wt < 100) { const g = Math.min(100 - wt, def.water); hungerShift(u, "water", g); msgs.push(`น้ำ +${g}`); }
-  if (def.water < 0 && wt > 0) { const g = Math.min(wt, -def.water); hungerShift(u, "water", -g); msgs.push(`น้ำ −${g}`); }
-  if (def.stamina > 0 && cur < maxStamina()) {
-    const n = Math.min(maxStamina(), cur + def.stamina);
-    u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน +${n - cur}`);
-  }
-  if (def.stamina < 0 && cur > 0) {
-    const n = Math.max(0, cur + def.stamina);
-    u[`users/${state.uid}/stamina`] = n; u[`users/${state.uid}/staminaTs`] = serverTimestamp(); msgs.push(`พลังงาน −${cur - n}`);
-  }
-
-  // ไอเทมสเตตัส (custom_food ที่มี s_* / b_*): ถาวร = บวกเข้า stats / ชั่วคราว = เขียนทับ buffs
-  const statItem = it.id === "custom_food" && hasStatFx(def);
-  if (statItem) {
-    const mine = (STAT_DEF[p.faction] || []).map((d) => d.k);
-    if (state.stats) {
-      mine.filter((k) => (def["s_" + k] > 0 && baseStat(k) < STAT_CAP) || (def["s_" + k] < 0 && baseStat(k) > STAT_MIN[k])).forEach((k) => {
-        const n = Math.max(STAT_MIN[k], Math.min(STAT_CAP, baseStat(k) + def["s_" + k]));
-        u[`stats/${state.uid}/${k}`] = n; msgs.push(`${STAT_LABEL[k]} ถาวร ${sgn(n - baseStat(k))}`);
-      });
-    }
-    if (def.bmin > 0 && mine.some((k) => def["b_" + k])) {
-      if (buffActive() && !confirm("คุณมีบัฟชั่วคราวอยู่ การใช้ไอเทมนี้จะแทนที่บัฟเดิมทั้งหมด ต้องการใช้ต่อไหม?")) return;
-      const b = { bstart: serverTimestamp(), mins: def.bmin };
-      STAT_KEYS.forEach((k) => { b[k] = def["b_" + k] || 0; });
-      u[`buffs/${state.uid}`] = b;
-      msgs.push(`${mine.some((k) => def["b_" + k] < 0) ? "บัฟ/ดีบัฟ" : "บัฟ"} ${mine.filter((k) => def["b_" + k]).map((k) => `${STAT_LABEL[k].split(" ")[0]}${sgn(def["b_" + k])}`).join(" ")} นาน ${def.bmin} นาที`);
-    }
-  }
-
-  // สถานะพิเศษ: ไอเทม custom ใส่สถานะ (e_*) หรือรักษา (c_*) / ผ้าพันแผล-ชุดปฐมพยาบาล-มอส รักษาสถานะได้ตาม FX_CURES
-  let usedEat = false;
-  const cure = (t) => { u[`effects/${state.uid}/${t}`] = null; msgs.push(`หาย${FX_TYPES[t].name}`); usedEat = true; };
-  if (it.id === "custom_food") {
-    if (def.emin > 0) FX_KEYS.filter((t) => def["e_" + t]).forEach((t) => {
-      u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins: def.emin, v: def["e_" + t], tick: serverTimestamp() };
-      msgs.push(`${FX_TYPES[t].icon} ${FX_TYPES[t].name}${t === "dice" ? " " + sgn(def.e_dice) : ""} นาน ${def.emin} นาที`); usedEat = true;
-    });
-    FX_CURE_KEYS.filter((t) => def["c_" + t] && !def["e_" + t] && effActive(t)).forEach(cure);
-  }
-  let strongBlocked = false;
-  (FX_CURES[it.id] || []).filter(effActive).forEach((t) => { if (t === "poison" && effV("poison") >= POISON_STRONG && !STRONG_CURE.includes(it.id)) { strongBlocked = true; return; } cure(t); });
-  if (it.id === "antidote") {   // ยาแก้พิษ: ภูมิต้านพิษ 10 นาที (ใช้ล่วงหน้าก่อนไปโซนอันตรายได้)
-    if (poisonImmLeft() > 120000 && !msgs.length) return toast(`ภูมิต้านพิษยังเหลืออีก ${Math.ceil(poisonImmLeft() / 60000)} นาที`);
-    LS.set(lsKey("pimm"), serverNow() + ANTI_IMM_MS); msgs.push("🛡️ ภูมิต้านพิษ 10 นาที"); usedEat = true;
-  }
-  if (strongBlocked) { if (!msgs.length) return toast("☠️ พิษแรงเกินกว่าไอเทมนี้จะรักษาได้ ต้องใช้ยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง"); msgs.push("แต่พิษแรงยังไม่หาย (ต้องยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง)"); }
-
-  if (p.infected && p.faction === "human" && ["medkit", "moss", "serum", "trauma_kit"].includes(it.id)) { u[`users/${state.uid}/infected`] = null; u[`users/${state.uid}/infectTs`] = null; msgs.push("หายจากการติดเชื้อ"); }
-
-  if (!msgs.length && statItem) return toast("ไอเทมนี้ไม่มีผลกับฝ่ายของคุณ หรือสเตตัสถาวรถึงเพดาน/ขีดต่ำสุดแล้ว");
-  if (!msgs.length) return toast(zombieNoFood ? "ซอมบี้กินอาหารทั่วไปไม่ลง… ต้องกัดเหยื่อเท่านั้น" : "สเตตัสหลอดนั้นเต็มอยู่แล้ว ไม่จำเป็นต้องใช้");
-
-  u[`users/${state.uid}/eatSlot`] = slot;  // ให้ database rules รู้ว่าใช้สล็อตไหน (rules ตรวจผลไอเทมจากชื่อสล็อตนี้ทุกชนิด)
-  if (it.qty > 1) u[`inventory/${state.uid}/${slot}/qty`] = it.qty - 1;
-  else u[`inventory/${state.uid}/${slot}`] = null;
-
-  try { await update(ref(db), u); questBump("use"); try { mealOnUse(it.id); } catch { /* ข้าม */ } if (def.heal > 0) achBump("heal"); toast(`ใช้ ${def.name} ` + msgs.join(", ")); }
-  catch (e) { toast(errMsg(e)); }
+  // ยาแก้พิษ: ถ้าภูมิต้านพิษยังเหลือเกิน 2 นาทีและไม่มีพิษให้รักษา ไม่ต้องใช้ (ภูมิเก็บในเครื่อง)
+  if (it.id === "antidote" && poisonImmLeft() > 120000 && !effActive("poison")) return toast(`ภูมิต้านพิษยังเหลืออีก ${Math.ceil(poisonImmLeft() / 60000)} นาที`);
+  try {
+    const go = async (extra) => { try { return await useCall({ slot, ...extra }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); return await useCall({ slot, ...extra }); } };   // ติดล็อกลองใหม่ 1 ครั้ง
+    let r = await go();
+    if (r.confirm === "buff") { if (!confirm("คุณมีบัฟชั่วคราวอยู่ การใช้ไอเทมนี้จะแทนที่บัฟเดิมทั้งหมด ต้องการใช้ต่อไหม?")) return; r = await go({ replaceBuff: true }); }
+    if (it.id === "antidote") LS.set(lsKey("pimm"), serverNow() + ANTI_IMM_MS);
+    questBump("use"); try { mealOnUse(it.id); } catch { /* ข้าม */ } if (def.heal > 0) achBump("heal");
+    toast(`ใช้ ${def.name} ` + (r.msgs || []).join(", "));
+  } catch (e) { toast(fnErr(e)); }
 }
 
 /* =========================================================
