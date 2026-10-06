@@ -54,7 +54,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0600";
+const APP_VERSION = "2026-10-08.0610";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -5332,7 +5332,7 @@ function zmapApply() {
 // จำนวนผู้เล่นในแต่ละโซน (ฟัง zonePlayers ทุกโซน — ข้อมูลเล็ก) + เครื่องหมายบอสโลก
 function zmapListen() {
   if (state.zmapOn) return; state.zmapOn = true; state.zcount = state.zcount || {};
-  [...Object.keys(ZONES), "casino"].forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { state.zcount[z] = s.numChildren(); zmapBadges(); }, () => {}));
+  [...Object.keys(ZONES), "casino"].forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { try { state.zcount[z] = typeof s.numChildren === "function" ? s.numChildren() : Object.keys(s.val?.() || s || {}).length; zmapBadges(); } catch (e) { console.warn("zcount", z, e); } }, () => {}));
 }
 function zmapBadges() {
   document.querySelectorAll(".zone-btn").forEach((b) => {
