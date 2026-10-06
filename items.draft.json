@@ -1,0 +1,1570 @@
+{
+ "version": 1,
+ "note": "ร่างแคตตาล็อกไอเทมใหม่ 100 ชิ้น — ดู ITEMS_DESIGN.md",
+ "rarityWeight": {
+  "C": 20,
+  "U": 10,
+  "R": 4,
+  "E": 1
+ },
+ "zoneNewShare": {
+  "ruins": 20,
+  "mall": 25,
+  "hospital": 25,
+  "police": 30,
+  "forest": 22,
+  "factory": 25,
+  "port": 25,
+  "base": 30,
+  "tunnel": 30,
+  "lab": 30
+ },
+ "bossLoot": {
+  "ruins": {
+   "leather_jacket": 3,
+   "golf_club": 2,
+   "survival_bracelet": 2,
+   "boss_trophy": 1
+  },
+  "mall": {
+   "rabbit_foot": 3,
+   "lucky_coin": 2,
+   "gold_watch": 1,
+   "boss_trophy": 1
+  },
+  "hospital": {
+   "suture_kit": 3,
+   "morphine": 2,
+   "iv_drip": 2,
+   "boss_trophy": 1
+  },
+  "police": {
+   "revolver": 2,
+   "riot_baton": 3,
+   "kevlar_vest": 1,
+   "boss_trophy": 1
+  },
+  "forest": {
+   "hunter_cloak": 3,
+   "machete": 2,
+   "mushroom_stew": 2,
+   "boss_trophy": 1
+  },
+  "factory": {
+   "welder_apron": 3,
+   "nail_gun": 2,
+   "sledgehammer": 1,
+   "boss_trophy": 1
+  },
+  "port": {
+   "diver_suit": 3,
+   "harpoon": 1,
+   "desal_water": 2,
+   "boss_trophy": 1
+  },
+  "base": {
+   "combat_knife": 3,
+   "combat_stim": 2,
+   "field_surgery_kit": 1,
+   "bomb_suit": 1,
+   "boss_trophy": 1
+  },
+  "tunnel": {
+   "mutagen_vial": 2,
+   "mut_hide4": 1,
+   "mut_fang5": 1,
+   "railgun_proto": 1,
+   "boss_trophy": 1
+  },
+  "lab": {
+   "regen_gel": 2,
+   "plasma_cutter": 1,
+   "lab_keycard": 1,
+   "data_chip": 2,
+   "boss_trophy": 1
+  }
+ },
+ "recipes": {
+  "gauze_roll": {
+   "need": {
+    "cloth_roll": 1,
+    "scrap": 1
+   },
+   "qty": 2
+  },
+  "antiseptic": {
+   "need": {
+    "chem": 1,
+    "herb_bundle": 1
+   },
+   "qty": 1
+  },
+  "painkillers": {
+   "need": {
+    "herb_bundle": 2,
+    "chem": 1
+   },
+   "qty": 1
+  },
+  "suture_kit": {
+   "need": {
+    "cloth_roll": 1,
+    "copper_wire": 1,
+    "antiseptic": 1
+   },
+   "qty": 1
+  },
+  "herbal_salve": {
+   "need": {
+    "herb_bundle": 3,
+    "water": 1
+   },
+   "qty": 1
+  },
+  "herbal_tea": {
+   "need": {
+    "herb_bundle": 1,
+    "water": 1
+   },
+   "qty": 1
+  },
+  "broom_spear": {
+   "need": {
+    "duct_tape": 1,
+    "rusty_nails": 2
+   },
+   "qty": 1
+  },
+  "hunting_spear": {
+   "need": {
+    "rope_coil": 1,
+    "steel_plate": 1,
+    "duct_tape": 1
+   },
+   "qty": 1
+  },
+  "nail_gun": {
+   "need": {
+    "battery_pack": 2,
+    "steel_plate": 1,
+    "rusty_nails": 3
+   },
+   "qty": 1
+  },
+  "harpoon": {
+   "need": {
+    "rope_coil": 2,
+    "steel_plate": 2
+   },
+   "qty": 1
+  },
+  "compound_bow": {
+   "need": {
+    "rope_coil": 2,
+    "steel_plate": 1,
+    "cloth_roll": 1,
+    "leather_scrap": 1
+   },
+   "qty": 1
+  },
+  "sledgehammer": {
+   "need": {
+    "steel_plate": 3,
+    "rope_coil": 1
+   },
+   "qty": 1
+  },
+  "cardboard_armor": {
+   "need": {
+    "cloth_roll": 2,
+    "duct_tape": 2
+   },
+   "qty": 1
+  },
+  "leather_jacket": {
+   "need": {
+    "leather_scrap": 4,
+    "cloth_roll": 1
+   },
+   "qty": 1
+  },
+  "hunter_cloak": {
+   "need": {
+    "leather_scrap": 6,
+    "herb_bundle": 2,
+    "rope_coil": 1
+   },
+   "qty": 1
+  },
+  "welder_apron": {
+   "need": {
+    "leather_scrap": 3,
+    "steel_plate": 1,
+    "cloth_roll": 2
+   },
+   "qty": 1
+  },
+  "diver_suit": {
+   "need": {
+    "rope_coil": 2,
+    "cloth_roll": 3,
+    "fuel_can": 1
+   },
+   "qty": 1
+  },
+  "kevlar_vest": {
+   "need": {
+    "cloth_roll": 4,
+    "steel_plate": 2,
+    "duct_tape": 2
+   },
+   "qty": 1
+  },
+  "compass": {
+   "need": {
+    "battery_pack": 1,
+    "copper_wire": 1,
+    "steel_plate": 1
+   },
+   "qty": 1
+  },
+  "earplugs": {
+   "need": {
+    "cloth_roll": 1,
+    "duct_tape": 1
+   },
+   "qty": 1
+  },
+  "survival_bracelet": {
+   "need": {
+    "rope_coil": 1,
+    "duct_tape": 1,
+    "scrap": 2
+   },
+   "qty": 1
+  },
+  "night_goggles": {
+   "need": {
+    "circuit_board": 1,
+    "battery_pack": 2,
+    "steel_plate": 1,
+    "leather_scrap": 1
+   },
+   "qty": 1
+  },
+  "flare_gun": {
+   "need": {
+    "gunpowder": 1,
+    "fuel_can": 1,
+    "steel_plate": 1
+   },
+   "qty": 1
+  },
+  "regen_gel": {
+   "need": {
+    "chem_catalyst": 1,
+    "antiseptic": 1,
+    "water": 1
+   },
+   "qty": 1
+  },
+  "mutagen_vial": {
+   "need": {
+    "mutant_gland": 1,
+    "chem_catalyst": 1,
+    "chem": 2
+   },
+   "qty": 1
+  }
+ },
+ "items": [
+  {
+   "id": "broom_spear",
+   "name": "หอกไม้กวาด",
+   "icon": "🧹",
+   "cat": "weapon",
+   "rar": "C",
+   "dmg": 7,
+   "dur": 30,
+   "zones": {
+    "ruins": "C",
+    "forest": "U"
+   }
+  },
+  {
+   "id": "frying_pan",
+   "name": "กระทะเหล็ก",
+   "icon": "🍳",
+   "cat": "weapon",
+   "rar": "C",
+   "dmg": 9,
+   "dur": 28,
+   "zones": {
+    "mall": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "golf_club",
+   "name": "ไม้กอล์ฟ",
+   "icon": "🏌️",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 11,
+   "dur": 24,
+   "zones": {
+    "mall": "U",
+    "ruins": "C"
+   }
+  },
+  {
+   "id": "hatchet",
+   "name": "ขวานเล็ก",
+   "icon": "🪓",
+   "cat": "weapon",
+   "rar": "C",
+   "dmg": 13,
+   "dur": 26,
+   "zones": {
+    "forest": "C",
+    "factory": "U"
+   }
+  },
+  {
+   "id": "cleaver",
+   "name": "มีดอีโต้",
+   "icon": "🔪",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 15,
+   "dur": 22,
+   "zones": {
+    "mall": "U",
+    "port": "U",
+    "hospital": "C"
+   }
+  },
+  {
+   "id": "machete",
+   "name": "มีดพร้า",
+   "icon": "🗡️",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 15,
+   "dur": 24,
+   "zones": {
+    "forest": "U",
+    "port": "U",
+    "base": "C"
+   }
+  },
+  {
+   "id": "hunting_spear",
+   "name": "หอกล่าสัตว์",
+   "icon": "🔱",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 16,
+   "dur": 20,
+   "zones": {
+    "forest": "U"
+   }
+  },
+  {
+   "id": "riot_baton",
+   "name": "ตะบองปราบจลาจล",
+   "icon": "🏑",
+   "cat": "weapon",
+   "rar": "C",
+   "dmg": 12,
+   "dur": 30,
+   "zones": {
+    "police": "C",
+    "base": "U"
+   }
+  },
+  {
+   "id": "combat_knife",
+   "name": "มีดคอมแบท",
+   "icon": "🔪",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 16,
+   "dur": 28,
+   "zones": {
+    "base": "U",
+    "police": "U"
+   }
+  },
+  {
+   "id": "nail_gun",
+   "name": "ปืนยิงตะปู",
+   "icon": "🔧",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 16,
+   "dur": 22,
+   "star": "ยิงโดน 15% ทำให้เลือดไหล (ต้องเพิ่มกลไก onhit)",
+   "zones": {
+    "factory": "U"
+   }
+  },
+  {
+   "id": "welding_torch",
+   "name": "หัวเชื่อมแก๊ส",
+   "icon": "🔥",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 20,
+   "dur": 15,
+   "star": "ตีโดน 10% ทำให้มึนงง 1 นาที (ต้องเพิ่มกลไก onhit)",
+   "zones": {
+    "factory": "R"
+   }
+  },
+  {
+   "id": "harpoon",
+   "name": "ฉมวก",
+   "icon": "🪝",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 20,
+   "dur": 16,
+   "zones": {
+    "port": "R"
+   }
+  },
+  {
+   "id": "flare_gun",
+   "name": "ปืนยิงพลุ",
+   "icon": "🎇",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 18,
+   "dur": 10,
+   "star": "ยิงโดน 15% ทำให้มึนงง (ต้องเพิ่มกลไก onhit)",
+   "zones": {
+    "port": "U"
+   }
+  },
+  {
+   "id": "revolver",
+   "name": "ปืนลูกโม่",
+   "icon": "🔫",
+   "cat": "weapon",
+   "rar": "U",
+   "dmg": 22,
+   "dur": 16,
+   "zones": {
+    "police": "U"
+   }
+  },
+  {
+   "id": "sledgehammer",
+   "name": "ค้อนปอนด์",
+   "icon": "🔨",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 24,
+   "dur": 14,
+   "zones": {
+    "factory": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "compound_bow",
+   "name": "ธนูคอมพาวด์",
+   "icon": "🏹",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 24,
+   "dur": 16,
+   "zones": {
+    "forest": "R",
+    "base": "U"
+   }
+  },
+  {
+   "id": "smg",
+   "name": "ปืนกลมือ",
+   "icon": "🔫",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 14,
+   "dur": 26,
+   "zones": {
+    "base": "R",
+    "police": "R"
+   }
+  },
+  {
+   "id": "hunting_rifle",
+   "name": "ปืนไรเฟิลล่าสัตว์",
+   "icon": "🎯",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 34,
+   "dur": 6,
+   "zones": {
+    "forest": "R",
+    "base": "R"
+   }
+  },
+  {
+   "id": "plasma_cutter",
+   "name": "เครื่องตัดพลาสมา",
+   "icon": "⚡",
+   "cat": "weapon",
+   "rar": "R",
+   "dmg": 30,
+   "dur": 14,
+   "zones": {
+    "lab": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "railgun_proto",
+   "name": "ปืนรางต้นแบบ",
+   "icon": "🧲",
+   "cat": "weapon",
+   "rar": "E",
+   "dmg": 40,
+   "dur": 6,
+   "zones": {
+    "lab": "E",
+    "tunnel": "E"
+   }
+  },
+  {
+   "id": "cardboard_armor",
+   "name": "เกราะกระดาษแข็ง",
+   "icon": "📦",
+   "cat": "arm",
+   "rar": "C",
+   "red": 3,
+   "zones": {
+    "ruins": "C",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "leather_jacket",
+   "name": "แจ็คเก็ตหนัง",
+   "icon": "🧥",
+   "cat": "arm",
+   "rar": "C",
+   "red": 7,
+   "zones": {
+    "mall": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "hunter_cloak",
+   "name": "เสื้อคลุมนักล่า",
+   "icon": "🪶",
+   "cat": "arm",
+   "rar": "U",
+   "red": 9,
+   "zones": {
+    "forest": "U"
+   }
+  },
+  {
+   "id": "welder_apron",
+   "name": "ผ้ากันเปื้อนช่างเชื่อม",
+   "icon": "🥋",
+   "cat": "arm",
+   "rar": "U",
+   "red": 11,
+   "zones": {
+    "factory": "U"
+   }
+  },
+  {
+   "id": "diver_suit",
+   "name": "ชุดกันน้ำนักดำน้ำ",
+   "icon": "🤿",
+   "cat": "arm",
+   "rar": "U",
+   "red": 13,
+   "zones": {
+    "port": "U"
+   }
+  },
+  {
+   "id": "hazmat_suit",
+   "name": "ชุดป้องกันสารเคมี",
+   "icon": "☢️",
+   "cat": "arm",
+   "rar": "U",
+   "red": 16,
+   "zones": {
+    "lab": "U",
+    "tunnel": "U",
+    "factory": "R"
+   }
+  },
+  {
+   "id": "kevlar_vest",
+   "name": "เสื้อเคฟลาร์",
+   "icon": "🦺",
+   "cat": "arm",
+   "rar": "R",
+   "red": 18,
+   "zones": {
+    "police": "R",
+    "base": "U"
+   }
+  },
+  {
+   "id": "bomb_suit",
+   "name": "ชุดเก็บกู้ระเบิด",
+   "icon": "💣",
+   "cat": "arm",
+   "rar": "E",
+   "red": 26,
+   "zones": {
+    "base": "E",
+    "tunnel": "E"
+   }
+  },
+  {
+   "id": "compass",
+   "name": "เข็มทิศ",
+   "icon": "🧭",
+   "cat": "acc",
+   "rar": "C",
+   "fx": {
+    "nofind": 10
+   },
+   "zones": {
+    "ruins": "U",
+    "forest": "C"
+   }
+  },
+  {
+   "id": "earplugs",
+   "name": "ที่อุดหู",
+   "icon": "🎧",
+   "cat": "acc",
+   "rar": "C",
+   "fx": {
+    "zspawn": 15
+   },
+   "zones": {
+    "mall": "C",
+    "hospital": "C"
+   }
+  },
+  {
+   "id": "survival_bracelet",
+   "name": "สายรัดข้อมือเอาชีวิตรอด",
+   "icon": "⌚",
+   "cat": "acc",
+   "rar": "U",
+   "fx": {
+    "searchCost": 10
+   },
+   "zones": {
+    "ruins": "U",
+    "port": "U"
+   }
+  },
+  {
+   "id": "rabbit_foot",
+   "name": "ตีนกระต่ายนำโชค",
+   "icon": "🐇",
+   "cat": "acc",
+   "rar": "U",
+   "fx": {
+    "rare": 5
+   },
+   "zones": {
+    "forest": "U",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "lucky_coin",
+   "name": "เหรียญนำโชค",
+   "icon": "🪙",
+   "cat": "acc",
+   "rar": "U",
+   "fx": {
+    "nofind": 8,
+    "rare": 3
+   },
+   "zones": {
+    "mall": "U",
+    "port": "U"
+   }
+  },
+  {
+   "id": "respirator",
+   "name": "เครื่องช่วยหายใจ",
+   "icon": "🫁",
+   "cat": "acc",
+   "rar": "U",
+   "fx": {
+    "poisonHalf": true
+   },
+   "zones": {
+    "hospital": "U",
+    "factory": "U"
+   }
+  },
+  {
+   "id": "night_goggles",
+   "name": "แว่นมองกลางคืน",
+   "icon": "🥽",
+   "cat": "acc",
+   "rar": "R",
+   "fx": {
+    "nightSafe": true,
+    "zspawn": 10
+   },
+   "zones": {
+    "police": "R",
+    "base": "U"
+   }
+  },
+  {
+   "id": "tactical_radio",
+   "name": "วิทยุยุทธวิธี",
+   "icon": "📻",
+   "cat": "acc",
+   "rar": "R",
+   "fx": {
+    "zspawn": 20
+   },
+   "zones": {
+    "base": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "mut_fang4",
+   "name": "เขี้ยวฟันเลื่อย",
+   "icon": "🦷",
+   "cat": "mut",
+   "rar": "U",
+   "slot": "mf",
+   "fx": {
+    "wall": 4
+   },
+   "zones": {
+    "police": "U",
+    "factory": "U"
+   }
+  },
+  {
+   "id": "mut_fang6",
+   "name": "เขี้ยวเลือดเดือด",
+   "icon": "🩸",
+   "cat": "mut",
+   "rar": "R",
+   "slot": "mf",
+   "fx": {
+    "wall": 6
+   },
+   "star": "กัดสำเร็จฟื้น HP 3% (ต้องเพิ่มกลไก)",
+   "zones": {
+    "hospital": "R",
+    "lab": "R"
+   }
+  },
+  {
+   "id": "mut_fang5",
+   "name": "เขี้ยวมังกรซาก",
+   "icon": "🐉",
+   "cat": "mut",
+   "rar": "E",
+   "slot": "mf",
+   "fx": {
+    "wall": 9
+   },
+   "zones": {
+    "tunnel": "E",
+    "base": "R"
+   }
+  },
+  {
+   "id": "mut_hide3",
+   "name": "หนังเหล็กไหล",
+   "icon": "🛡️",
+   "cat": "mut",
+   "rar": "U",
+   "slot": "mh",
+   "red": 12,
+   "zones": {
+    "factory": "U",
+    "port": "U"
+   }
+  },
+  {
+   "id": "mut_hide4",
+   "name": "กระดองซาก",
+   "icon": "🐚",
+   "cat": "mut",
+   "rar": "R",
+   "slot": "mh",
+   "red": 20,
+   "zones": {
+    "base": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "mut_hide5",
+   "name": "เกราะกระดูกยักษ์",
+   "icon": "🦴",
+   "cat": "mut",
+   "rar": "E",
+   "slot": "mh",
+   "red": 26,
+   "zones": {
+    "tunnel": "E",
+    "lab": "R"
+   }
+  },
+  {
+   "id": "mut_nose3",
+   "name": "จมูกกลิ่นเลือด",
+   "icon": "👃",
+   "cat": "mut",
+   "rar": "U",
+   "slot": "mn",
+   "fx": {
+    "meat": 2.2
+   },
+   "zones": {
+    "forest": "U",
+    "hospital": "U"
+   }
+  },
+  {
+   "id": "mut_nose4",
+   "name": "จมูกผู้ล่า",
+   "icon": "🐕",
+   "cat": "mut",
+   "rar": "R",
+   "slot": "mn",
+   "fx": {
+    "meat": 1.4,
+    "nofind": 35
+   },
+   "zones": {
+    "lab": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "instant_noodle",
+   "name": "บะหมี่กึ่งสำเร็จรูป",
+   "icon": "🍜",
+   "cat": "food",
+   "rar": "C",
+   "food": 25,
+   "water": -5,
+   "zones": {
+    "ruins": "C",
+    "mall": "C"
+   }
+  },
+  {
+   "id": "potato_chips",
+   "name": "มันฝรั่งทอดกรอบ",
+   "icon": "🍟",
+   "cat": "food",
+   "rar": "C",
+   "food": 15,
+   "stamina": 5,
+   "zones": {
+    "mall": "C"
+   }
+  },
+  {
+   "id": "canned_sardine",
+   "name": "ซาร์ดีนกระป๋อง",
+   "icon": "🐟",
+   "cat": "food",
+   "rar": "C",
+   "food": 30,
+   "water": -5,
+   "stamina": 5,
+   "zones": {
+    "port": "C",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "cereal_bar",
+   "name": "ซีเรียลบาร์",
+   "icon": "🥜",
+   "cat": "food",
+   "rar": "U",
+   "food": 25,
+   "stamina": 15,
+   "zones": {
+    "mall": "U",
+    "ruins": "C"
+   }
+  },
+  {
+   "id": "canned_tuna",
+   "name": "ทูน่ากระป๋อง",
+   "icon": "🥫",
+   "cat": "food",
+   "rar": "U",
+   "food": 35,
+   "heal": 3,
+   "zones": {
+    "mall": "U",
+    "port": "C"
+   }
+  },
+  {
+   "id": "wild_berries",
+   "name": "เบอร์รี่ป่า",
+   "icon": "🫐",
+   "cat": "food",
+   "rar": "C",
+   "food": 12,
+   "water": 10,
+   "e_poison": 1,
+   "emin": 1,
+   "note": "เสี่ยงพิษอ่อน 1 นาที",
+   "zones": {
+    "forest": "C"
+   }
+  },
+  {
+   "id": "smoked_meat",
+   "name": "เนื้อรมควัน",
+   "icon": "🍖",
+   "cat": "food",
+   "rar": "U",
+   "food": 45,
+   "water": -8,
+   "zones": {
+    "forest": "U",
+    "port": "U"
+   }
+  },
+  {
+   "id": "honey_jar",
+   "name": "ขวดน้ำผึ้ง",
+   "icon": "🍯",
+   "cat": "food",
+   "rar": "U",
+   "food": 25,
+   "heal": 10,
+   "zones": {
+    "forest": "U",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "mushroom_stew",
+   "name": "ซุปเห็ดป่า",
+   "icon": "🥘",
+   "cat": "food",
+   "rar": "R",
+   "food": 40,
+   "heal": 15,
+   "b_regen": 1,
+   "bmin": 8,
+   "zones": {
+    "forest": "R"
+   }
+  },
+  {
+   "id": "mre_pack",
+   "name": "เสบียงสนาม MRE",
+   "icon": "🍱",
+   "cat": "food",
+   "rar": "R",
+   "food": 70,
+   "water": 20,
+   "zones": {
+    "base": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "soda_can",
+   "name": "น้ำอัดลมกระป๋อง",
+   "icon": "🥤",
+   "cat": "water",
+   "rar": "C",
+   "water": 25,
+   "stamina": 5,
+   "zones": {
+    "mall": "C",
+    "ruins": "C"
+   }
+  },
+  {
+   "id": "spring_water",
+   "name": "น้ำพุธรรมชาติ",
+   "icon": "🏞️",
+   "cat": "water",
+   "rar": "C",
+   "water": 40,
+   "zones": {
+    "forest": "C"
+   }
+  },
+  {
+   "id": "mineral_bottle",
+   "name": "น้ำแร่ขวดแก้ว",
+   "icon": "🍶",
+   "cat": "water",
+   "rar": "U",
+   "water": 45,
+   "zones": {
+    "ruins": "U",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "herbal_tea",
+   "name": "ชาสมุนไพร",
+   "icon": "🍵",
+   "cat": "water",
+   "rar": "U",
+   "water": 20,
+   "heal": 8,
+   "c_stun": 1,
+   "zones": {
+    "forest": "U",
+    "hospital": "C"
+   }
+  },
+  {
+   "id": "sports_drink",
+   "name": "เครื่องดื่มเกลือแร่",
+   "icon": "🧃",
+   "cat": "water",
+   "rar": "U",
+   "water": 40,
+   "stamina": 15,
+   "zones": {
+    "mall": "U",
+    "hospital": "U"
+   }
+  },
+  {
+   "id": "desal_water",
+   "name": "น้ำกลั่นจากทะเล",
+   "icon": "🌊",
+   "cat": "water",
+   "rar": "U",
+   "water": 60,
+   "food": -5,
+   "zones": {
+    "port": "U"
+   }
+  },
+  {
+   "id": "gauze_roll",
+   "name": "ผ้าก๊อซม้วน",
+   "icon": "🩹",
+   "cat": "med",
+   "rar": "C",
+   "heal": 12,
+   "c_bleed": 1,
+   "zones": {
+    "hospital": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "antiseptic",
+   "name": "น้ำยาฆ่าเชื้อ",
+   "icon": "🧴",
+   "cat": "med",
+   "rar": "C",
+   "heal": 8,
+   "c_poison": 1,
+   "zones": {
+    "hospital": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "painkillers",
+   "name": "ยาแก้ปวด",
+   "icon": "💊",
+   "cat": "med",
+   "rar": "U",
+   "heal": 10,
+   "stamina": 15,
+   "b_tough": 2,
+   "bmin": 10,
+   "zones": {
+    "hospital": "U",
+    "police": "C"
+   }
+  },
+  {
+   "id": "antibiotic",
+   "name": "ยาปฏิชีวนะ",
+   "icon": "💊",
+   "cat": "med",
+   "rar": "U",
+   "heal": 15,
+   "c_poison": 1,
+   "zones": {
+    "hospital": "U",
+    "lab": "C"
+   }
+  },
+  {
+   "id": "suture_kit",
+   "name": "ชุดเย็บแผล",
+   "icon": "🧵",
+   "cat": "med",
+   "rar": "U",
+   "heal": 35,
+   "c_bleed": 1,
+   "zones": {
+    "hospital": "U",
+    "police": "U"
+   }
+  },
+  {
+   "id": "herbal_salve",
+   "name": "ยาขี้ผึ้งสมุนไพร",
+   "icon": "🌿",
+   "cat": "med",
+   "rar": "U",
+   "heal": 25,
+   "c_poison": 1,
+   "zones": {
+    "forest": "U"
+   }
+  },
+  {
+   "id": "iv_drip",
+   "name": "น้ำเกลือ IV",
+   "icon": "🏥",
+   "cat": "med",
+   "rar": "R",
+   "heal": 40,
+   "water": 30,
+   "zones": {
+    "hospital": "R"
+   }
+  },
+  {
+   "id": "morphine",
+   "name": "มอร์ฟีน",
+   "icon": "💉",
+   "cat": "med",
+   "rar": "R",
+   "heal": 90,
+   "b_agi": -3,
+   "b_str": -2,
+   "bmin": 8,
+   "note": "ผลลบชั่วคราว",
+   "zones": {
+    "hospital": "R",
+    "base": "U"
+   }
+  },
+  {
+   "id": "blood_pack",
+   "name": "ถุงเลือด",
+   "icon": "🩸",
+   "cat": "med",
+   "rar": "R",
+   "heal": 65,
+   "stamina": -10,
+   "zones": {
+    "hospital": "R",
+    "lab": "U"
+   }
+  },
+  {
+   "id": "field_surgery_kit",
+   "name": "ชุดผ่าตัดสนาม",
+   "icon": "🧰",
+   "cat": "med",
+   "rar": "E",
+   "heal": 90,
+   "c_bleed": 1,
+   "c_poison": 1,
+   "stamina": -20,
+   "zones": {
+    "base": "E",
+    "hospital": "E"
+   }
+  },
+  {
+   "id": "coffee_can",
+   "name": "กาแฟกระป๋อง",
+   "icon": "☕",
+   "cat": "boost",
+   "rar": "C",
+   "stamina": 25,
+   "water": -5,
+   "zones": {
+    "mall": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "smelling_salts",
+   "name": "ยาดมกระตุ้น",
+   "icon": "🧂",
+   "cat": "boost",
+   "rar": "C",
+   "stamina": 10,
+   "c_stun": 1,
+   "zones": {
+    "ruins": "C",
+    "police": "C"
+   }
+  },
+  {
+   "id": "rum_bottle",
+   "name": "เหล้ารัม",
+   "icon": "🍾",
+   "cat": "boost",
+   "rar": "U",
+   "stamina": 30,
+   "heal": 15,
+   "b_agi": -2,
+   "bmin": 5,
+   "note": "ผลลบชั่วคราว",
+   "zones": {
+    "port": "U"
+   }
+  },
+  {
+   "id": "adrenaline_shot",
+   "name": "อะดรีนาลีน",
+   "icon": "💉",
+   "cat": "boost",
+   "rar": "U",
+   "stamina": 50,
+   "b_str": 3,
+   "b_tough": -2,
+   "bmin": 5,
+   "zones": {
+    "police": "U",
+    "base": "U"
+   }
+  },
+  {
+   "id": "focus_pill",
+   "name": "ยาเพิ่มสมาธิ",
+   "icon": "💊",
+   "cat": "boost",
+   "rar": "U",
+   "b_agi": 4,
+   "bmin": 10,
+   "food": -10,
+   "zones": {
+    "mall": "U",
+    "hospital": "U"
+   }
+  },
+  {
+   "id": "regen_gel",
+   "name": "เจลฟื้นฟูเซลล์",
+   "icon": "🧴",
+   "cat": "boost",
+   "rar": "R",
+   "e_hot": 2,
+   "emin": 6,
+   "zones": {
+    "lab": "U",
+    "hospital": "R"
+   }
+  },
+  {
+   "id": "combat_stim",
+   "name": "ยากระตุ้นรบ",
+   "icon": "💊",
+   "cat": "boost",
+   "rar": "R",
+   "stamina": 40,
+   "b_str": 4,
+   "b_agi": 3,
+   "bmin": 10,
+   "heal": -10,
+   "zones": {
+    "base": "R",
+    "police": "R"
+   }
+  },
+  {
+   "id": "berserker_serum",
+   "name": "เซรั่มคลั่ง",
+   "icon": "🧪",
+   "cat": "boost",
+   "rar": "R",
+   "b_str": 9,
+   "b_tough": -3,
+   "bmin": 8,
+   "note": "ผลลบชั่วคราว",
+   "zones": {
+    "lab": "R",
+    "tunnel": "R"
+   }
+  },
+  {
+   "id": "reflex_booster",
+   "name": "ยาเร่งรีเฟล็กซ์",
+   "icon": "⚡",
+   "cat": "boost",
+   "rar": "R",
+   "b_agi": 8,
+   "bmin": 8,
+   "food": -15,
+   "zones": {
+    "lab": "R"
+   }
+  },
+  {
+   "id": "mutagen_vial",
+   "name": "หลอดมิวทาเจน",
+   "icon": "☣️",
+   "cat": "boost",
+   "rar": "R",
+   "b_str": 5,
+   "b_hp": 3,
+   "bmin": 10,
+   "e_poison": 1,
+   "emin": 2,
+   "note": "เสี่ยงพิษอ่อน",
+   "zones": {
+    "tunnel": "R",
+    "lab": "U"
+   }
+  },
+  {
+   "id": "duct_tape",
+   "name": "เทปกาว",
+   "icon": "🧷",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "ruins": "C",
+    "mall": "C"
+   }
+  },
+  {
+   "id": "rusty_nails",
+   "name": "ตะปูสนิม",
+   "icon": "📌",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "ruins": "C",
+    "factory": "C"
+   }
+  },
+  {
+   "id": "cloth_roll",
+   "name": "ม้วนผ้า",
+   "icon": "🧶",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "mall": "C",
+    "ruins": "U"
+   }
+  },
+  {
+   "id": "rope_coil",
+   "name": "เชือกมัด",
+   "icon": "🪢",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "port": "C",
+    "forest": "U"
+   }
+  },
+  {
+   "id": "herb_bundle",
+   "name": "กำสมุนไพร",
+   "icon": "🌾",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "forest": "C",
+    "hospital": "U"
+   }
+  },
+  {
+   "id": "copper_wire",
+   "name": "ลวดทองแดง",
+   "icon": "🔌",
+   "cat": "mat",
+   "rar": "C",
+   "zones": {
+    "factory": "C",
+    "lab": "U"
+   }
+  },
+  {
+   "id": "leather_scrap",
+   "name": "เศษหนัง",
+   "icon": "🟫",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "forest": "U",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "fuel_can",
+   "name": "น้ำมันเชื้อเพลิง",
+   "icon": "⛽",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "factory": "U",
+    "port": "U"
+   }
+  },
+  {
+   "id": "gunpowder",
+   "name": "ดินปืน",
+   "icon": "🧨",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "police": "U",
+    "base": "U"
+   }
+  },
+  {
+   "id": "steel_plate",
+   "name": "แผ่นเหล็กกล้า",
+   "icon": "🔩",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "factory": "U",
+    "base": "U"
+   }
+  },
+  {
+   "id": "battery_pack",
+   "name": "แบตเตอรี่",
+   "icon": "🔋",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "mall": "U",
+    "factory": "U",
+    "lab": "C"
+   }
+  },
+  {
+   "id": "circuit_board",
+   "name": "แผงวงจร",
+   "icon": "🖥️",
+   "cat": "mat",
+   "rar": "U",
+   "zones": {
+    "lab": "U",
+    "mall": "U"
+   }
+  },
+  {
+   "id": "chem_catalyst",
+   "name": "ตัวเร่งปฏิกิริยา",
+   "icon": "⚗️",
+   "cat": "mat",
+   "rar": "R",
+   "zones": {
+    "lab": "U",
+    "factory": "R"
+   }
+  },
+  {
+   "id": "mutant_gland",
+   "name": "ต่อมมิวแทนต์",
+   "icon": "🫀",
+   "cat": "mat",
+   "rar": "R",
+   "zones": {
+    "tunnel": "R",
+    "lab": "U"
+   }
+  },
+  {
+   "id": "survivor_badge",
+   "name": "เข็มกลัดผู้รอดชีวิต",
+   "icon": "🎖️",
+   "cat": "special",
+   "rar": "R",
+   "zones": {
+    "mall": "R",
+    "police": "R"
+   }
+  },
+  {
+   "id": "old_photo",
+   "name": "ภาพถ่ายเก่า",
+   "icon": "🖼️",
+   "cat": "special",
+   "rar": "U",
+   "zones": {
+    "ruins": "U",
+    "hospital": "U"
+   }
+  },
+  {
+   "id": "gold_watch",
+   "name": "นาฬิกาทอง",
+   "icon": "🕰️",
+   "cat": "special",
+   "rar": "R",
+   "zones": {
+    "mall": "R",
+    "port": "R"
+   }
+  },
+  {
+   "id": "lab_keycard",
+   "name": "บัตรผ่านห้องแล็บ",
+   "icon": "🪪",
+   "cat": "special",
+   "rar": "R",
+   "zones": {
+    "lab": "R"
+   }
+  },
+  {
+   "id": "data_chip",
+   "name": "ชิปข้อมูลวิจัย",
+   "icon": "💾",
+   "cat": "special",
+   "rar": "R",
+   "zones": {
+    "lab": "R",
+    "tunnel": "U"
+   }
+  },
+  {
+   "id": "boss_trophy",
+   "name": "ถ้วยรางวัลบอส",
+   "icon": "🏆",
+   "cat": "special",
+   "rar": "E",
+   "note": "ดรอปจากบอสโซนเท่านั้น",
+   "zones": {}
+  }
+ ]
+}
