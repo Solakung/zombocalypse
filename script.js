@@ -31,13 +31,16 @@ const baseCall = (data) => httpsCallable(fns, "baseAct")(data).then((r) => r.dat
 const marketCall = (data) => httpsCallable(fns, "marketAct")(data).then((r) => r.data);   // ตลาด/ตลาดมืด/ฝากของ (functions/market.js)
 const passCall = (data) => httpsCallable(fns, "passAct")(data).then((r) => r.data);   // 🎟️ ภารกิจซีซัน (functions/pass.js)
 const eventCall = (data) => httpsCallable(fns, "eventAct")(data).then((r) => r.data);   // 🎭 เหตุการณ์สุ่มเลือกทาง (functions/events.js)
+const dailyCall = (data) => httpsCallable(fns, "dailyAct")(data).then((r) => r.data);   // 🎁 หีบรายวัน/🎯 ล่าค่าหัว (functions/daily.js)
+const campCall = (data) => httpsCallable(fns, "campAct")(data).then((r) => r.data);   // 🏕️ ต้นไม้ค่าย/🐾 สัตว์เลี้ยง (functions/camp.js)
+const worldCall = (data) => httpsCallable(fns, "worldAct")(data).then((r) => r.data);   // 🌍 อีเวนต์โลกรายสัปดาห์ (functions/world.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.2200";
+const APP_VERSION = "2026-10-07.0100";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -712,6 +715,7 @@ function openGuide() {
   ]);
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
+    "🎁 ปุ่ม “🎁” บนแถบบน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
     "🎟️ ปุ่ม “🎟️ n” บนแถบบน: ภารกิจซีซัน — ภารกิจรายวัน 3 ข้อ/รายสัปดาห์ 4 ข้อ ได้ XP สะสมปลดรางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน) กดรับเองก่อนซีซันจบ",
     "🎭 เหตุการณ์สุ่ม: ระหว่างค้นหานอก Safe Zone มีโอกาสเจอสถานการณ์ให้เลือกทาง (บางทางต้องใช้ของ) ผลลัพธ์สุ่ม อาจได้ของหรือเสีย HP แต่จะไม่ทำให้ตาย",
     "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
@@ -2020,7 +2024,7 @@ async function zombieEncounter(u, hpNow) {
   }
 
   await update(ref(db), u);
-  stat("zombie"); if (won) stat("zwin"); if (dmg > 0) stat("dmg", dmg);
+  stat("zombie"); if (won) { stat("zwin"); try { achBump("hw" + state.zone); if (acs.hunt?.acc && !acs.hunt.got && acs.hunt.zone === state.zone) toast(`🎯 ค่าหัว ${Math.min(acs.hunt.n, acs.hunt.v + 1)}/${acs.hunt.n}`); } catch { /* ข้าม */ } } if (dmg > 0) stat("dmg", dmg);
   logLine(`🧟 ${rollTxt} — ${verdict}`, "combat");
   if (newHp === 0) logLine("คุณบาดเจ็บสาหัสจนล้มลง…", "system");
 }
@@ -7158,7 +7162,7 @@ function careerCheck() {
 }
 const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0) + (typeof fxPerkCut === "function" ? fxPerkCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
@@ -7176,6 +7180,7 @@ function fxMods(z) {
   if (typeof fxCampMods === "function") fxCampMods(m, z);
   if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
   if (typeof fxNpcMods === "function") fxNpcMods(m, z);
+  if (typeof fxPerkMods === "function") fxPerkMods(m);
   fxMemo = { k, v: m }; return m;
 }
 function fxDrops(z, d) {
@@ -8725,7 +8730,7 @@ async function petClaim() {
   const have = (await get(ref(db, `inventory/${state.uid}/${pk.id}/qty`))).val() || 0;
   if (have + pk.q > 99) return toast(`ช่อง ${ITEMS[pk.id].name} เต็ม — ใช้ก่อนแล้วค่อยรับ`);
   await petWrite(`${pk.icon} ${pk.name}กลับมาแล้ว! ได้ ${ITEMS[pk.id].icon} ${ITEMS[pk.id].name} ×${pk.q}`, { [`pet/${state.uid}/t`]: 0, [`inventory/${state.uid}/${pk.id}`]: { id: pk.id, qty: have + pk.q } });
-  try { achBump("petc"); } catch { /* ข้าม */ }
+  try { achBump("petc"); petBonusAfterClaim(); } catch { /* ข้าม */ }
 }
 function petRows(body) {
   if (!petOn()) return;
@@ -9237,6 +9242,7 @@ function mwRender() {
 function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
   try { passTick(); } catch { /* ข้าม */ }
+  try { actTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
   const b = $("btn-ck"); if (!b) return;
   const show = ckOn() && state.ck !== undefined || cbPending();
@@ -9378,6 +9384,107 @@ async function encChoose(i) {
     toast(fnErr(e)); state.enc = null;
     try { const p = await eventCall({ a: "peek" }); if (p.enc) { state.encBusy = false; encShow(p.enc); } else $("enc-modal").classList.add("hidden"); } catch { $("enc-modal").classList.add("hidden"); }
   } finally { state.encBusy = false; }
+}
+
+/* =========================================================
+   49.6) 🎁 กิจกรรมประจำวัน — หีบรายวัน • ล่าค่าหัว • อีเวนต์โลกรายสัปดาห์ • ต้นไม้ค่าย/สัตว์เลี้ยง
+   ทุกระบบทำงานผ่าน Cloud Functions (dailyAct / worldAct / campAct — functions/daily.js, world.js, camp.js) ไม่แตะ rules
+   - โบนัสจากต้นไม้ค่าย/ระดับสัตว์เลี้ยง คำนวณฝั่งเกมเป็นตัวคูณตารางของที่เจอ + ลดดาเมจ (เหมือนโปรเจกต์ค่ายเดิม)
+   - ล่าค่าหัว: ชนะซอมบี้ในโซนเป้าหมายบวกตัวนับ ach hw<โซน> (ซอมบี้ใช้ตัวนับ bite เดิม)
+   ========================================================= */
+const acs = (state.acs = state.acs || { tab: "crate" });
+const actTabs = [["crate", "🎁 หีบรายวัน"], ["hunt", "🎯 ค่าหัว"], ["world", "🌍 อีเวนต์โลก"], ["camp", "🏕️ ค่าย"]];
+const actCall = { crate: (a) => dailyCall({ s: "crate", a }), hunt: (a) => dailyCall({ s: "hunt", a }), world: (a, x) => worldCall({ a, ...(x || {}) }), camp: (a, x) => campCall({ a, ...(x || {}) }) };
+async function actSync(tab, a = "state", x) {
+  if (tab === "world" || tab === "hunt") { try { await achFlush(); } catch { /* ข้าม */ } }
+  const r = await actCall[tab](a, x); acs[tab] = r; acs[tab + "At"] = Date.now(); return r;
+}
+function actDot() {
+  const c = acs.crate, h = acs.hunt, w = acs.world;
+  return !!(c && !c.claimed) || !!(h && h.done && !h.got) || !!(w && w.mine >= w.min && w.ms.some((m) => m.ok && !m.got));
+}
+function actBtn() {
+  let b = $("btn-act");
+  if (!b) { const ref = $("btn-pass") || $("btn-ck") || $("btn-profile"); if (!ref) return; b = btn("🎁", actOpen, "btn ghost mini"); b.id = "btn-act"; b.title = "กิจกรรมประจำวัน"; ref.before(b); }
+  b.classList.toggle("btn-dot", actDot());
+}
+function actTick() {
+  if (!state.profile || !state.ach?.loaded) return;
+  const now = Date.now();
+  ["crate", "camp"].forEach((t) => {   // ดึงข้อมูลตอนเข้าเกม (โบนัสค่ายต้องใช้ทันที) แล้วรีเฟรชทุก 5 นาที
+    if (acs[t + "Busy"] || (acs[t + "At"] && now - acs[t + "At"] < 300000) || document.hidden) return;
+    acs[t + "Busy"] = true; acs[t + "At"] = now;
+    actSync(t).catch(() => { /* ข้าม */ }).finally(() => { acs[t + "Busy"] = false; try { actBtn(); actRender(); } catch { /* ข้าม */ } });
+  });
+  actBtn();
+}
+function actOpen() {
+  if (!$("act-modal")) {
+    const m = mk("div", "modal hidden"); m.id = "act-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
+    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎁 กิจกรรมประจำวัน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const tabs = mk("div"); tabs.id = "act-tabs"; tabs.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px";
+    const body = mk("div"); body.id = "act-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
+    box.append(head, tabs, body); m.append(box); document.body.append(m);
+  }
+  $("act-modal").classList.remove("hidden"); actRender(); actRefresh();
+}
+function actRefresh() {
+  const t = acs.tab; if (acs[t + "Busy"]) return; acs[t + "Busy"] = true;
+  actSync(t).catch((e) => toast(fnErr(e))).finally(() => { acs[t + "Busy"] = false; actBtn(); actRender(); });
+}
+const actLeft = (t) => passMs(t - serverNow());
+function actRender() {
+  const m = $("act-modal"), body = $("act-body"); if (!m || !body || m.classList.contains("hidden")) return;
+  const tabs = $("act-tabs"); tabs.innerHTML = "";
+  actTabs.forEach(([k, l]) => { const b = btn(l, () => { acs.tab = k; actRender(); actRefresh(); }, "btn mini " + (acs.tab === k ? "primary" : "ghost")); tabs.append(b); });
+  body.innerHTML = ""; const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; }, t = acs.tab, D = acs[t];
+  if (!D) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const row = (c, left, right) => { const r = mk("div"); r.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px"; r.append(left); if (right) r.append(right); c.append(r); };
+  if (t === "crate") {
+    const c = card(D.claimed ? "" : " evt-live");
+    c.append(mk("div", "", `🎁 หีบรายวัน • streak ${D.st} วัน`), mk("div", "muted", D.claimed ? `วันนี้เปิดแล้ว ✅ — หีบใหม่ในอีก ${actLeft(D.end)}` : `วันนี้เป็นวันที่ ${D.day}/7 ของรอบ${D.day === 7 ? " — การันตีของหายาก + ของแถม!" : ""}`));
+    const g = mk("div"); g.style.cssText = "display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin:6px 0";
+    for (let i = 1; i <= 7; i++) { const done = D.claimed ? i <= ((D.st - 1) % 7) + 1 : i <= (D.st % 7); const x = mk("span", "", i === 7 ? "💎" : done ? "✔" : String(i)); x.style.cssText = `font-size:11px;text-align:center;padding:4px 0;border-radius:4px;background:${done ? "var(--accent,#e0a030)" : "var(--panel-2,#1c2128)"}`; g.append(x); }
+    c.append(g);
+    if (D.last) c.append(mk("div", "", `ได้รับล่าสุด: ${mRew([D.last])}`));
+    if (!D.claimed) c.append(btn("เปิดหีบ", async () => { try { const r = await actSync("crate", "open"); toast(`🎁 ได้ ${mRew([r.got])}${r.bonus ? " + " + mRew([r.bonus]) : ""}`); logLine(`🎁 เปิดหีบรายวัน (วันที่ ${r.day}${r.tier === "r" ? " ★หายาก" : ""}): ${mRew([r.got].concat(r.bonus ? [r.bonus] : []))}`, "system"); acs.crate.last = r.got; try { sfx("boss"); } catch { /* ข้าม */ } } catch (e) { toast(fnErr(e)); } actBtn(); actRender(); }, "btn primary"));
+  } else if (t === "hunt") {
+    const c = card(D.done && !D.got ? " evt-live" : "");
+    c.append(mk("div", "", `🎯 ค่าหัววันนี้: ${D.name}`), mk("div", "muted", D.zone ? `ล่าซอมบี้ให้ได้ ${D.n} ตัว ที่ ${(ZONES[D.zone] || {}).name || D.zone}` : `กัดเหยื่อให้ได้ ${D.n} ครั้ง`), mk("div", "muted", `รางวัล: ${mRew(D.rew)} • รีเซ็ตในอีก ${actLeft(D.end)}`));
+    if (!D.acc) c.append(btn("รับค่าหัว", async () => { try { await actSync("hunt", "accept"); } catch (e) { toast(fnErr(e)); } actRender(); }, "btn primary"));
+    else {
+      c.append(mk("div", "", `ความคืบหน้า ${D.v}/${D.n} ${D.got ? "✅ รับรางวัลแล้ว" : D.done ? "🎯 สำเร็จ!" : ""}`));
+      if (D.done && !D.got) c.append(btn("รับรางวัล", async () => { try { const r = await actSync("hunt", "claim"); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🎯 ล่าค่าหัวสำเร็จ: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } actBtn(); actRender(); }, "btn primary"));
+    }
+  } else if (t === "world") {
+    const c = card(); c.append(mk("div", "", `${D.icon} ${D.name} • สัปดาห์นี้`), mk("div", "muted", D.say), mk("div", "muted", `สิ้นสุดใน ${actLeft(D.end)} • ผู้ร่วมกิจกรรม ${D.np} คน (เป้าหมายขยายตามจำนวนคน)`));
+    const bar = mk("div"); bar.style.cssText = "height:10px;border-radius:5px;background:var(--panel-2,#1c2128);margin:6px 0;overflow:hidden"; const i = mk("div"); i.style.cssText = `height:100%;width:${Math.min(100, D.tot / D.goal * 100)}%;background:var(--accent,#e0a030)`; bar.append(i);
+    c.append(bar, mk("div", "", `รวมทั้งเมือง ${D.tot}/${D.goal} ${D.unit} • คุณช่วยไป ${D.mine} (ต้องช่วยอย่างน้อย ${D.min} ถึงรับรางวัลได้)`));
+    D.ms.forEach((x) => { const ok = x.ok && D.mine >= D.min; row(c, mk("div", x.got ? "muted" : "", `${x.got ? "✅" : x.ok ? "🎯" : "🔒"} ${Math.round(x.p * 100)}% (${x.need}): ${mRew(x.rew)}`), ok && !x.got ? btn("รับ", async () => { try { const r = await actSync("world", "claim", { i: x.i }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🌍 รางวัลอีเวนต์โลก: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } actBtn(); actRender(); }, "btn primary mini") : null); });
+  } else if (t === "camp") {
+    const c = card(); c.append(mk("div", "", "🏕️ ต้นไม้อัปเกรดค่าย (โบนัสถาวร)"), mk("div", "muted", D.base >= 1 ? "อัปเกรดได้ที่ Safe Zone ด้วยวัสดุ/สารเคมี" : "ต้องมีที่พักขั้น 1 ขึ้นไปก่อนถึงจะอัปเกรดได้"));
+    D.perks.forEach((p) => {
+      const cost = p.next ? mRew(p.next) : "สูงสุดแล้ว";
+      row(c, mk("div", "", `${p.icon} ${p.name} ระดับ ${p.lv}/${p.max} — ${p.tip}${p.next ? ` • ราคา ${cost}` : ""}`), p.next ? btn("อัปเกรด", async () => {
+        if (state.zone !== "safe") return toast("ต้องอยู่ที่ Safe Zone");
+        try { await actSync("camp", "buy", { id: p.id }); toast(`${p.icon} ${p.name} ระดับ ${p.lv + 1}`); } catch (e) { toast(fnErr(e)); } actRender();
+      }, "btn primary mini") : null);
+    });
+    if (D.pet) { const PK = PET_K[D.pet.k] || {}; const pc = card(); pc.append(mk("div", "", `${PK.icon || "🐾"} ${PK.name || "สัตว์เลี้ยง"} ระดับ ${D.pet.lv}/5`), mk("div", "muted", `รับของจากสัตว์เลี้ยงแล้ว ${D.pet.claims} ครั้ง (ทุก 5 ครั้งเลื่อน 1 ระดับ) • ได้ของแถมทุกครั้งที่รับ และระดับ 2 ขึ้นไปลดโอกาสค้นหาแล้วไม่เจออะไรเพิ่มขึ้น 1%/ระดับ`)); }
+    else card().append(mk("div", "muted", "🐾 ยังไม่มีสัตว์เลี้ยง — รับเลี้ยงได้ที่หน้าที่พัก"));
+  }
+}
+// โบนัสถาวรจากต้นไม้ค่าย + สัตว์เลี้ยง: ตัวคูณ 1 + ค่าต่อระดับ × ระดับ
+function fxPerkMods(m) {
+  const D = acs.camp; if (!D) return;
+  const ap = (eff, L) => Object.entries(eff).forEach(([q, v]) => { if (q === "cut") return; if (m[q] !== undefined) m[q] *= Math.max(0.2, 1 + v * L); });
+  D.perks.forEach((p) => { if (p.lv > 0) ap(p.eff, p.lv); });
+  if (D.pet?.eff) ap(D.pet.eff, 1);   // eff ของสัตว์เลี้ยงคูณระดับมาจากเซิร์ฟเวอร์แล้ว
+}
+const fxPerkCut = () => (acs.camp ? acs.camp.perks.reduce((a, p) => a + ((p.eff.cut || 0) * p.lv), 0) : 0);
+async function petBonusAfterClaim() {
+  try { await achFlush(); const r = await actSync("camp", "petBonus"); if (r.bonus) { toast(`🐾 ของแถมจากสัตว์เลี้ยง: ${mRew(r.bonus)}`); logLine(`🐾 สัตว์เลี้ยง (ระดับ ${r.lvl}) หาของแถมมาให้: ${mRew(r.bonus)}`, "info"); } } catch { /* ข้าม */ }
 }
 
 /* =========================================================

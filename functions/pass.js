@@ -23,8 +23,15 @@ const WEEKLY = [
   ["w_fish", "fish", 10, "🎣 ตกปลา 10 ครั้ง"], ["w_night", "nsrch", 40, "🌙 ค้นหาตอนกลางคืน 40 ครั้ง"],
   ["w_enc", "enc", 8, "🎭 ผ่านเหตุการณ์สุ่ม 8 ครั้ง"]
 ];
+// ภารกิจพิเศษประจำธีมซีซัน (วนตาม seaIdx % 4 ให้ตรงกับอาร์เรย์ SEA ใน script.js: ฝน, โรคระบาด, เก็บเสบียง, หนาว) — เพิ่มเข้าพูลของซีซันนั้นเท่านั้น
+const THEME = [
+  { d: [["d_t0a", "bcol", 6, "🏠 เก็บผลผลิตที่พัก 6 ชิ้น"], ["d_t0b", "fish", 4, "🎣 ตกปลา 4 ครั้ง"]], w: [["w_t0a", "bcol", 35, "🏠 เก็บผลผลิตที่พัก 35 ชิ้น"], ["w_t0b", "use", 50, "🧪 ใช้ไอเทม 50 ครั้ง"]] },
+  { d: [["d_t1a", "use", 10, "🧪 ใช้ไอเทม 10 ครั้ง"], ["d_t1b", "zwin", 10, "⚔️ ชนะซอมบี้ 10 ครั้ง", "h"], ["d_t1c", "bite", 6, "🦷 กัดเหยื่อ 6 ครั้ง", "z"]], w: [["w_t1a", "use", 70, "🧪 ใช้ไอเทม 70 ครั้ง"], ["w_t1b", "zwin", 50, "⚔️ ชนะซอมบี้ 50 ครั้ง", "h"], ["w_t1c", "bite", 25, "🦷 กัดเหยื่อ 25 ครั้ง", "z"]] },
+  { d: [["d_t2a", "mkt", 4, "🏪 ซื้อ/ขายในตลาด 4 ครั้ง"], ["d_t2b", "srch", 50, "🔍 ค้นหาของ 50 ครั้ง"]], w: [["w_t2a", "mkt", 15, "🏪 ซื้อ/ขายในตลาด 15 ครั้ง"], ["w_t2b", "camp", 200, "🏕️ สมทบโปรเจกต์ค่าย 200 แต้ม"]] },
+  { d: [["d_t3a", "nsrch", 15, "🌙 ค้นหาตอนกลางคืน 15 ครั้ง"], ["d_t3b", "found", 20, "🎒 เจอของ 20 ชิ้น"]], w: [["w_t3a", "nsrch", 80, "🌙 ค้นหาตอนกลางคืน 80 ครั้ง"], ["w_t3b", "srch", 300, "🔍 ค้นหาของ 300 ครั้ง"]] }
+];
 const POOL = {};
-DAILY.concat(WEEKLY).forEach((m) => { POOL[m[0]] = { id: m[0], k: m[1], n: m[2], t: m[3], f: m[4] || "", xp: m[0][0] === "d" ? XP_DAILY : XP_WEEKLY }; });
+DAILY.concat(WEEKLY, ...THEME.map((t) => t.d.concat(t.w))).forEach((m) => { POOL[m[0]] = { id: m[0], k: m[1], n: m[2], t: m[3], f: m[4] || "", xp: m[0][0] === "d" ? XP_DAILY : XP_WEEKLY }; });
 
 // รางวัลระดับ 1–30: R([ไอเทมมนุษย์, จำนวน], [ไอเทมซอมบี้, จำนวน]) — ไม่ระบุช่องที่สอง = ใช้ของเดียวกัน
 const R = (h, z) => ({ h: [h], z: [z || h] });
@@ -37,6 +44,16 @@ const TIER_REW = [
   R(["medkit", 2], ["serum", 2]), R(["gunpowder", 2], ["mutant_gland", 2]), R(["antidote", 2], ["rotten_meat", 8]), R(["circuit_board", 1], ["serum", 2]), R(["gold_watch", 1]),
   R(["trauma_kit", 2], ["serum", 3]), R(["chem_catalyst", 2], ["mutant_gland", 3]), R(["army_meal", 3], ["rotten_meat", 10]), R(["data_chip", 1], ["mutant_gland", 3]), R(["kevlar_vest", 1], ["mut_hide3", 1])
 ];
+
+// รางวัลเฉพาะธีมซีซัน: เขียนทับบางระดับของชุดพื้นฐาน (ระดับ → R(...)) ; 10/20/30 เป็นของเด่นประจำธีม
+const OVR = [
+  { 3: R(["water_jug", 1]), 6: R(["herb_bundle", 3], ["water_jug", 1]), 9: R(["moss", 5], ["water_jug", 2]), 10: R(["diver_suit", 1], ["mut_hide2", 1]), 12: R(["fish_stew", 2], ["rotten_meat", 5]), 20: R(["rabbit_foot", 1], ["mut_nose3", 1]), 21: R(["herb_bundle", 4], ["serum", 1]), 30: R(["hazmat_suit", 1], ["mut_hide3", 1]) },
+  { 3: R(["bandage", 3], ["serum", 1]), 6: R(["antidote", 1], ["serum", 1]), 9: R(["medkit", 1], ["serum", 1]), 10: R(["lab_coat", 1], ["mut_hide2", 1]), 12: R(["trauma_kit", 1], ["serum", 2]), 18: R(["antidote", 2], ["serum", 2]), 20: R(["respirator", 1], ["mut_nose3", 1]), 21: R(["trauma_kit", 1], ["serum", 2]), 24: R(["chem_catalyst", 2], ["serum", 2]), 30: R(["hazmat_suit", 1], ["mut_hide4", 1]) },
+  { 3: R(["canned_food", 3], ["rotten_meat", 4]), 6: R(["army_meal", 1], ["rotten_meat", 5]), 9: R(["fruit", 3], ["rotten_meat", 6]), 10: R(["survival_bracelet", 1], ["mut_nose2", 1]), 12: R(["soup", 3], ["rotten_meat", 6]), 18: R(["canned_food", 5], ["rotten_meat", 8]), 20: R(["welder_apron", 1], ["mut_hide3", 1]), 21: R(["army_meal", 2], ["rotten_meat", 10]), 24: R(["scrap", 8], ["rotten_meat", 10]), 30: R(["riot_vest", 1], ["mut_nose4", 1]) },
+  { 3: R(["energy_drink", 1]), 6: R(["army_meal", 1], ["rotten_meat", 6]), 9: R(["stim_shot", 1], ["energy_drink", 2]), 10: R(["hunter_cloak", 1], ["mut_hide2", 1]), 12: R(["steel_plate", 1], ["mutant_gland", 2]), 18: R(["medkit", 1], ["serum", 1]), 20: R(["night_goggles", 1], ["mut_nose3", 1]), 21: R(["battery_pack", 2], ["mutant_gland", 2]), 30: R(["army_vest", 1], ["mut_hide4", 1]) }
+];
+const tierRew = (s) => TIER_REW.map((r, i) => OVR[s % OVR.length][i + 1] || r);
+const themeList = (s, k) => THEME[s % THEME.length][k];
 
 const dayIdx = (now) => Math.floor((now + COOP_TZ) / DAY);
 const seaIdx = (now) => Math.max(0, Math.floor((dayIdx(now) - SEA_EPOCH) / SEA_LEN));
@@ -81,8 +98,8 @@ function makePass(db) {
       let cur = ps.s === s ? ps : { s, xp: 0 };   // ซีซันใหม่ → XP/รางวัลระดับเริ่มใหม่ (ระดับที่ไม่ได้กดรับของซีซันเก่าจะหายไป)
       const mk = (idx, ids) => { const b = {}; ids.forEach((id) => { b[POOL[id].k] = c[POOL[id].k] || 0; }); return { i: idx, m: ids, b, c: {} }; };
       let d = cur.d, w = cur.w, dirty = ps.s !== s;
-      if (!d || d.i !== di) { d = mk(di, pick(DAILY, 3, di * 7 + 1, fac)); dirty = true; }
-      if (!w || w.i !== wi) { w = mk(wi, pick(WEEKLY, 4, wi * 13 + 5, fac)); dirty = true; }
+      if (!d || d.i !== di) { d = mk(di, pick(DAILY.concat(themeList(s, "d")), 3, di * 7 + 1, fac)); dirty = true; }
+      if (!w || w.i !== wi) { w = mk(wi, pick(WEEKLY.concat(themeList(s, "w")), 4, wi * 13 + 5, fac)); dirty = true; }
       d.c = d.c || {}; w.c = w.c || {}; d.b = d.b || {}; w.b = w.b || {};   // อ็อบเจ็กต์ว่างไม่ถูกเก็บใน RTDB → คืนค่าว่างเอง
       cur = { ...cur, d, w, tc: cur.tc || {} };
       const view = (P) => P.m.map((id) => { const m = POOL[id], v = Math.max(0, (c[m.k] || 0) - (P.b[m.k] || 0)); return { id, t: m.t, n: m.n, v: Math.min(v, m.n), xp: m.xp, done: v >= m.n, got: !!P.c[id] }; });
@@ -100,7 +117,7 @@ function makePass(db) {
         if (!Number.isInteger(t) || t < 1 || t > TIERS) fail("invalid-argument", "ข้อมูลไม่ถูกต้อง");
         if ((cur.xp || 0) < t * TIER_XP) fail("failed-precondition", "XP ยังไม่ถึงระดับนี้");
         if (cur.tc[t]) fail("failed-precondition", "รับไปแล้ว");
-        const rw = TIER_REW[t - 1][fac === "zombie" ? "z" : "h"];
+        const rw = tierRew(s)[t - 1][fac === "zombie" ? "z" : "h"];
         for (const [id] of rw) { const slot = (await db.ref(`inventory/${uid}/${id}`).get()).val(); if (slot && slot.id !== id) fail("failed-precondition", "ช่องกระเป๋านี้ใช้ไม่ได้"); }
         cur.tc[t] = 1; await save();   // ตีตราว่ารับแล้วก่อนแจกของ (ถ้าแจกไม่สำเร็จจะถอนตรากลับ)
         const done = [];
@@ -122,7 +139,7 @@ function makePass(db) {
       function finish(extra) {
         return Object.assign({
           ok: true, s, xp: cur.xp || 0, tierXp: TIER_XP, tiers: TIERS, tc: cur.tc,
-          rew: TIER_REW.map((r) => r[fac === "zombie" ? "z" : "h"]),
+          rew: tierRew(s).map((r) => r[fac === "zombie" ? "z" : "h"]), theme: s % THEME.length,
           d: view(cur.d), w: view(cur.w), dEnd: dayEnd(now), wEnd: weekEnd(now), sEnd: seaEnd(now)
         }, extra || {});
       }
@@ -131,4 +148,4 @@ function makePass(db) {
   return { run };
 }
 
-module.exports = { makePass, POOL, DAILY, WEEKLY, TIER_REW, TIER_XP, TIERS, pick, seaIdx, dayIdx, weekIdx };
+module.exports = { makePass, POOL, DAILY, WEEKLY, TIER_REW, OVR, THEME, tierRew, TIER_XP, TIERS, pick, seaIdx, dayIdx, weekIdx };
