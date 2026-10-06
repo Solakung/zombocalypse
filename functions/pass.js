@@ -12,7 +12,7 @@ const DAILY = [
   ["d_zwin", "zwin", 5, "⚔️ ชนะซอมบี้ 5 ครั้ง", "h"], ["d_bite", "bite", 3, "🦷 กัดเหยื่อ 3 ครั้ง", "z"],
   ["d_use", "use", 6, "🧪 ใช้ไอเทม 6 ครั้ง"], ["d_craft", "craft", 3, "🔧 คราฟต์ 3 ชิ้น", "h"],
   ["d_mkt", "mkt", 2, "🏪 ซื้อ/ขายในตลาด 2 ครั้ง"], ["d_bcol", "bcol", 3, "🏠 เก็บผลผลิตที่พัก 3 ชิ้น"],
-  ["d_fish", "fish", 2, "🎣 ตกปลา 2 ครั้ง"], ["d_enc", "enc", 2, "🎭 ผ่านเหตุการณ์สุ่ม 2 ครั้ง"], ["d_gard", "gard", 3, "🌱 เก็บเกี่ยวจากแปลงปลูก 3 แปลง"]
+  ["d_fish", "fish", 2, "🎣 ตกปลา 2 ครั้ง"], ["d_enc", "enc", 2, "🎭 ผ่านเหตุการณ์สุ่ม 2 ครั้ง"], ["d_gard", "gard", 3, "🌱 เก็บเกี่ยวจากแปลงปลูก 3 แปลง"], ["d_home", "home", 1, "🛋️ จัดห้องแล้วบันทึก 1 ครั้ง"], ["d_like", "like", 2, "❤️ ถูกใจห้องของผู้เล่นอื่น 2 ห้อง"]
 ];
 const WEEKLY = [
   ["w_srch", "srch", 150, "🔍 ค้นหาของ 150 ครั้ง"], ["w_found", "found", 80, "🎒 เจอของ 80 ชิ้น"],
@@ -21,7 +21,7 @@ const WEEKLY = [
   ["w_mkt", "mkt", 8, "🏪 ซื้อ/ขายในตลาด 8 ครั้ง"], ["w_bcol", "bcol", 20, "🏠 เก็บผลผลิตที่พัก 20 ชิ้น"],
   ["w_camp", "camp", 100, "🏕️ สมทบโปรเจกต์ค่าย 100 แต้ม"], ["w_boss", "boss", 2, "👹 ชนะมินิบอส 2 ครั้ง"],
   ["w_fish", "fish", 10, "🎣 ตกปลา 10 ครั้ง"], ["w_night", "nsrch", 40, "🌙 ค้นหาตอนกลางคืน 40 ครั้ง"],
-  ["w_enc", "enc", 8, "🎭 ผ่านเหตุการณ์สุ่ม 8 ครั้ง"], ["w_gard", "gard", 15, "🌱 เก็บเกี่ยวจากแปลงปลูก 15 แปลง"]
+  ["w_enc", "enc", 8, "🎭 ผ่านเหตุการณ์สุ่ม 8 ครั้ง"], ["w_gard", "gard", 15, "🌱 เก็บเกี่ยวจากแปลงปลูก 15 แปลง"], ["w_like", "like", 8, "❤️ ถูกใจห้องของผู้เล่นอื่น 8 ห้อง"]
 ];
 // ภารกิจพิเศษประจำธีมซีซัน (วนตาม seaIdx % 4 ให้ตรงกับอาร์เรย์ SEA ใน script.js: ฝน, โรคระบาด, เก็บเสบียง, หนาว) — เพิ่มเข้าพูลของซีซันนั้นเท่านั้น
 const THEME = [
@@ -52,7 +52,15 @@ const OVR = [
   { 3: R(["canned_food", 3], ["rotten_meat", 4]), 6: R(["army_meal", 1], ["rotten_meat", 5]), 9: R(["fruit", 3], ["rotten_meat", 6]), 10: R(["survival_bracelet", 1], ["mut_nose2", 1]), 12: R(["soup", 3], ["rotten_meat", 6]), 18: R(["canned_food", 5], ["rotten_meat", 8]), 20: R(["welder_apron", 1], ["mut_hide3", 1]), 21: R(["army_meal", 2], ["rotten_meat", 10]), 24: R(["scrap", 8], ["rotten_meat", 10]), 30: R(["riot_vest", 1], ["mut_nose4", 1]) },
   { 3: R(["energy_drink", 1]), 6: R(["army_meal", 1], ["rotten_meat", 6]), 9: R(["stim_shot", 1], ["energy_drink", 2]), 10: R(["hunter_cloak", 1], ["mut_hide2", 1]), 12: R(["steel_plate", 1], ["mutant_gland", 2]), 18: R(["medkit", 1], ["serum", 1]), 20: R(["night_goggles", 1], ["mut_nose3", 1]), 21: R(["battery_pack", 2], ["mutant_gland", 2]), 30: R(["army_vest", 1], ["mut_hide4", 1]) }
 ];
-const tierRew = (s) => TIER_REW.map((r, i) => OVR[s % OVR.length][i + 1] || r);
+// ของตกแต่ง/ธีมห้องเป็นรางวัลระดับ 15 (ธีมประจำซีซัน + ของเด่น) และ 25 (ของเทศกาลประจำซีซัน) — id "theme_"/"deco_" เก็บที่ home/{uid}/own (lib.js)
+const HOME_REW = [
+  { 15: [["theme_rain", 1], ["deco_umbrella", 1]], 25: [["deco_rainbow", 1]] }, { 15: [["theme_plague", 1], ["deco_jacko", 1]], 25: [["deco_firework", 1]] },
+  { 15: [["theme_harvest", 1], ["deco_leaves", 1]], 25: [["deco_redpack", 1]] }, { 15: [["theme_winter", 1], ["deco_snowman", 1]], 25: [["deco_xtree", 1]] }
+];
+const tierRew = (s) => TIER_REW.map((r, i) => {
+  const b = OVR[s % OVR.length][i + 1] || r, x = HOME_REW[s % HOME_REW.length][i + 1];
+  return x ? { h: b.h.concat(x), z: b.z.concat(x) } : b;
+});
 const themeList = (s, k) => THEME[s % THEME.length][k];
 
 const dayIdx = (now) => Math.floor((now + COOP_TZ) / DAY);
@@ -72,17 +80,7 @@ function pick(list, n, seed, faction) {
   return out;
 }
 
-const { fail, withLock, addItem } = require("./lib");
-
-// เพิ่มของแบบไม่ให้ทะลุเพดาน 99 ต่อช่อง (rules ฝั่งกระเป๋า) — เต็มแล้วไม่ให้รับ (ไม่เสียรางวัล)
-async function addCapped(db, uid, id, qty) {
-  const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
-    if (!cur) return { id, qty };
-    if (cur.id !== id || !(cur.qty > 0) || cur.qty + qty > 99) return undefined;
-    return { ...cur, qty: cur.qty + qty };
-  });
-  return res.committed;
-}
+const { fail, withLock, grantAll } = require("./lib");
 
 function makePass(db) {
   async function run(uid, data, now = Date.now()) {
@@ -118,17 +116,8 @@ function makePass(db) {
         if ((cur.xp || 0) < t * TIER_XP) fail("failed-precondition", "XP ยังไม่ถึงระดับนี้");
         if (cur.tc[t]) fail("failed-precondition", "รับไปแล้ว");
         const rw = tierRew(s)[t - 1][fac === "zombie" ? "z" : "h"];
-        for (const [id] of rw) { const slot = (await db.ref(`inventory/${uid}/${id}`).get()).val(); if (slot && slot.id !== id) fail("failed-precondition", "ช่องกระเป๋านี้ใช้ไม่ได้"); }
         cur.tc[t] = 1; await save();   // ตีตราว่ารับแล้วก่อนแจกของ (ถ้าแจกไม่สำเร็จจะถอนตรากลับ)
-        const done = [];
-        for (const [id, q] of rw) {
-          if (!(await addCapped(db, uid, id, q))) {
-            for (const [rid, rq] of done) { await db.ref(`inventory/${uid}/${rid}`).transaction((x) => (x && x.qty > rq ? { ...x, qty: x.qty - rq } : null)); }
-            delete cur.tc[t]; await save();
-            fail("failed-precondition", "กระเป๋าช่องนั้นเต็ม (99 ชิ้น) — เคลียร์พื้นที่แล้วลองใหม่");
-          }
-          done.push([id, q]);
-        }
+        if (!(await grantAll(db, uid, rw))) { delete cur.tc[t]; await save(); fail("failed-precondition", "ช่องกระเป๋านั้นเต็ม (99 ชิ้น) — เคลียร์พื้นที่แล้วลองใหม่"); }
         dirty = false;
         return finish({ rewarded: rw });
       } else if (a !== "sync") fail("invalid-argument", "ไม่รู้จักคำสั่ง");

@@ -33,12 +33,18 @@ async function addItem(db, uid, id, qty) {
 }
 
 // เพิ่มของแบบไม่ทะลุเพดาน 99 ต่อช่อง (rules ฝั่งกระเป๋า) — เต็ม/ช่องใช้ไม่ได้ → คืน false (ไม่เขียนอะไร)
-// id ขึ้นต้น "seed_" = เมล็ดพันธุ์ของแปลงปลูก → เก็บเป็นตัวนับที่ garden/{uid}/seed/{พืช} (ไม่ใช่ไอเทมในกระเป๋า ไม่เกี่ยวกับ rules)
+// id พิเศษ (ไม่ใช่ไอเทมในกระเป๋า → ไม่เกี่ยวกับ rules):
+//   "seed_<พืช>"  = เมล็ดพันธุ์ → ตัวนับที่ garden/{uid}/seed/{พืช} (เพดาน 99)
+//   "deco_<ของ>" / "theme_<ธีม>" = ของตกแต่ง/ธีมห้อง → ตัวนับที่ home/{uid}/own/{ชื่อ} (เพดาน 9 ชิ้นต่อชนิด; ธีมมีได้ชิ้นเดียว)
 const isSeed = (id) => /^seed_[a-z]{3,10}$/.test(id);
-const itemRef = (db, uid, id) => (isSeed(id) ? db.ref(`garden/${uid}/seed/${id.slice(5)}`) : db.ref(`inventory/${uid}/${id}`));
+const isHome = (id) => /^(deco|theme)_[a-z0-9]{2,12}$/.test(id);
+const homeKey = (id) => (id.startsWith("theme_") ? "t_" + id.slice(6) : id.slice(5));   // own: d0.. / ชื่อของ / t_<ธีม>
+const homeCap = (id) => (id.startsWith("theme_") ? 1 : 9);
+const itemRef = (db, uid, id) => (isSeed(id) ? db.ref(`garden/${uid}/seed/${id.slice(5)}`) : isHome(id) ? db.ref(`home/${uid}/own/${homeKey(id)}`) : db.ref(`inventory/${uid}/${id}`));
 async function addCapped(db, uid, id, qty) {
-  if (isSeed(id)) {
-    const r = await itemRef(db, uid, id).transaction((cur) => { const n = Number(cur) || 0; return n + qty > 99 ? undefined : n + qty; });
+  if (isSeed(id) || isHome(id)) {
+    const cap = isSeed(id) ? 99 : homeCap(id);
+    const r = await itemRef(db, uid, id).transaction((cur) => { const n = Number(cur) || 0; return n + qty > cap ? undefined : n + qty; });
     return r.committed;
   }
   const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
@@ -54,7 +60,7 @@ async function grantAll(db, uid, list) {
   for (const [id, q] of list) {
     if (!(await addCapped(db, uid, id, q))) {
       for (const [rid, rq] of done) {
-        if (isSeed(rid)) await itemRef(db, uid, rid).transaction((x) => Math.max(0, (Number(x) || 0) - rq) || null);
+        if (isSeed(rid) || isHome(rid)) await itemRef(db, uid, rid).transaction((x) => Math.max(0, (Number(x) || 0) - rq) || null);
         else await db.ref(`inventory/${uid}/${rid}`).transaction((x) => (x && x.qty > rq ? { ...x, qty: x.qty - rq } : null));
       }
       return false;
@@ -68,4 +74,4 @@ const dayIdx = (now) => Math.floor((now + TZ) / DAY);
 const dayEnd = (now) => (dayIdx(now) + 1) * DAY - TZ;
 function rng(seed) { let a = (seed * 2654435761) >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-module.exports = { fail, withLock, takeItem, addItem, addCapped, grantAll, isSeed, dayIdx, dayEnd, rng, TZ, DAY };
+module.exports = { fail, withLock, takeItem, addItem, addCapped, grantAll, isSeed, isHome, homeKey, dayIdx, dayEnd, rng, TZ, DAY };

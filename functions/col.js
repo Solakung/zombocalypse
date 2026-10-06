@@ -32,7 +32,7 @@ const REWARDS = [
   { p: 25, r: [["medkit", 2], ["army_meal", 2], ["seed_herb", 3]], rz: [["serum", 1], ["rotten_meat", 6], ["seed_fungus", 3]] },
   { p: 50, r: [["trauma_kit", 2], ["steel_plate", 2], ["survivor_badge", 1]], rz: [["serum", 2], ["mutant_gland", 2], ["survivor_badge", 1]] },
   { p: 75, r: [["circuit_board", 2], ["chem_catalyst", 2], ["lab_core", 1]], rz: [["mutant_gland", 3], ["chem_catalyst", 2], ["lab_core", 1]] },
-  { p: 100, r: [["boss_trophy", 1], ["gold_watch", 1], ["lab_core", 2], ["data_chip", 2]], rz: [["boss_trophy", 1], ["gold_watch", 1], ["mutant_gland", 5], ["lab_core", 2]] }
+  { p: 100, r: [["boss_trophy", 1], ["gold_watch", 1], ["lab_core", 2], ["data_chip", 2], ["deco_medal", 1]], rz: [["boss_trophy", 1], ["gold_watch", 1], ["mutant_gland", 5], ["lab_core", 2], ["deco_medal", 1]] }
 ];
 const OK_ID = /^[a-z0-9_]{2,24}$/;
 const MAXSYNC = 400;

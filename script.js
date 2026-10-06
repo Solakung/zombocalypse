@@ -40,13 +40,14 @@ const radioCall = (data) => httpsCallable(fns, "radioAct")(data).then((r) => r.d
 const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) => r.data);   // 🐪 ขบวนพ่อค้าเร่ (functions/caravan.js)
 const gardenCall = (data) => httpsCallable(fns, "gardenAct")(data).then((r) => r.data);   // 🌱 แปลงปลูก (functions/garden.js)
 const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data);   // 📖 สมุดสะสมชุด/ความสมบูรณ์ (functions/col.js)
+const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.data);   // 🛋️ บ้านของฉัน/จัดห้อง/เยี่ยมห้อง (functions/home.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.1500";
+const APP_VERSION = "2026-10-07.1800";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -654,7 +655,7 @@ async function showBio(uid, name, fac) {
   try { const s = await get(ref(db, "bios/" + uid)); $("bio-text").textContent = s.val() || "ยังไม่ได้เขียนประวัติ"; }
   catch { $("bio-text").textContent = "โหลดไม่สำเร็จ"; }
   achBioLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
-  baseSceneBio(uid, fac).then((o) => { if (!o || $("bio-modal").classList.contains("hidden")) return; let h = $("bio-scene"); if (!h) { h = mk("div"); h.id = "bio-scene"; h.style.margin = "8px 0"; $("bio-text").before(h); } baseSceneFill(h, o); }).catch(() => {});
+  homeVisitFill(uid, name, fac).then((ok) => { if (ok) return; return baseSceneBio(uid, fac).then((o) => { if (!o || $("bio-modal").classList.contains("hidden")) return; let h = $("bio-scene"); if (!h) { h = mk("div"); h.id = "bio-scene"; h.style.margin = "8px 0"; $("bio-text").before(h); } baseSceneFill(h, o); }); }).catch(() => {});
   baseDecoLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
   try { gftBioRow(uid, name, fac); gftVisit(uid); } catch (e) { console.warn("gift ui", e); }
 }
@@ -723,6 +724,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "🛋️ จัดห้อง (หน้าต่างที่พัก → แท็บ “จัดห้อง”): เลือกของจากถาด แตะในภาพเพื่อวาง/ย้าย แล้วบันทึก • ธีมห้อง 13 แบบ • ของตกแต่งใหม่ 48 ชิ้น (ซื้อด้วยวัสดุ หรือได้จากหีบ/ซีซัน/สมุดสะสม/ห้องยอดนิยม) • คนอื่นเห็นห้องของคุณในหน้าประวัติ กด ❤️ ถูกใจได้วันละ 5 ห้อง ห้องยอดนิยมประจำสัปดาห์ได้รางวัล",
     "🌱 แปลงปลูก (ในหน้าต่างที่พัก): ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยว ฤดูกาลมีผลกับเวลาโต รับเมล็ดฟรีวันละครั้ง ได้เมล็ดเพิ่มจากหีบ/พ่อค้าเร่/ดิ่งลึก/เหตุการณ์สุ่ม • ซอมบี้เลี้ยงเชื้อรา/หนอนแทน",
     "🎲 🎲 ผจญภัย: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
     "🎁 🎁 รายวัน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
@@ -7612,12 +7614,13 @@ function renderBase() {
   const can = baseCan(), fac = state.profile?.faction === "zombie";
   body.append(mk("div", "muted", `${fac ? "รังของคุณ" : "ที่พักของคุณในค่าย"} — วางสถานีแล้วกลับมาเก็บผลผลิตได้เรื่อย ๆ แม้ไม่มีใครออนไลน์ ผลผลิตสะสมได้จำกัด (เต็มแล้วหยุดผลิต) ${can ? "" : "• ตอนนี้ไม่ได้อยู่ Safe Zone จึงดูได้อย่างเดียว"}`));
   { const tabs = mk("div", "subtabs"); tabs.style.paddingTop = "0";
-    [["in", "🏠 ห้องข้างใน"], ["yard", "🌱 ลานหน้าบ้าน"]].forEach(([k, l]) => tabs.append(btn(l, () => { state.baseView = k; renderBase(); }, "btn mini " + ((state.baseView || "in") === k ? "primary" : "ghost"))));
+    [["in", "🏠 ห้อง"], ["edit", "🛋️ จัดห้อง"], ["yard", "🌱 ลานบ้าน"]].forEach(([k, l]) => tabs.append(btn(l, () => { state.baseView = k; renderBase(); }, "btn mini " + ((state.baseView || "in") === k ? "primary" : "ghost"))));
     body.append(tabs);
     const sc = mk("div"); sc.id = "base-scene"; body.append(sc);
     try {
       if (state.baseView === "yard") { const D = state.gardenD, spent = Date.now() - (state.gardenAt || Date.now()); sc.innerHTML = baseYardSvg(baseLv(), fac, D ? D.plots : [], spent, state.uid); if (!D && !state.gardenBusy && !state.gardenLoad) { state.gardenLoad = true; gardenGo("state").finally(() => { state.gardenLoad = false; }); } }
-      else baseSceneFill(sc, baseSceneOwn());
+      else if (state.baseView === "edit") { homeEdit(sc, body); return; }
+      else { baseSceneFill(sc, baseSceneOwn()); homeLoad(); }
     } catch (e) { console.warn("scene", e); } }
   const slots = baseSlots(); let total = 0;
   for (let i = 1; i <= 5; i++) {
@@ -8096,7 +8099,7 @@ function scnSky() {
 // o: { lv, deco:{d0:true..}, zombie, uid, stations:[{k,u,cap,locked}], bench:[{state:'empty'|'busy'|'ready'|'locked'}] }
 function baseSceneSvg(o) {
   const lv = Math.max(0, Math.min(3, o.lv | 0)), z = !!o.zombie, h = scnHash(o.uid);
-  const pal = z ? SCN_ZPAL[h % SCN_ZPAL.length] : SCN_PAL[h % SCN_PAL.length], sky = scnSky();
+  const pal = o.pal && o.pal.length === 6 ? o.pal : z ? SCN_ZPAL[h % SCN_ZPAL.length] : SCN_PAL[h % SCN_PAL.length], sky = scnSky();
   const deco = o.deco || {}, P = [];
   const t = (x, y, size, ch, extra = "") => `<text x="${x}" y="${y}" font-size="${size}" text-anchor="middle" ${extra}>${ch}</text>`;
   P.push(`<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ภาพห้องที่พัก" style="width:100%;height:auto;border-radius:12px;display:block;background:#111">`);
@@ -8150,9 +8153,15 @@ function baseSceneSvg(o) {
     bs.forEach((b, i) => { const x = 276 + i * 20; if (b.state === "locked") P.push(`<rect x="${x - 7}" y="98" width="14" height="14" rx="3" fill="none" stroke="#fff" stroke-opacity=".25" stroke-dasharray="3 2"/>`); else if (b.state === "busy") P.push(t(x, 111, 15, "⚙️", 'class="sp"')); else if (b.state === "ready") P.push(t(x, 111, 15, "📦"), `<text x="${x + 7}" y="98" font-size="9" text-anchor="middle" class="sp">✨</text>`); else P.push(t(x, 111, 15, "🛠️", 'opacity=".55"')); });
   }
   // ของตกแต่ง
-  const hasLamp = deco.d11 === true;
-  if (hasLamp) P.push(`<circle cx="172" cy="46" r="52" fill="url(#scnglow)" class="pu"/><line x1="172" y1="0" x2="172" y2="20" stroke="#222" stroke-width="1.5"/>`);
-  for (const d of DECO) {
+  const lay = Array.isArray(o.layout) ? o.layout : null;   // ห้องแบบจัดเอง (homeAct): [{d,x,y}] + o.items = { รหัส: [ไอคอน, ชื่อ, ขนาด] }
+  const hasLamp = lay ? lay.some((e) => e.d === "d11") : deco.d11 === true;
+  if (hasLamp) { const lp = lay && lay.find((e) => e.d === "d11"); const lx = lp ? lp.x : 172; P.push(`<circle cx="${lx}" cy="46" r="52" fill="url(#scnglow)" class="pu"/><line x1="${lx}" y1="0" x2="${lx}" y2="20" stroke="#222" stroke-width="1.5"/>`); }
+  if (lay) [...lay].sort((a, b) => a.y - b.y).forEach((e) => {   // เรียงตามความลึก (y น้อย = ไกล วาดก่อน)
+    const it = (o.items && o.items[e.d]) || (DECO.find((x) => x[0] === e.d) && [DECO.find((x) => x[0] === e.d)[1], DECO.find((x) => x[0] === e.d)[2], (SCN_POS[e.d] || [0, 0, 24])[2]]);
+    if (!it) return;
+    P.push(`<g class="it${o.sel === e.i ? " sel" : ""}" data-n="${it[0]} ${it[1]}"><title>${it[1]}</title>${o.sel === e.i ? `<circle cx="${e.x}" cy="${e.y - it[2] / 3}" r="${it[2] * 0.7}" fill="none" stroke="#e0a030" stroke-width="2" stroke-dasharray="4 3"/>` : ""}${t(e.x, e.y, it[2], it[0], e.d === "d1" ? 'class="fl"' : "")}</g>`);
+  });
+  else for (const d of DECO) {
     const id = d[0]; if (deco[id] !== true) continue;
     const q = SCN_POS[id]; if (!q) continue;
     const extra = id === "d1" ? 'class="fl"' : "";
@@ -8180,7 +8189,8 @@ function baseSceneOwn() {
     if (!rec || !BENCH[rec.r]) return { state: "empty" };
     return { state: benchLeft(rec) <= 0 ? "ready" : "busy" };
   });
-  return { lv: baseLv(), deco: decoOwned(), zombie: state.profile?.faction === "zombie", uid: state.uid, stations: st, bench };
+  const hd = state.homeD, home = hd && hd.lay ? { layout: hd.lay, items: homeItemsMap(hd), pal: homePal(hd, hd.th) } : {};
+  return { lv: baseLv(), deco: decoOwned(), zombie: state.profile?.faction === "zombie", uid: state.uid, stations: st, bench, ...home };
 }
 // ห้องของคนอื่น (หน้าประวัติ): ขั้นบ้านประมาณจากจำนวนของตกแต่ง
 async function baseSceneBio(uid, facIn) {
@@ -9481,6 +9491,107 @@ function colRender() {
   });
   const mc = card(); mc.append(mk("div", "", "🎯 เหตุการณ์สำคัญ (นับรวมในความสมบูรณ์)"));
   D.miles.forEach((m) => { const r = mk("div", m.v >= m.n ? "muted" : ""); r.style.marginTop = "6px"; r.append(document.createTextNode(`${m.v >= m.n ? "✅" : "⬜"} ${m.t} — ${m.v}/${m.n}`)); mc.append(r); });
+}
+
+/* =========================================================
+   49.45) 🛋️ บ้านของฉัน — จัดห้องเอง • ธีม • เยี่ยมห้อง • ถูกใจ • ห้องยอดนิยม (functions/home.js — homeAct) • ไม่แตะ rules
+   - แท็บ "🛋️ จัดห้อง" ในหน้าต่างที่พัก: เลือกของจากถาด → แตะในภาพเพื่อวาง/ย้าย → บันทึก (เซิร์ฟเวอร์ตรวจเจ้าของ/โซน/จำนวนช่อง)
+   - หน้าประวัติผู้เล่นอื่น: เห็นห้องที่เขาจัด + ถูกใจวันละ 5 ห้อง • ของเดิม 12 ชิ้นย้ายเข้าระบบใหม่อัตโนมัติ
+   ========================================================= */
+function homeItemsMap(D) { const m = {}; (D?.catalog || []).forEach((c) => { m[c.id] = [c.ic, c.n, c.sz]; }); return m; }
+function homePal(D, th) { const t = D?.themes?.find((x) => x.id === th); return t && t.pal ? t.pal : null; }
+async function homeGo(a, x, ok) {
+  if (state.homeBusy) return; state.homeBusy = true;
+  try { const r = await homeCall({ a, ...(x || {}) }); if (r.catalog) state.homeD = r; if (ok) ok(r); }
+  catch (e) { toast(fnErr(e)); } finally { state.homeBusy = false; try { baseAgain(); } catch { /* ข้าม */ } }
+}
+function homeLoad() { if (!state.homeD && !state.homeBusy && !state.homeLoadTry) { state.homeLoadTry = true; homeGo("state").finally(() => { state.homeLoadTry = false; }); } }
+function homeDraftInit() {
+  const D = state.homeD; if (!D) return null;
+  if (!state.homeDraft || state.homeDraft.base !== D) state.homeDraft = { base: D, lay: D.lay.map((e) => ({ ...e })), th: D.th, cap: D.cap, sel: null, pick: null };
+  return state.homeDraft;
+}
+const homeUsed = (dr, d) => dr.lay.filter((e) => e.d === d).length;
+const homeSceneObj = (D, dr) => ({ ...baseSceneOwn(), layout: dr.lay.map((e, i) => ({ ...e, i })), items: homeItemsMap(D), pal: homePal(D, dr.th), sel: dr.sel });
+function homeEdit(sc, body) {
+  const D = state.homeD, can = baseCan(); homeLoad();
+  if (!D) { sc.append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const dr = homeDraftInit(), cat = (id) => D.catalog.find((c) => c.id === id), draw = () => { sc.innerHTML = baseSceneSvg(homeSceneObj(D, dr)); };
+  draw();
+  sc.onclick = (ev) => {
+    const svg = sc.querySelector("svg"); if (!svg) return; const r = svg.getBoundingClientRect(), x = (ev.clientX - r.left) / r.width * 320, y = (ev.clientY - r.top) / r.height * 200;
+    let best = -1, bd = 1e9; dr.lay.forEach((e, i) => { const c = cat(e.d), sz = c ? c.sz : 24, d = Math.hypot(e.x - x, e.y - sz / 3 - y); if (d < Math.max(16, sz * 0.65) && d < bd) { bd = d; best = i; } });
+    const place = (c, at) => { const zr = { w: [20, 132], f: [128, 196], a: [20, 196] }[c.z]; return { d: c.id, x: Math.max(8, Math.min(312, Math.round(x / 8) * 8)), y: Math.max(zr[0], Math.min(zr[1], Math.round((y + c.sz / 3) / 4) * 4)) }; };
+    if (dr.pick) {   // วางชิ้นใหม่
+      const c = cat(dr.pick); if (!c) return;
+      if (dr.lay.length >= D.slots) return toast(`วางได้ไม่เกิน ${D.slots} ชิ้นที่ที่พักระดับนี้ (อัปเกรดที่พักเพื่อเพิ่มช่อง)`);
+      if (homeUsed(dr, c.id) >= (D.own[c.id] || 0)) return toast(`${c.n} วางครบจำนวนที่มีแล้ว`);
+      dr.lay.push(place(c)); dr.sel = dr.lay.length - 1; if (homeUsed(dr, c.id) >= (D.own[c.id] || 0)) dr.pick = null; baseAgain(); return;
+    }
+    if (best >= 0) { dr.sel = dr.sel === best ? null : best; baseAgain(); return; }
+    if (dr.sel !== null && dr.lay[dr.sel]) { const c = cat(dr.lay[dr.sel].d); if (c) { const p = place(c); dr.lay[dr.sel] = { ...dr.lay[dr.sel], x: p.x, y: p.y }; baseAgain(); } }   // ย้ายชิ้นที่เลือกไปจุดที่แตะ
+  };
+  const box = mk("div"); box.style.cssText = "border:1px solid var(--hazard);border-radius:10px;padding:10px;display:grid;gap:8px;background:var(--panel-2);margin-top:8px";
+  const dirty = JSON.stringify(dr.lay) !== JSON.stringify(D.lay) || dr.th !== D.th || dr.cap !== D.cap;
+  box.append(mk("b", "", `🛋️ จัดห้อง — วางแล้ว ${dr.lay.length}/${D.slots} ชิ้น${dirty ? " • ยังไม่ได้บันทึก" : ""}`), mk("span", "muted", dr.pick ? `เลือก ${cat(dr.pick)?.ic} ${cat(dr.pick)?.n} อยู่ — แตะในภาพเพื่อวาง` : dr.sel !== null && dr.lay[dr.sel] ? "เลือกชิ้นที่วางแล้ว — แตะที่ว่างเพื่อย้าย หรือกดลบ" : "เลือกของจากถาดด้านล่าง แล้วแตะในภาพเพื่อวาง • แตะของที่วางแล้วเพื่อเลือกย้าย/ลบ"));
+  const tray = mk("div"); tray.style.cssText = "display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch";
+  D.catalog.filter((c) => (D.own[c.id] || 0) > 0).forEach((c) => {
+    const left = (D.own[c.id] || 0) - homeUsed(dr, c.id), b = btn(`${c.ic} ${c.n} ×${left}`, () => { dr.pick = dr.pick === c.id ? null : c.id; dr.sel = null; baseAgain(); }, "btn mini " + (dr.pick === c.id ? "primary" : "ghost"));
+    b.style.cssText += ";flex:0 0 auto;white-space:nowrap"; b.disabled = left <= 0 && dr.pick !== c.id; tray.append(b);
+  });
+  if (!tray.children.length) tray.append(mk("span", "muted", "ยังไม่มีของตกแต่ง — ซื้อด้านล่าง หรือได้จากหีบ/ซีซัน/สมุดสะสม"));
+  box.append(tray);
+  const row = mk("div"); row.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px";
+  const del = btn("🗑️ ลบที่เลือก", () => { if (dr.sel !== null) { dr.lay.splice(dr.sel, 1); dr.sel = null; baseAgain(); } }, "btn ghost"); del.disabled = dr.sel === null;
+  row.append(del, btn("ล้างทั้งห้อง", () => { if (!dr.lay.length || confirm("เก็บของทุกชิ้นออกจากห้อง? (ของยังอยู่ในคลัง)")) { dr.lay = []; dr.sel = null; baseAgain(); } }, "btn ghost"));
+  box.append(row);
+  // ธีม + วลี
+  const th = mk("div"); th.style.cssText = "display:flex;gap:6px;overflow-x:auto;padding:2px 0 6px"; th.append(mk("span", "muted", "ธีม:"));
+  D.themes.forEach((t) => { const b = btn(`${t.ic} ${t.n}${t.owned ? "" : t.cost ? " 🔒" : " 🔒"}`, () => { if (t.owned) { dr.th = t.id; baseAgain(); } else if (t.cost) { if (confirm(`ซื้อธีม "${t.n}" ด้วย ${mRew([t.cost])} ?`)) homeGo("buy", { t: t.id }, () => toast(`🎨 ได้ธีม ${t.n}`)); } else toast("ธีมนี้ได้จากรางวัล (ซีซัน/สมุดสะสม/ห้องยอดนิยม)"); }, "btn mini " + (dr.th === t.id ? "primary" : "ghost")); b.style.cssText += ";flex:0 0 auto;white-space:nowrap"; th.append(b); });
+  box.append(th);
+  const cs = document.createElement("select"); cs.style.cssText = "width:100%;min-height:44px"; cs.append(new Option("— ไม่มีวลีประจำห้อง —", ""));
+  D.caps.forEach((c, i) => cs.append(new Option(c, String(i)))); cs.value = dr.cap === null || dr.cap === undefined ? "" : String(dr.cap); cs.addEventListener("change", () => { dr.cap = cs.value === "" ? null : Number(cs.value); });
+  box.append(cs);
+  const save = btn(dirty ? "💾 บันทึกห้อง" : "บันทึกแล้ว", () => homeGo("place", { lay: dr.lay.map(({ d, x, y }) => ({ d, x, y })), th: dr.th, cap: dr.cap }, () => { toast("🛋️ บันทึกห้องแล้ว"); logLine("🛋️ จัดห้องใหม่แล้ว คนอื่นเยี่ยมชมได้จากหน้าประวัติของคุณ", "system"); state.homeDraft = null; try { achBump("home"); } catch { /* ข้าม */ } }), "btn primary"); save.disabled = !dirty || !can;
+  const rs = btn("↩️ คืนค่าเดิม", () => { state.homeDraft = null; baseAgain(); }, "btn ghost"); rs.disabled = !dirty;
+  box.append(save, rs); if (!can) box.append(mk("span", "muted", "ต้องอยู่ที่ Safe Zone และมีชีวิตถึงจะบันทึกได้"));
+  body.append(box);
+  // ร้านค้า
+  const shop = mk("details"); shop.style.marginTop = "8px"; shop.append(mk("summary", "", "🛒 ร้านของตกแต่ง (ซื้อด้วยวัสดุ)"));
+  Object.entries(D.cats).filter(([k]) => k !== "old" && k !== "fest").forEach(([k, name]) => {
+    const items = D.catalog.filter((c) => c.cat === k && c.cost); if (!items.length) return;
+    shop.append(mk("div", "muted", name)); const g = mk("div"); g.style.cssText = "display:grid;gap:6px;margin:4px 0 8px";
+    items.forEach((c) => { const have = D.own[c.id] || 0, b = btn(`${c.ic} ${c.n} • ${mRew([c.cost])}${have ? ` • มี ${have}` : ""}`, () => homeGo("buy", { d: c.id }, () => toast(`${c.ic} ซื้อ ${c.n} แล้ว`)), "btn ghost"); b.disabled = !can || have >= 9; b.style.textAlign = "left"; g.append(b); });
+    shop.append(g);
+  });
+  shop.append(mk("div", "muted", "🎁 เทศกาล/รางวัล: ได้จากหีบรายวัน ซีซัน สมุดสะสม ดิ่งลึก และห้องยอดนิยมประจำสัปดาห์ • ของเดิม 12 ชิ้นซื้อได้ที่ส่วน “ของตกแต่งที่พัก” ด้านล่าง"));
+  body.append(shop);
+  const tp = mk("details"); tp.style.marginTop = "8px"; tp.append(mk("summary", "", `🏆 ห้องยอดนิยมประจำสัปดาห์ • คุณได้ ❤️ ${D.wlikes} สัปดาห์นี้ (รวม ${D.likes})`));
+  tp.addEventListener("toggle", () => { if (tp.open && !tp.dataset.l) { tp.dataset.l = 1; homeTopFill(tp); } }); body.append(tp);
+}
+async function homeTopFill(host) {
+  const box = mk("div"); box.style.cssText = "display:grid;gap:6px;margin-top:6px"; host.append(box); box.append(mk("span", "muted", "กำลังโหลด…"));
+  try {
+    const r = await homeCall({ a: "top" }); box.innerHTML = "";
+    box.append(mk("div", "muted", `สัปดาห์นี้ (เหลือ ${passMs(r.end - serverNow())}) — 10 อันดับแรกของสัปดาห์ได้รางวัลสัปดาห์ถัดไป`));
+    if (!r.cur.length) box.append(mk("span", "muted", "ยังไม่มีใครได้ถูกใจ — ตกแต่งห้องแล้วชวนเพื่อนมาเยี่ยม!"));
+    r.cur.forEach((x, i) => { const row = mk("div"); row.style.cssText = "display:flex;gap:8px;justify-content:space-between"; row.append(mk("span", "", `${["🥇", "🥈", "🥉"][i] || `${i + 1}.`} ${x.name}`), mk("span", "muted", `❤️ ${x.v}`)); row.style.cursor = "pointer"; row.onclick = () => { try { showBio(x.uid, x.name, x.fac); } catch { /* ข้าม */ } }; box.append(row); });
+    if (r.canClaim) box.append(btn("🎁 รับรางวัลห้องยอดนิยมสัปดาห์ที่แล้ว", () => homeGo("claimTop", null, (q) => { toast(`🏆 อันดับ ${q.rank}: ได้ ${mRew(q.rewarded)}`); logLine(`🏆 ห้องยอดนิยมอันดับ ${q.rank}: ${mRew(q.rewarded)}`, "system"); }), "btn primary"));
+  } catch (e) { box.innerHTML = ""; box.append(mk("span", "muted", fnErr(e))); }
+}
+// ---- เยี่ยมห้องในหน้าประวัติผู้เล่น ----
+async function homeVisitFill(uid, name, fac) {
+  const modalOpen = () => !$("bio-modal").classList.contains("hidden");
+  let r; try { r = await homeCall({ a: "visit", uid }); } catch { r = null; }
+  if (!modalOpen()) return true;
+  if (!r || !r.ok || !r.lay || !r.lay.length) return false;   // ยังไม่ได้จัดห้อง / ฟังก์ชันยังไม่ deploy → ใช้ภาพห้องเดิม
+  let h = $("bio-scene"); if (!h) { h = mk("div"); h.id = "bio-scene"; h.style.margin = "8px 0"; $("bio-text").before(h); }
+  h.innerHTML = ""; const sc = mk("div"); sc.innerHTML = baseSceneSvg({ lv: r.lv, deco: {}, zombie: r.fac === "zombie", uid, stations: [], bench: [], layout: r.lay, items: r.items, pal: r.pal });
+  sc.onclick = (e) => { const g = e.target.closest && e.target.closest("[data-n]"); if (g) toast(g.getAttribute("data-n")); }; h.append(sc);
+  if (r.cap) h.append(mk("div", "muted", `💬 “${r.cap}”`));
+  const row = mk("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px"; row.append(mk("span", "muted", `❤️ ${r.likes} (สัปดาห์นี้ ${r.wlikes})`));
+  if (!r.self) { const b = btn(r.liked ? "❤️ ถูกใจแล้ววันนี้" : `🤍 ถูกใจห้องนี้ (เหลือ ${r.left})`, () => { b.disabled = true; homeCall({ a: "like", to: uid }).then((q) => { toast(`❤️ ถูกใจแล้ว${q.rew ? ` • ได้ ${mRew(q.rew)}` : ""}`); try { achBump("like"); } catch { /* ข้าม */ } b.textContent = "❤️ ถูกใจแล้ววันนี้"; }).catch((e) => { toast(fnErr(e)); b.disabled = false; }); }, "btn primary mini"); b.disabled = r.liked || r.left <= 0; row.append(b); }
+  h.append(row); return true;
 }
 
 /* =========================================================
