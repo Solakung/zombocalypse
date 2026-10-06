@@ -25,6 +25,7 @@ const { makeWar } = require("./war");
 const { makeCasino } = require("./casino");
 const { makeSlave } = require("./slave");
 const { makeMutate } = require("./mutate");
+const { makeHc } = require("./hc");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app", storageBucket: "zompocalypse-137a6.firebasestorage.app" });
@@ -181,4 +182,11 @@ const mutSys = makeMutate(admin.database());
 exports.mutAct = onCall(async (req) => {
   try { return await mutSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("mutAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 📡 ภารกิจ HC: ค้นพบธาราทั้งเซิร์ฟเวอร์ครั้งเดียว + ส่งชิ้นส่วน DNA (โหนด hc — อ่านได้เฉพาะ hc/state; coop/hc1 เขียนโดยฟังก์ชันเท่านั้น)
+const hcSys = makeHc(admin.database(), admin);
+exports.hcAct = onCall(async (req) => {
+  try { return await hcSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("hcAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

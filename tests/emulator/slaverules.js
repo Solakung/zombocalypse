@@ -1,0 +1,20 @@
+process.env.FIREBASE_DATABASE_EMULATOR_HOST = "127.0.0.1:9000";
+const fs = require("fs"), assert = require("assert");
+const admin = require("/home/user/zombocalypse/functions/node_modules/firebase-admin");
+const { initializeTestEnvironment } = require("@firebase/rules-unit-testing");
+const NS = "demo-zombo"; if (!admin.apps.length) admin.initializeApp({ projectId: NS, databaseURL: `http://127.0.0.1:9000?ns=${NS}` });
+const adb = admin.database();
+(async () => {
+  const rules = fs.readFileSync("/home/user/zombocalypse/database_rules.json", "utf8");
+  const env = await initializeTestEnvironment({ projectId: NS, database: { host: "127.0.0.1", port: 9000, rules } });
+  await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`, { method: "PUT", headers: { Authorization: "Bearer owner" }, body: rules });
+  await adb.ref().set({ cpub: { t1: { st: "play", seats: [{ u: "u1" }, { u: "u2" }] } }, chand: { t1: { u1: [1, 2, 3], u2: [4, 5, 6] } }, ctable: { t1: { hands: { u1: [1] } } } });
+  const as = (u) => env.authenticatedContext(u, { firebase: { sign_in_provider: "password" } }).database(), anon = env.unauthenticatedContext().database();
+  const ok = async (p) => { try { await p; return true; } catch { return false; } };
+  const rd = (db, path) => ok(db.ref(path).get());
+  assert(await rd(as("u1"), "cpub/t1"), "auth reads cpub"); assert(await rd(as("u1"), "cpub"), "auth lists cpub"); assert(!(await rd(anon, "cpub/t1")), "anon cannot read cpub");
+  assert(await rd(as("u1"), "chand/t1/u1"), "own hand"); assert(!(await rd(as("u1"), "chand/t1/u2")), "other hand denied"); assert(!(await rd(as("u1"), "chand/t1")), "hand list denied"); assert(!(await rd(as("u1"), "chand")), "chand root denied");
+  assert(!(await rd(as("u1"), "ctable/t1")), "ctable denied"); assert(!(await rd(as("u1"), "ctable")), "ctable root denied");
+  for (const w of ["cpub/t1/st", "chand/t1/u1", "ctable/t1/x", "cpub/t9"]) assert(!(await ok(as("u1").ref(w).set("x"))), "write denied " + w);
+  console.log("slave rules OK"); await env.cleanup(); process.exit(0);
+})().catch((e) => { console.error("FAIL", e); process.exit(1); });

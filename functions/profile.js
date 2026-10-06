@@ -29,14 +29,14 @@ const TITLES = [
   ["ti_hunter", "นักล่าค่าหัว", ["ach", "boss", 15]], ["ti_diver", "นักดิ่งลึก", ["ach", "dive", 10]], ["ti_nem", "ผู้ล้มคู่อาฆาต", ["ach", "nemk", 5]], ["ti_radio", "ผู้ถอดรหัส", ["ach", "radio", 1]], ["ti_trader", "พ่อค้าตลาดมืด", ["ach", "mkt", 40]],
   ["ti_pet", "เพื่อนสัตว์โลก", ["ach", "petc", 20]], ["ti_decor", "นักตกแต่ง", ["ach", "home", 5]], ["ti_loved", "ห้องเป็นที่รัก", ["likes", 15]], ["ti_pass", "ผู้พิชิตซีซัน", ["tier", 30]], ["ti_full", "ผู้รอดชีวิตเต็มตัว", ["pct", 100]],
   ["ti_biter", "ผู้กัดไม่ปรานี", ["ach", "bite", 100]], ["ti_slayer", "ผู้ล้างซอมบี้", ["ach", "zwin", 150]], ["ti_craft", "ช่างฝีมือ", ["ach", "craft", 60]], ["ti_enc", "ผู้ผ่านเหตุการณ์", ["ach", "enc", 30]], ["ti_vet", "ผู้อยู่รอดนาน", ["ach", "login", 20]],
-  ["ti_mut_h", "อสูรทมิฬ", ["mut", "h", 4]], ["ti_mut_g", "ยักษ์ศิลาอมตะ", ["mut", "g", 4]], ["ti_mut_s", "ราชันเงา", ["mut", "s", 4]]
+  ["ti_tara", "ผู้ค้นพบธารา", ["hcf"]], ["ti_mut_h", "อสูรทมิฬ", ["mut", "h", 4]], ["ti_mut_g", "ยักษ์ศิลาอมตะ", ["mut", "g", 4]], ["ti_mut_s", "ราชันเงา", ["mut", "s", 4]]
 ];
 const ALL = {};
 AVATARS.forEach(([id, ic, n, req, f]) => { ALL[id] = { id, k: "av", ic, n, req, f }; });
 FRAMES.forEach(([id, n, req]) => { ALL[id] = { id, k: "fr", n, req, f: "" }; });
 BANNERS.forEach(([id, n, req]) => { ALL[id] = { id, k: "bn", n, req, f: "" }; });
 TITLES.forEach(([id, n, req]) => { ALL[id] = { id, k: "ti", n, req, f: "" }; });
-const REQ_TXT = { mut: (r) => `มิวเตชันซอมบี้ถึงขั้น ${4 + r[2]}`, ach: (r, L) => `${L[r[1]] || r[1]} ${r[2]}`, col: (r) => `ครบชุดสะสม "${r[1]}"`, pct: (r) => `ความสมบูรณ์ ${r[1]}%`, tier: (r) => `Season Pass ระดับ ${r[1]}`, likes: (r) => `ถูกใจห้อง ${r[1]} ครั้ง` };
+const REQ_TXT = { hcf: () => "เป็นคนแรกที่ค้นพบธาราที่ศูนย์วิจัย", mut: (r) => `มิวเตชันซอมบี้ถึงขั้น ${4 + r[2]}`, ach: (r, L) => `${L[r[1]] || r[1]} ${r[2]}`, col: (r) => `ครบชุดสะสม "${r[1]}"`, pct: (r) => `ความสมบูรณ์ ${r[1]}%`, tier: (r) => `Season Pass ระดับ ${r[1]}`, likes: (r) => `ถูกใจห้อง ${r[1]} ครั้ง` };
 const ACH_LBL = { srch: "ค้นหา", nsrch: "ค้นหากลางคืน", petc: "รับของสัตว์เลี้ยง", boss: "ชนะบอส", found: "เจอของ", bite: "กัดเหยื่อ", gard: "เก็บเกี่ยว", login: "เข้าเล่น", dive: "ดิ่งลึก", nemk: "ล้มคู่อาฆาต", radio: "ไขวิทยุ", mkt: "ตลาด", home: "จัดห้อง", zwin: "ชนะซอมบี้", craft: "คราฟต์", enc: "เหตุการณ์สุ่ม" };
 
 function makeProfile(db, bucketFn) {
@@ -48,20 +48,20 @@ function makeProfile(db, bucketFn) {
   }
   // ข้อมูลความก้าวหน้าของผู้เล่น (อ่านฝั่งเซิร์ฟเวอร์ ปลอมไม่ได้เท่าที่ ach อนุญาต)
   async function progress(uid, now) {
-    const [aS, cS, pS, hS, mS] = await Promise.all([db.ref(`ach/${uid}/c`).get(), db.ref(`col/${uid}`).get(), db.ref(`pass/${uid}`).get(), db.ref(`home/${uid}/lk`).get(), db.ref(`mut/${uid}`).get()]);
+    const [aS, cS, pS, hS, mS, fS] = await Promise.all([db.ref(`ach/${uid}/c`).get(), db.ref(`col/${uid}`).get(), db.ref(`pass/${uid}`).get(), db.ref(`home/${uid}/lk`).get(), db.ref(`mut/${uid}`).get(), db.ref("hc/state/by").get()]);
     const ach = col(aS.val()), cl = col(col(cS.val()).cl), ps = col(pS.val());
     const done = Object.keys(cl).filter((k) => !/^m\d+$/.test(k)).length, ms = Object.keys(cl).filter((k) => /^m\d+$/.test(k)).map((k) => Number(k.slice(1)));
     const pct = ms.length ? Math.max(...ms) : 0;   // รางวัลความสมบูรณ์ที่รับแล้วสูงสุด (25/50/75/100)
     const SEA_EPOCH = Math.floor(Date.UTC(2026, 8, 7) / 86400000), seaNow = Math.max(0, Math.floor((dayIdx(now) - SEA_EPOCH) / 28));
     const tier = ps.s === seaNow ? Math.min(30, Math.floor((Number(ps.xp) || 0) / 100)) : 0;
-    return { ach, cl, pct, tier, likes: Number(hS.val()) || 0, done, mut: col(mS.val()) };
+    return { ach, cl, pct, tier, likes: Number(hS.val()) || 0, done, mut: col(mS.val()), hcf: fS.val() === uid };
   }
   const unlocked = (it, P, fk) => {
     if (it.f && it.f !== fk) return false;
     const r = it.req;
     switch (r[0]) {
       case "none": return true; case "ach": return (Number(P.ach[r[1]]) || 0) >= r[2]; case "col": return !!P.cl[r[1]];
-      case "pct": return P.pct >= r[1]; case "tier": return P.tier >= r[1]; case "likes": return P.likes >= r[1]; case "mut": return (Number(col(P.mut)[r[1]]) || 0) >= r[2]; default: return false;
+      case "pct": return P.pct >= r[1]; case "tier": return P.tier >= r[1]; case "likes": return P.likes >= r[1]; case "hcf": return !!P.hcf; case "mut": return (Number(col(P.mut)[r[1]]) || 0) >= r[2]; default: return false;
     }
   };
   const reqText = (it) => { const r = it.req; return r[0] === "none" ? "" : REQ_TXT[r[0]](r, ACH_LBL); };
