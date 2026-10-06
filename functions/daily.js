@@ -7,13 +7,13 @@ const { fail, withLock, grantAll, dayIdx, dayEnd, rng } = require("./lib");
 const CRATE = {
   human: {
     c: [["water", 2], ["bandage", 2], ["scrap", 4], ["canned_food", 2], ["energy_drink", 1], ["herb_bundle", 2], ["duct_tape", 2], ["rusty_nails", 3], ["moss", 3], ["cloth_roll", 2]],
-    u: [["medkit", 1], ["army_meal", 1], ["stim_shot", 1], ["steel_plate", 1], ["copper_wire", 2], ["battery_pack", 1], ["antidote", 1], ["gunpowder", 2], ["fuel_can", 1]],
-    r: [["trauma_kit", 1], ["serum", 2], ["chem_catalyst", 2], ["circuit_board", 1], ["survivor_badge", 1], ["gold_watch", 1], ["data_chip", 1]]
+    u: [["medkit", 1], ["army_meal", 1], ["stim_shot", 1], ["steel_plate", 1], ["copper_wire", 2], ["battery_pack", 1], ["antidote", 1], ["gunpowder", 2], ["fuel_can", 1], ["seed_aloe", 2], ["seed_wheat", 2], ["seed_pumpkin", 1]],
+    r: [["trauma_kit", 1], ["serum", 2], ["chem_catalyst", 2], ["circuit_board", 1], ["survivor_badge", 1], ["gold_watch", 1], ["data_chip", 1], ["seed_shroom", 1], ["seed_glow", 1]]
   },
   zombie: {
     c: [["rotten_meat", 3], ["moss", 3], ["water", 2], ["rotten_meat", 4], ["energy_drink", 1]],
-    u: [["serum", 1], ["mutant_gland", 1], ["chem", 3], ["rotten_meat", 7], ["medkit", 1]],
-    r: [["serum", 2], ["mutant_gland", 2], ["chem_catalyst", 2], ["survivor_badge", 1], ["trauma_kit", 1]]
+    u: [["serum", 1], ["mutant_gland", 1], ["chem", 3], ["rotten_meat", 7], ["medkit", 1], ["seed_maggot", 2]],
+    r: [["serum", 2], ["mutant_gland", 2], ["chem_catalyst", 2], ["survivor_badge", 1], ["trauma_kit", 1], ["seed_bloodroot", 1]]
   }
 };
 const crateTier = (day, rand) => { if (day >= 7) return "r"; const rare = 0.03 + 0.03 * day, unc = 0.25 + 0.03 * day, x = rand(); return x < rare ? "r" : x < rare + unc ? "u" : "c"; };
@@ -25,7 +25,7 @@ const HUNT_N = { ruins: 4, mall: 4, hospital: 5, police: 5, forest: 5, factory: 
 const HUNT_NAME = { ruins: "ซากตะกายกำแพง", mall: "ผู้จัดการห้างผีสิง", hospital: "พยาบาลไร้วิญญาณ", police: "สารวัตรมรณะ", forest: "เจ้าป่าเน่าเฟะ", factory: "หัวหน้าไลน์ผลิตซาก", port: "กัปตันจมน้ำ", base: "จ่าฝูงนายทหารซอมบี้", tunnel: "ผู้ครองอุโมงค์มืด", lab: "ตัวอย่างหมายเลขศูนย์" };
 const HUNT_REW = {
   ruins: [["scrap", 6], ["bandage", 2]], mall: [["energy_drink", 2], ["cloth_roll", 2]], hospital: [["medkit", 1], ["antidote", 1]], police: [["gunpowder", 2], ["steel_plate", 1]],
-  forest: [["herb_bundle", 3], ["fish_stew", 1]], factory: [["copper_wire", 2], ["battery_pack", 1]], port: [["fuel_can", 1], ["rope_coil", 2]], base: [["army_meal", 1], ["stim_shot", 1]],
+  forest: [["herb_bundle", 3], ["fish_stew", 1], ["seed_aloe", 1]], factory: [["copper_wire", 2], ["battery_pack", 1]], port: [["fuel_can", 1], ["rope_coil", 2]], base: [["army_meal", 1], ["stim_shot", 1]],
   tunnel: [["circuit_board", 1], ["chem_catalyst", 1]], lab: [["lab_core", 1], ["data_chip", 1]]
 };
 const HUNT_Z = { n: 4, name: "เหยื่อสดตัวเด่น", rew: [["mutant_gland", 1], ["serum", 1], ["rotten_meat", 4]] };

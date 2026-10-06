@@ -38,13 +38,14 @@ const diveCall = (data) => httpsCallable(fns, "diveAct")(data).then((r) => r.dat
 const nemCall = (data) => httpsCallable(fns, "nemAct")(data).then((r) => r.data);   // 👹 ศัตรูคู่อาฆาต (functions/nemesis.js)
 const radioCall = (data) => httpsCallable(fns, "radioAct")(data).then((r) => r.data);   // 📻 ปริศนาวิทยุ (functions/radio.js)
 const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) => r.data);   // 🐪 ขบวนพ่อค้าเร่ (functions/caravan.js)
+const gardenCall = (data) => httpsCallable(fns, "gardenAct")(data).then((r) => r.data);   // 🌱 แปลงปลูก (functions/garden.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0600";
+const APP_VERSION = "2026-10-07.1000";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -7641,7 +7642,7 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
-  try { benchRows(body); expRows(body); petRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+  try { gardenRows(body); benchRows(body); expRows(body); petRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
 }
 
 /* =========================================================
@@ -9127,7 +9128,7 @@ const CK_MILES = [
 const BACK_REW = [["bandage", 3], ["water", 3], ["energy_drink", 2], ["medkit", 1]], BACK_MS = 604800000, WB_MS = 10800000;
 const ckOn = () => T("ck_on", 1) === 1, cbOn = () => T("cb_on", 1) === 1, wbOn = () => T("wb_on", 1) === 1;
 const ckDay = () => coopDay(), ckSeas = () => SEA_EPOCH + seaIdx() * SEA_LEN;
-const mRew = (l) => l.map(([id, q]) => `${ITEMS[id]?.icon || "📦"}${ITEMS[id]?.name || id} ×${q}`).join(" ");
+const mRew = (l) => l.map(([id, q]) => { const sd = seedLbl(id); return sd ? `${sd} ×${q}` : `${ITEMS[id]?.icon || "📦"}${ITEMS[id]?.name || id} ×${q}`; }).join(" ");
 const ckUnclaimed = (C = state.ck) => (C ? CK_MILES.filter((m) => C.n >= m.n && state.ckm?.[m.k]?.s !== C.s) : []);
 const ckToday = () => !!state.ck && state.ck.s === ckSeas() && state.ck.d === ckDay();
 const ckHold = () => !!state.ck && state.ck.s !== ckSeas() && ckUnclaimed().length > 0 && !state.ckSkip;
@@ -9255,6 +9256,66 @@ function mTick() {
     const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
     if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
   }
+}
+
+/* =========================================================
+   49.3) 🌱 แปลงปลูกในที่พัก (functions/garden.js — gardenAct) • ไม่แตะ rules
+   - ลงเมล็ด → รดน้ำ (เวลาเหลือ −25%) / ใส่ปุ๋ย (+1 ผลผลิต กันศัตรูพืช) → เก็บเกี่ยว • ฤดูกาลมีผลกับเวลาโต • มีเหตุการณ์เล็กตอนเก็บ (ศัตรูพืช/กลายพันธุ์)
+   - เมล็ดพันธุ์ ("seed_<พืช>") เป็นตัวนับในแปลง ไม่ใช่ไอเทมในกระเป๋า • ได้จากเมล็ดฟรีรายวัน ซื้อ หรือรางวัล (หีบ พ่อค้าเร่ ดิ่งลึก เหตุการณ์สุ่ม)
+   ========================================================= */
+const SEED_LBL = { herb: "🌿 สมุนไพรข้างรั้ว", mossb: "🪴 บ่อมอส", tomato: "🍅 มะเขือเทศบนดาดฟ้า", wheat: "🌾 ข้าวสาลีป่า", pumpkin: "🎃 ฟักทองหลังบ้านร้าง", aloe: "🪻 ว่านหางจระเข้", shroom: "🍄 เห็ดห้องใต้ดิน", glow: "🌸 ดอกไม้เรืองแสง", fungus: "🍄 เชื้อราซาก", maggot: "🪱 บ่อหนอน", bog: "💧 แอ่งน้ำเน่า", bloodroot: "🩸 รากเลือด" };
+const seedLbl = (id) => (/^seed_/.test(id) && SEED_LBL[id.slice(5)] ? `🌱 เมล็ด${SEED_LBL[id.slice(5)]}` : null);
+const SEASON_TH = ["🌧️ ฤดูฝน", "🦠 ฤดูโรคระบาด", "🌾 ฤดูเก็บเสบียง", "❄️ ฤดูหนาว"];
+async function gardenGo(a, x, ok) {
+  if (state.gardenBusy) return; state.gardenBusy = true;
+  try { const r = await gardenCall({ a, ...(x || {}) }); state.gardenD = r; state.gardenAt = Date.now(); if (ok) ok(r); }
+  catch (e) { toast(fnErr(e)); try { state.gardenD = await gardenCall({ a: "state" }); state.gardenAt = Date.now(); } catch { /* ข้าม */ } }
+  finally { state.gardenBusy = false; try { baseAgain(); } catch { /* ข้าม */ } }
+}
+function gardenRows(body) {
+  const D = state.gardenD, can = baseCan(), box = mk("div"); box.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:8px";
+  box.append(mk("b", "", "🌱 แปลงปลูก"));
+  if (!D || Date.now() - (state.gardenAt || 0) > 120000) { if (!state.gardenBusy && !state.gardenLoad) { state.gardenLoad = true; gardenGo("state").finally(() => { state.gardenLoad = false; }); } }
+  if (!D) { box.append(mk("span", "muted", "กำลังโหลด…")); return body.append(box); }
+  if (D.n < 1) { box.append(mk("span", "muted", "อัปเกรดที่พักเป็นขั้น 1 ก่อนถึงจะเริ่มปลูกได้")); return body.append(box); }
+  const spent = Date.now() - state.gardenAt, zom = state.profile?.faction === "zombie";
+  box.append(mk("span", "muted", `${zom ? "บ่อบ่มเชื้อ" : "สวนลับในค่าย"} ${D.n} แปลง • ${SEASON_TH[D.season]} (ฤดูกาลมีผลกับเวลาโต) • รดน้ำเร็วขึ้น 25% • ปุ๋ย +1 ผลผลิต/กันศัตรูพืช`));
+  if (D.daily) box.append(btn("🎁 รับเมล็ดฟรีวันนี้", () => gardenGo("daily", null, (r) => { toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เมล็ดฟรีรายวัน: ${mRew(r.got)}`, "system"); }), "btn primary mini"));
+  const seeds = Object.entries(D.seeds);
+  const sb = mk("div"); sb.style.cssText = "display:grid;gap:4px"; sb.append(mk("span", "", `🌰 เมล็ดที่มี: ${seeds.length ? seeds.map(([c, q]) => `${D.crops[c]?.i || "🌱"}${D.crops[c]?.n || c} ×${q}`).join(" • ") : "ไม่มี"}`));
+  const shop = Object.entries(D.crops).filter(([, c]) => c.buy);
+  if (shop.length) { const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap"; shop.forEach(([c, v]) => { const b = btn(`ซื้อ ${v.i}${v.n} (${mRew([v.buy])})`, () => gardenGo("buy", { c, q: 1 }, () => toast(`🌱 ซื้อเมล็ด${v.n}แล้ว`)), "btn ghost mini"); b.disabled = !can; row.append(b); }); sb.append(row); }
+  box.append(sb);
+  let ready = 0;
+  D.plots.forEach((pl) => {
+    const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;gap:6px";
+    if (!pl.c) {
+      c.append(mk("b", "", `แปลงที่ ${pl.i} (ว่าง)`));
+      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap";
+      const have = seeds.filter(([k, q]) => q > 0 && D.crops[k]);
+      if (!have.length) c.append(mk("span", "muted", "ไม่มีเมล็ด — รับฟรี/ซื้อ/ได้จากหีบและพ่อค้าเร่"));
+      have.forEach(([k, q]) => { const v = D.crops[k], b = btn(`${v.i} ปลูก${v.n} (${baseHm(v.g)})`, () => gardenGo("plant", { i: pl.i, c: k }), "btn ghost mini"); b.disabled = !can; row.append(b); }); c.append(row);
+    } else {
+      const v = D.crops[pl.c] || { i: "🌱", n: pl.c, y: ["", 0] }, left = Math.max(0, pl.left - spent), done = left <= 0; if (done) ready++;
+      c.append(mk("b", "", `${v.i} ${v.n} (แปลง ${pl.i})${pl.w ? " 💧" : ""}${pl.f ? " 🧪" : ""}`));
+      c.append(worldBar(pl.total ? 1 - left / pl.total : 1, done ? "พร้อมเก็บเกี่ยว!" : `อีก ~${baseHm(left)}`));
+      const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;align-items:center";
+      row.append(mk("span", "muted", `ผลผลิต ${mRew([[v.y[0], v.y[1] + (pl.f ? 1 : 0)]])}`));
+      if (done) { const b = btn("เก็บเกี่ยว", () => gardenGo("harvest", { i: pl.i }, gardenDone), "btn primary mini"); b.disabled = !can; row.append(b); }
+      else {
+        const w = btn(pl.w ? "รดน้ำแล้ว" : `💧 รดน้ำ (${mRew([D.water])})`, () => gardenGo("water", { i: pl.i }), "btn ghost mini"), f = btn(pl.f ? "ใส่ปุ๋ยแล้ว" : `🧪 ปุ๋ย (${mRew([D.fert])})`, () => gardenGo("fert", { i: pl.i }), "btn ghost mini");
+        w.disabled = !can || pl.w; f.disabled = !can || pl.f; row.append(w, f);
+      }
+      c.append(row);
+    }
+    box.append(c);
+  });
+  if (ready > 1) { const b = btn(`เก็บเกี่ยวทั้งหมด (${ready} แปลง)`, () => gardenGo("harvest", { i: "all" }, gardenDone), "btn primary"); b.disabled = !can; box.append(b); }
+  body.append(box);
+}
+function gardenDone(r) {
+  toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เก็บเกี่ยว ${r.cnt} แปลง: ${mRew(r.got)}`, "system");
+  (r.notes || []).forEach((n) => logLine(n, "info")); try { achBump("gard", r.cnt); sfx("boss"); } catch { /* ข้าม */ }
 }
 
 /* =========================================================

@@ -21,15 +21,19 @@ const GOODS = [
   { id: "mutant_gland", q: 2, cost: [["rotten_meat", 10]], stock: 6 },
   { id: "survivor_badge", q: 2, cost: [["gold_watch", 1]], stock: 3, tag: "b" },
   { id: "rabbit_foot", q: 1, cost: [["lab_sample", 3], ["gold_watch", 1]], stock: 1 },
+  { id: "seed_glow", q: 2, cost: [["serum", 1], ["scrap", 8]], stock: 4, f: "h" },
+  { id: "seed_shroom", q: 2, cost: [["army_meal", 1], ["scrap", 6]], stock: 4, f: "h" },
+  { id: "seed_bloodroot", q: 2, cost: [["mutant_gland", 1], ["rotten_meat", 6]], stock: 4, f: "z" },
+  { id: "seed_maggot", q: 3, cost: [["rotten_meat", 8]], stock: 6, f: "z" },
   { id: "night_goggles", q: 1, cost: [["circuit_board", 1], ["battery_pack", 2], ["scrap", 10]], stock: 2 }
 ];
-const GOOD_KEY = (g, i) => `${g.id}${g.tag || ""}`;
+const GOOD_KEY = (g) => `${g.id}${g.tag || ""}`;
 const hash = (s) => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
 const slotOf = (now) => Math.floor(now / SLOT_MS);
 const openNow = (now) => now - slotOf(now) * SLOT_MS < OPEN_MS;
 const zoneOf = (s) => ZONES[hash("cz" + s) % ZONES.length];
 const nameOf = (s) => NAMES[hash("cn" + s) % NAMES.length];
-const stockOf = (s) => { const idx = GOODS.map((_, i) => i).sort((a, b) => hash("cs" + s + a) - hash("cs" + s + b)).slice(0, 5); return idx.map((i) => GOODS[i]); };
+const stockOf = (s, fk) => { const idx = GOODS.map((_, i) => i).filter((i) => !fk || !GOODS[i].f || GOODS[i].f === fk).sort((a, b) => hash("cs" + s + a) - hash("cs" + s + b)).slice(0, 5); return idx.map((i) => GOODS[i]); };
 // ตั้งแต่ ruins..tunnel (ไม่รวม lab/safe) — lab ไม่ใช้เพราะขบวนเดินเข้าไม่ถึง
 
 function makeCaravan(db) {
@@ -42,7 +46,7 @@ function makeCaravan(db) {
       if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
       const s = slotOf(now), z = zoneOf(s), open = openNow(now), here = open && p.zone === z, closeAt = s * SLOT_MS + OPEN_MS, nextAt = (s + 1) * SLOT_MS;
       const sold = (await db.ref(`caravan/${s}/sold`).get()).val() || {}, mine = (await db.ref(`caravan/${s}/u/${uid}`).get()).val() || {};
-      const goods = stockOf(s);
+      const goods = stockOf(s, p.faction === "zombie" ? "z" : "h");
       const view = (extra) => {
         if (!open) return Object.assign({ ok: true, open: false, next: nextAt }, extra || {});
         if (!here) return Object.assign({ ok: true, open: true, here: false, hint: HINT[z], until: closeAt }, extra || {});
