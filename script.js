@@ -46,6 +46,7 @@ const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.dat
 const profCall = (data) => httpsCallable(fns, "profAct")(data).then((r) => r.data);   // 🪪 โปรไฟล์ตกแต่ง/รูปอัปโหลด (functions/profile.js)
 const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.data);   // 🧭 บทเรียนแนะนำการเล่น (functions/learn.js)
 const abilCall = (data) => httpsCallable(fns, "abilAct")(data).then((r) => r.data);   // ⚡ ความสามารถประจำสาย (functions/ability.js)
+const slaveCall = (data) => httpsCallable(fns, "slaveAct")(data).then((r) => r.data);   // 🃏 โต๊ะสลาฟหลายผู้เล่น (functions/slave.js)
 const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
@@ -54,7 +55,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0610";
+const APP_VERSION = "2026-10-08.0700";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -736,6 +737,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "🃏 โต๊ะสลาฟ (ในคาสิโนเถื่อน → แท็บ “สลาฟ”): ผู้เล่น 3–4 คน 3 รอบ ลงไพ่เดี่ยว/คู่/ตอง/โฟร์ ชนิดเดียวกันและสูงกว่ากองกลาง ไพ่หมดก่อน = King หมดท้ายสุด = Slave (รอบถัดไป Slave ให้ไพ่แรงสุด 2 ใบกับ King, King คืน 2 ใบ) • ค่าเข้าโต๊ะรวมเป็นกอง อันดับ 1 ได้ 60% อันดับ 2 ได้ 30% บ่อนเก็บ 10% • ตาละ 30 วินาที ออกกลางเกม/หมดเวลาติดกัน 3 ครั้งเสียค่าเข้า",
     "🎰 คาสิโนเถื่อน: เดินทางไปที่โซน “คาสิโนเถื่อน” (ห้ามต่อสู้ ไม่มีซอมบี้) — แลกของ/เลือด (HP) เป็นชิป เล่นสล็อต รูเล็ต ไฮโล บาคาร่า สูง-ต่ำ แบล็กแจ็ก โป๊กเกอร์ กู้เงินนอกระบบได้ (ไม่คืน = ถูกยึดของ) และเอาชิปแลกของ/ของตกแต่งห้อง เจ้ามือได้เปรียบเสมอ — การพนันไม่เคยทำให้ใครรวย เสียสุทธิได้ไม่เกิน 2000 ชิปต่อวัน",
     "⚡ ความสามารถประจำสาย: แถบใต้ปุ่มค้นหา — มนุษย์ใช้พลังตามอาชีพ (นักสำรวจ ส่องทาง • นักล่า เตรียมซุ่ม • หมอสนาม รักษาตัวเอง/เพื่อนในโซนเดียวกัน • พ่อค้า สายส่งวัสดุ) ซอมบี้ใช้พลังตามสายวิวัฒนาการ (ล่ากลิ่น • ผิวหนา • ซุ่มเงียบ) มีค่าใช้จ่ายเล็กน้อยและคูลดาวน์ • ⚔️ ศึกใหญ่ประจำสัปดาห์: 🎲 ผจญภัย → แท็บ ศึกใหญ่ (แต้มศึกชิงโซนรวมทั้งเซิร์ฟเวอร์ ฝ่ายชนะได้โบนัสและรางวัล)",
     "🧭 แถบโค้ชบนสุดของหน้าเกม: บทเรียนแนะนำการเล่น 12 ขั้น แยกมนุษย์/ซอมบี้ (ต่อจากภารกิจวันแรก) ปุ่ม “ไปเลย” พาเปิดหน้าต่างที่เกี่ยวข้อง ทุกขั้นมีรางวัล ครบแล้วรับของปิดท้าย",
@@ -9934,9 +9936,10 @@ function casinoRender() {
   if (D.capLeft <= 0) hdr.append(mk("div", "casino-debt", "วันนี้เสียถึงเพดานแล้ว — พักก่อนนะ"));
   body.append(hdr);
   if (!D.inZone) body.append(mk("div", "casino-debt", "ต้องอยู่ที่คาสิโนเถื่อนก่อนถึงจะเล่นได้"));
-  const tabs = mk("div", "casino-tabs"); [["game", "🎰 เกม"], ["ex", "💱 แลกชิป"], ["shop", "🛍️ ร้านแลก"], ["more", "⚙️ อื่นๆ"]].forEach(([k, l]) => { const b = btn(l, () => { state.csTab = k; casinoRender(); }, "btn mini " + (state.csTab === k ? "primary" : "ghost")); tabs.append(b); }); body.append(tabs);
+  const tabs = mk("div", "casino-tabs"); [["game", "🎰 เกม"], ["slave", "🃏 สลาฟ"], ["ex", "💱 แลกชิป"], ["shop", "🛍️ ร้านแลก"], ["more", "⚙️ อื่นๆ"]].forEach(([k, l]) => { const b = btn(l, () => { state.csTab = k; casinoRender(); if (k === "slave") slOpen(); }, "btn mini " + (state.csTab === k ? "primary" : "ghost")); tabs.append(b); }); body.append(tabs);
   const T = state.csTab;
-  if (T === "ex") {
+  if (T === "slave") { slRender(body); }
+  else if (T === "ex") {
     const inv = Object.values(state.inv || {}).filter((x) => x && D.rates?.[x.id] && x.qty > 0).sort((a, b) => D.rates[b.id] - D.rates[a.id]), c = mk("div", "world-row");
     c.append(mk("b", "", "💱 แลกของเป็นชิป"), mk("div", "muted", `หักค่าธรรมเนียมบ่อน ${Math.round(D.fee * 100)}% • ราคาเป็นชิปต่อชิ้นแสดงข้างของ`));
     const g = mk("div"); g.style.cssText = "display:grid;gap:6px;margin-top:8px";
@@ -9963,13 +9966,13 @@ function casinoRender() {
     body.append(row(mk("b", "", "📋 กติกาของบ่อน"), mk("div", "muted", `เดิมพันครั้งละ ${D.min}–${D.max} ชิป • เสียสุทธิต่อวันไม่เกิน ${D.cap} ชิป • สล็อตคืน ~${D.slotRtp ?? 95}% ในระยะยาว (เสียเปรียบเสมอ) • เกมที่ค้างนาน 10 นาทีถือว่าแพ้ • ห้ามต่อสู้ในบ่อน`)));
   } else {
     const gs = mk("div", "casino-tabs"); CS_GAMES.forEach(([k, ic, n]) => gs.append(btn(`${ic} ${n}`, () => { state.csGame = k; state.csRes = null; casinoRender(); }, "btn mini " + (state.csGame === k ? "primary" : "ghost")))); body.append(gs);
-    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0, panel = mk("div", "world-row");
-    const betRow = () => { const r = mk("div", "casino-bets"); CS_BETS.forEach((n) => { const b = btn(String(n), () => { state.csBet = n; casinoRender(); }, "btn mini " + (n === bet ? "primary" : "ghost")); b.style.minHeight = "40px"; r.append(b); }); return r; };
+    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, g === "slots" ? (D.slotMax || 100) : D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0, panel = mk("div", "world-row");
+    const betRow = () => { const r = mk("div", "casino-bets"); CS_BETS.filter((n) => g !== "slots" || n <= (D.slotMax || 100)).forEach((n) => { const b = btn(String(n), () => { state.csBet = n; casinoRender(); }, "btn mini " + (n === bet ? "primary" : "ghost")); b.style.minHeight = "40px"; r.append(b); }); return r; };
     const act = (label, data, cls) => { const b = btn(label, () => casinoGo(data), cls || "btn primary"); b.disabled = !can; b.style.cssText = "min-height:48px;margin-top:8px"; return b; };
     const res = state.csRes && state.csRes.game === g ? state.csRes : null, resTxt = (r) => r.ret !== undefined ? `${r.net > 0 ? "🎉 ชนะ" : r.net === 0 ? "เสมอ" : "💸 แพ้"} • ได้คืน ${r.ret} • สุทธิ ${r.net > 0 ? "+" : ""}${r.net}` : "";
     const show = (r) => { if (!r) return null; const d = mk("div", "casino-res"); d.append(mk("div", "casino-res-main", resTxt(r))); return d; };
     if (g === "slots") {
-      panel.append(mk("b", "", "🎰 สล็อต 3 ช่อง"), mk("div", "muted", "ออก 3 ตัวเหมือนกัน ×4 ถึง ×400 • 🍒 ออกก็ได้คืนบางส่วน"), betRow());
+      panel.append(mk("b", "", "🎰 สล็อต 3 ช่อง"), mk("div", "muted", `ออก 3 ตัวเหมือนกัน ×4 ถึง ×400 • 🍒 ออกก็ได้คืนบางส่วน • เดิมพันสูงสุด ${D.slotMax || 100} ชิป`), betRow());
       const reel = mk("div", "casino-reels"); (res ? res.reels : ["❔", "❔", "❔"]).forEach((x) => reel.append(mk("span", "", x))); panel.append(reel, act(`หมุน (${bet} ชิป)`, { a: "slots", bet }), show(res));
     } else if (g === "roulette") {
       const L = state.csRL = state.csRL || []; panel.append(mk("b", "", "🎡 รูเล็ต (0 เจ้ามือกิน)"), mk("div", "muted", "แตะเพื่อวางชิปครั้งละ 1 ก้อน (สูงสุด 8 ช่อง รวมไม่เกิน 500) • เลขตรง ×36"), betRow());
@@ -10003,6 +10006,82 @@ function casinoRender() {
     }
     body.append(panel);
   }
+}
+// ---------- 49.49 โต๊ะสลาฟ (functions/slave.js) — ผู้เล่นหลายคนในคาสิโนเถื่อน ----------
+const SL_R = ["3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A", "2"], SL_S = ["♣", "♦", "♥", "♠"], SL_TURN = 30000;
+const slTxt = (c) => SL_R[c >> 2] + SL_S[c & 3], slRed = (c) => (c & 3) === 1 || (c & 3) === 2;
+const slCombo = (cs) => { if (!cs.length || cs.length > 4) return null; const v = cs[0] >> 2; return cs.every((c) => (c >> 2) === v) ? { n: cs.length, top: Math.max(...cs) } : null; };
+const slSt = () => (state.sl = state.sl || { sel: [], tab: "lobby", list: null, tid: null, pub: null, hand: [], busy: false });
+function slStop() { const S = slSt(); (S.unsub || []).forEach((f) => { try { f(); } catch { /* ข้าม */ } }); S.unsub = []; clearInterval(S.timer); S.timer = null; }
+function slListen(tid) {
+  const S = slSt(); if (S.lt === tid) return; slStop(); S.lt = tid;
+  S.unsub = [onValue(ref(db, "cpub/" + tid), (s) => { S.pub = s.val(); if (!S.pub) { S.tid = null; S.lt = null; slStop(); } S.sel = []; casinoRender(); }, () => {}),
+    onValue(ref(db, `chand/${tid}/${state.uid}`), (s) => { const v = s.val(); S.hand = Array.isArray(v) ? v : v ? Object.values(v) : []; S.sel = S.sel.filter((c) => S.hand.includes(c)); casinoRender(); }, () => {})];
+  S.timer = setInterval(() => { const m = $("casino-modal"); if (!m || m.classList.contains("hidden")) return; slTimerTick(); }, 1000);
+}
+function slTimerTick() {
+  const S = slSt(), p = S.pub; if (!p) return; const el = $("sl-timer");
+  if (el && p.dl && (p.st === "play" || p.st === "xchg")) { const left = Math.max(0, Math.ceil((p.dl - serverNow()) / 1000)); el.textContent = `⏱ ${left} วิ`; el.classList.toggle("sl-late", left <= 8); }
+  if (p.dl && (p.st === "play" || p.st === "xchg") && serverNow() > p.dl + 1500 && !S.busy && serverNow() - (S.lastTick || 0) > 6000) { S.lastTick = serverNow(); slGo({ a: "tick", tid: S.tid }, true); }
+}
+async function slGo(data, quiet) {
+  const S = slSt(); if (S.busy) return; S.busy = true; if (!quiet) casinoRender();
+  try {
+    let r; try { r = await slaveCall(data); } catch (e) { if (e?.code === "functions/aborted") { await new Promise((x) => setTimeout(x, 400)); r = await slaveCall(data); } else throw e; }
+    if (r.tables) { S.list = r; if (r.mine && !S.tid) { S.tid = r.mine; slListen(r.mine); } }
+    if (r.tid) { S.tid = r.tid; S.pub = r.pub; S.hand = r.hand || S.hand; slListen(r.tid); }
+    if (r.none || r.left) { S.tid = null; S.pub = null; S.hand = []; S.lt = null; slStop(); S.list = null; S.needList = true; }
+    if (r.warn) toast(r.warn);
+    if (data.a === "play" || data.a === "give") S.sel = [];
+  } catch (e) { toast(csErr(e)); } finally { S.busy = false; casinoRender(); if (S.needList) { S.needList = false; slGo({ a: "list" }); } }
+}
+function slOpen() { const S = slSt(); if (S.tid) slGo({ a: "state", tid: S.tid }); else slGo({ a: "list" }); }
+function slCard(c, on, fn) { const b = mk("button", "sl-card" + (slRed(c) ? " red" : "") + (on ? " sel" : ""), slTxt(c)); b.type = "button"; if (fn) b.addEventListener("click", fn); else b.disabled = true; return b; }
+function slRender(body) {
+  const S = slSt(), D = state.csD || {}, busy = S.busy, p = S.pub;
+  if (!p || !S.tid) {   // ล็อบบี้
+    const c = mk("div", "world-row"); c.append(mk("b", "", "🃏 โต๊ะสลาฟ (3–4 คน)"), mk("div", "muted", "ไพ่ 52 ใบ 3 รอบ • ลงเดี่ยว/คู่/ตอง/โฟร์ ต้องชนิดเดียวกันและสูงกว่า • ไพ่หมดก่อน = King, หมดท้ายสุด = Slave • รอบถัดไป Slave ให้ไพ่แรงสุด 2 ใบกับ King และ King คืน 2 ใบ • อันดับ 1 ได้ 60% ของกอง อันดับ 2 ได้ 30% บ่อนเก็บ 10% • ชนะสุทธิได้ไม่เกิน 3,000 ชิป/วัน"));
+    const f = state.slForm = state.slForm || { ante: 25, seats: 4 }, row = mk("div", "casino-bets"); [10, 25, 50, 100, 250].forEach((n) => { const b = btn(String(n), () => { f.ante = n; casinoRender(); }, "btn mini " + (f.ante === n ? "primary" : "ghost")); b.style.minHeight = "40px"; row.append(b); });
+    const sr = mk("div", "casino-tabs"); [3, 4].forEach((n) => sr.append(btn(`${n} คน`, () => { f.seats = n; casinoRender(); }, "btn mini " + (f.seats === n ? "primary" : "ghost"))));
+    const cr = btn(`➕ สร้างโต๊ะ (ค่าเข้า ${f.ante} ชิป)`, () => slGo({ a: "create", ante: f.ante, seats: f.seats }), "btn primary"); cr.disabled = busy || !D.inZone; cr.style.cssText = "min-height:48px;margin-top:8px";
+    c.append(mk("div", "muted", "ค่าเข้าโต๊ะ:"), row, sr, cr); body.append(c);
+    const L = mk("div", "world-row"); L.append(mk("b", "", "โต๊ะที่รอผู้เล่น"), btn("🔄 รีเฟรช", () => slGo({ a: "list" }), "btn ghost mini")); const g = mk("div"); g.style.cssText = "display:grid;gap:6px;margin-top:8px";
+    const tb = (S.list && S.list.tables) || []; if (!S.list) g.append(mk("div", "muted", "กำลังโหลด…")); else if (!tb.length) g.append(mk("div", "muted", "ยังไม่มีโต๊ะ — สร้างโต๊ะแล้วรอเพื่อนมานั่ง"));
+    tb.forEach((t) => { const r = mk("div"); r.style.cssText = "display:flex;gap:6px;align-items:center"; const l = mk("span", "", `🪙${t.ante} • ${t.seats.length}/${t.max} • ${t.seats.join(", ")}`); l.style.flex = "1"; const j = btn("นั่ง", () => slGo({ a: "join", tid: t.id }), "btn mini"); j.disabled = busy || !D.inZone; j.style.minHeight = "44px"; r.append(l, j); g.append(r); });
+    L.append(g); body.append(L); return;
+  }
+  const me = state.uid, my = p.seats.find((s) => s.u === me), pot = p.ante * p.seats.length;
+  const head = mk("div", "world-row"); head.append(mk("b", "", `🃏 รอบ ${Math.max(1, p.rd)}/${p.rounds} • ค่าเข้า ${p.ante} • กอง ${pot}`), mk("div", "muted", p.st === "wait" ? "รอผู้เล่น (ต้องมีอย่างน้อย 3 คน)" : p.st === "fin" ? "จบเกม" : p.st === "xchg" ? "แลกไพ่: Slave ให้ไพ่แรงสุด 2 ใบ King เลือก 2 ใบคืน" : "กำลังเล่น")); body.append(head);
+  const seats = mk("div", "sl-seats"); p.seats.forEach((s) => { const d = mk("div", "sl-seat" + (p.turn === s.u && (p.st === "play" || p.st === "xchg") ? " turn" : "") + (s.u === me ? " me" : "")); const tag = s.dq ? "⛔" : s.o ? ["🥇", "🥈", "🥉", "💩"][s.o - 1] || s.o : s.p ? "⏭" : ""; d.append(mk("b", "", `${tag} ${s.n}`), mk("span", "muted", p.st === "wait" ? "" : `ไพ่ ${s.c} • ${s.pt >= 0 ? "+" : ""}${s.pt}`)); seats.append(d); }); body.append(seats);
+  if (p.st === "wait") {
+    const r = mk("div", "casino-tabs"); if (p.ow === me) { const st = btn("▶️ เริ่มเกม", () => slGo({ a: "start", tid: S.tid }), "btn primary"); st.disabled = busy || p.seats.length < 3; st.style.minHeight = "48px"; r.append(st); }
+    const lv = btn("ออก (คืนค่าเข้า)", () => slGo({ a: "leave", tid: S.tid }), "btn ghost"); lv.disabled = busy; lv.style.minHeight = "48px"; r.append(lv); body.append(r); return;
+  }
+  if (p.st === "fin") {
+    const res = p.res || { rank: [] }, c = mk("div", "casino-res"); c.append(mk("div", "casino-res-main", "🏁 ผลสุดท้าย")); res.rank.forEach((x, i) => c.append(mk("div", "", `${["🥇", "🥈", "🥉", "4️⃣"][i]} ${x.n}${x.u === me ? " (คุณ)" : ""} • ${x.pt >= 0 ? "+" : ""}${x.pt} แต้ม • ${x.pay} ชิป (${x.net >= 0 ? "+" : ""}${x.net})${x.dq ? " ⛔หลุด" : ""}`)));
+    c.append(mk("div", "muted", `ค่าบ่อน ${res.fee || 0} ชิป`)); body.append(c);
+    const b = btn("กลับล็อบบี้", () => { S.tid = null; S.pub = null; S.hand = []; S.lt = null; slStop(); S.list = null; slGo({ a: "leave", tid: p.id }); }, "btn primary"); b.style.cssText = "min-height:48px;margin-top:8px"; body.append(b); return;
+  }
+  // กองกลาง
+  const mid = mk("div", "sl-mid"); const lastBy = p.last && p.seats.find((s) => s.u === p.last.u);
+  mid.append(mk("div", "muted", p.last ? `${lastBy ? lastBy.n : "?"} ลง:` : p.st === "xchg" ? "ช่วงแลกไพ่" : "กองว่าง — ผู้เล่นที่ได้เทิร์นเปิดกอง")); const lc = mk("div", "sl-lastcards"); (p.last ? p.last.c : []).forEach((c) => lc.append(slCard(c, false))); mid.append(lc);
+  const tm = mk("div", "sl-timer", "⏱"); tm.id = "sl-timer"; mid.append(tm); body.append(mid); setTimeout(slTimerTick, 0);
+  const myTurn = p.turn === me, king = p.xc && p.xc.k === me, sel = S.sel;
+  if (p.st === "xchg") {
+    if (p.xc) { const x = mk("div", "muted", `${(p.seats.find((s) => s.u === p.xc.s) || {}).n} (Slave) ให้ ${(p.seats.find((s) => s.u === p.xc.k) || {}).n} (King): ${p.xc.g.map(slTxt).join(" ")}`); body.append(x); }
+  }
+  const hr = mk("div", "sl-hand"); S.hand.forEach((c) => hr.append(slCard(c, sel.includes(c), () => { const i = sel.indexOf(c); if (i >= 0) sel.splice(i, 1); else if (sel.length < 4) sel.push(c); casinoRender(); }))); body.append(hr);
+  if (!my || my.dq) { body.append(mk("div", "casino-debt", "คุณหลุดจากโต๊ะนี้แล้ว (ริบค่าเข้า)")); const lb = btn("ปิดโต๊ะ", () => { S.tid = null; S.pub = null; S.lt = null; slStop(); S.list = null; slGo({ a: "list" }); }, "btn ghost"); body.append(lb); return; }
+  const ctl = mk("div", "casino-tabs");
+  if (p.st === "xchg") {
+    if (king) { const b = btn(`ส่งคืน 2 ใบ (${sel.length}/2)`, () => slGo({ a: "give", tid: S.tid, cards: sel.slice() }), "btn primary"); b.disabled = busy || sel.length !== 2; b.style.minHeight = "48px"; ctl.append(b); } else ctl.append(mk("div", "muted", "รอ King เลือกไพ่คืน…"));
+  } else {
+    const cb = slCombo(sel), lcb = p.last && slCombo(p.last.c), okPlay = myTurn && cb && (!lcb || (cb.n === lcb.n && cb.top > lcb.top)) && (!p.first || sel.includes(S.hand[0]));
+    const pl = btn(sel.length ? `ลง ${sel.slice().sort((a, b) => a - b).map(slTxt).join(" ")}` : "ลง", () => slGo({ a: "play", tid: S.tid, cards: sel.slice() }), "btn primary"), ps = btn("ผ่าน", () => slGo({ a: "pass", tid: S.tid }), "btn ghost");
+    pl.disabled = busy || !okPlay; ps.disabled = busy || !myTurn || !p.last; pl.style.minHeight = ps.style.minHeight = "52px"; ctl.append(pl, ps);
+    if (!myTurn) ctl.append(mk("div", "muted", "รอเทิร์น…"));
+  }
+  const lv = btn("ยอมแพ้/ออก (ริบค่าเข้า)", () => { if (confirm("ออกกลางเกมจะเสียค่าเข้าโต๊ะ ยืนยัน?")) slGo({ a: "leave", tid: S.tid }); }, "btn ghost mini"); lv.disabled = busy; ctl.append(lv); body.append(ctl);
 }
 function hubOpen(tab) {
   if (tab) hub2.tab = tab;
