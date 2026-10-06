@@ -1,0 +1,21 @@
+rules_version = '2';
+// กฎ Firebase Storage ของ ZOMBOCALYPSE
+// - raw/{uid}: ผู้เล่นอัปโหลด "ไฟล์ต้นฉบับ" ของตัวเองได้ (ต้องเป็นรูป ≤ 10 MB) อ่านไม่ได้ — ฟังก์ชัน profAct ดึงไปแปลงเป็น webp < 100 KB แล้วลบทิ้ง
+// - profile/{uid}.webp: ผู้ล็อกอินอ่านได้ ไม่มีใครเขียนได้จากฝั่งเกม (เขียนโดยฟังก์ชันด้วย Admin SDK เท่านั้น)
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /raw/{uid} {
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size > 0 && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow read, delete: if false;
+    }
+    match /profile/{file} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
