@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1042";
+const APP_VERSION = "2026-10-06.1044";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2761,21 +2761,13 @@ function attackCooldownLeft() {
   return Math.max(0, ATTACK_COOLDOWN - (serverNow() - last));
 }
 
-// พักแรงต่อเป้าหมายคนเดิม (เฉพาะผู้โจมตีที่เป็นซอมบี้): ตีคนเดิมซ้ำได้ทุก 20 วินาที (ตีคนอื่นได้ตามพักแรงปกติ 10 วินาที) — ต้องตรง rules (attacks: users/{uid}/lastTgt = {u, t} เขียนพร้อมคำสั่งโจมตี)
-const PAIR_COOLDOWN = 20000;
-function pairCooldownLeft(uid) {
-  if (state.profile?.faction !== "zombie") return 0;   // จำกัดเฉพาะซอมบี้ตีเป้าหมายคนเดิม (มนุษย์ตีซอมบี้ซ้ำได้ตามพักแรงปกติ — ไม่งั้นสู้ซอมบี้ไม่ทัน)
-  const t = state.profile?.lastTgt;
-  if (!t || t.u !== uid || typeof t.t !== "number") return 0;
-  return Math.max(0, PAIR_COOLDOWN - (serverNow() - t.t));
-}
 function updateAttackButtons() {
   const left = Math.ceil(attackCooldownLeft() / 1000);
   document.querySelectorAll(".atk-btn").forEach((b) => {
     const pending = state.pending.has(b.dataset.uid);
-    const stunned = effActive("stun"), pl = Math.ceil(pairCooldownLeft(b.dataset.uid) / 1000);
-    b.disabled = left > 0 || pending || stunned || pl > 0;
-    b.textContent = pending ? "รอตอบโต้…" : stunned ? "มึนงง" : pl > 0 ? `พักแรงกับเขา ${pl}` : left > 0 ? `พักแรง ${left}` : "โจมตี";
+    const stunned = effActive("stun");
+    b.disabled = left > 0 || pending || stunned;
+    b.textContent = pending ? "รอตอบโต้…" : stunned ? "มึนงง" : left > 0 ? `พักแรง ${left}` : "โจมตี";
   });
 }
 
@@ -2787,8 +2779,6 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
   const cd = attackCooldownLeft();
   if (cd > 0) return toast(`ร่างกายยังล้าจากการปะทะครั้งก่อน พักอีก ${Math.ceil(cd / 1000)} วินาที`);
-  const pcd = pairCooldownLeft(targetUid);
-  if (pcd > 0) return toast(`เพิ่งปะทะกับ ${targetName} ไป ต้องรออีก ${Math.ceil(pcd / 1000)} วินาทีถึงจะโจมตีเขาซ้ำได้`);
   const skd = state.pvpSkill ? skillDef(state.pvpSkill) : null;
   const skId = skd && skd.kind === "pvp" && skd.type !== "brace" ? state.pvpSkill : null;
   if (skId && !skillReady(skId)) { state.pvpSkill = null; renderPvpSkillBar(); return toast("สกิลยังไม่พร้อม"); }
@@ -2831,7 +2821,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   if (am > 1) state.evoAmbFor = state.profile.lastTravel;
 
   try {
-    await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, [`users/${state.uid}/lastTgt`]: { u: targetUid, t: serverTimestamp() }, ...selfUpdate });
+    await update(ref(db), { [`attacks/${targetUid}/${state.uid}`]: attackData, ...selfUpdate });
     questBump("hit");
 
     if (attackerDied) {
