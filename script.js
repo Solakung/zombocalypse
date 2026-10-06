@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1006";
+const APP_VERSION = "2026-10-06.1042";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -884,6 +884,52 @@ function openGuide() {
 }
 $("btn-guide").addEventListener("click", openGuide);
 $("guide-close").addEventListener("click", () => $("guide-modal").classList.add("hidden"));
+// ---- 📰 มีอะไรใหม่ (changelog.json) — แสดงอัตโนมัติครั้งเดียวต่อรายการที่ยังไม่เคยเห็น (เก็บในเครื่อง) + เปิดดูซ้ำได้จากปุ่มในหน้าวิธีเล่น
+// รูปแบบไฟล์: { entries: [ { id, date, title, items: [ { k: "ใหม่"|"ปรับ"|"แก้", t: "ข้อความสั้น" } ] } ] } เรียงใหม่สุดไว้บน — แก้ไฟล์นี้ไฟล์เดียวเมื่อมีอัปเดต (ไม่ต้องแก้โค้ดเกม)
+const CLOG_KINDS = { "ใหม่": "clog-new", "ปรับ": "clog-chg", "แก้": "clog-fix" };
+async function clogLoad() {
+  try {
+    const r = await fetch(`changelog.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return [];
+    const j = await r.json(); return Array.isArray(j?.entries) ? j.entries.filter((e) => e && typeof e.id === "string" && Array.isArray(e.items)) : [];
+  } catch { return []; }
+}
+function clogRender(entries) {
+  const box = $("clog-body"); box.textContent = "";
+  if (!entries.length) { box.append(mk("p", "muted", "ยังไม่มีบันทึกการอัปเดต")); return; }
+  entries.forEach((e) => {
+    const h = mk("div"); h.style.cssText = "margin:0 0 6px;font-weight:700";
+    h.append(mk("span", "", String(e.title || "อัปเดต")), mk("span", "muted", e.date ? `  ${String(e.date)}` : ""));
+    const ul = mk("ul"); ul.style.cssText = "margin:0 0 14px;padding-left:18px";
+    e.items.forEach((it) => {
+      const li = mk("li"); li.style.margin = "4px 0";
+      const k = typeof it === "string" ? "" : String(it.k || "");
+      if (k) li.append(mk("span", "clog-k " + (CLOG_KINDS[k] || ""), k), document.createTextNode(" "));
+      li.append(document.createTextNode(typeof it === "string" ? it : String(it.t || ""))); ul.append(li);
+    });
+    box.append(h, ul);
+  });
+}
+async function clogOpen(onlyUnseen) {
+  const all = await clogLoad(), seen = LS.get(lsKey("clog"), ""), i = all.findIndex((e) => e.id === seen);
+  const list = onlyUnseen ? (i < 0 ? all.slice(0, 3) : all.slice(0, i)).slice(0, 3) : all.slice(0, 8);   // อัตโนมัติ: เฉพาะที่ยังไม่เคยเห็น (สูงสุด 3 รายการ) • เปิดเอง: ย้อนหลัง 8 รายการ
+  if (onlyUnseen && !list.length) return false;
+  clogRender(list); $("clog-modal").classList.remove("hidden");
+  if (all[0]) LS.set(lsKey("clog"), all[0].id);
+  return true;
+}
+// เรียกหลังเข้าเกม: ผู้เล่นใหม่ (สร้างตัวภายใน 10 นาที) ไม่ต้องเห็น • ถ้ามีหน้าต่างอื่นเปิดอยู่ รอแล้วลองใหม่ (ไม่ทับกัน)
+async function clogAuto(tries = 0) {
+  try {
+    const p = state.profile; if (!p || p.banned) return;
+    if (typeof p.createdAt === "number" && serverNow() - p.createdAt < 600000) { const a = await clogLoad(); if (a[0]) LS.set(lsKey("clog"), a[0].id); return; }
+    if (document.querySelector(".modal:not(.hidden)")) { if (tries < 6) setTimeout(() => clogAuto(tries + 1), 20000); return; }
+    await clogOpen(true);
+  } catch { /* ข้าม */ }
+}
+$("clog-open").addEventListener("click", () => { $("guide-modal").classList.add("hidden"); clogOpen(false); });
+$("clog-close").addEventListener("click", () => $("clog-modal").classList.add("hidden"));
+// ---- /มีอะไรใหม่
+
 
 // เดินเวลาสถานะ: bleed/poison ลด HP (poison ลดพลังงานด้วย) ย้อนหลังได้ไม่เกิน FX_MAX_TICKS รอบ ไม่ทำให้ตาย (เหลือ ≥ 1 HP) / hot ฟื้นรอบละครั้ง / หมดเวลาแล้วลบทิ้ง
 async function effectTick() {
@@ -1189,6 +1235,7 @@ function startGame() {
   if (state.started) return;
   state.started = true;
   state.sessionStart = serverNow() - 30000;
+  setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
     state.stats = s.val(); state.statsLoaded = true;

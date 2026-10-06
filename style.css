@@ -911,3 +911,10 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .sl-card:disabled { opacity: 1; }
 .sl-timer { font-weight: 700; }
 .sl-timer.sl-late { color: #ff6b6b; }
+
+/* 📰 มีอะไรใหม่ (changelog) */
+.clog-k { display: inline-block; min-width: 34px; text-align: center; padding: 1px 6px; border-radius: 8px; font-size: 12px; font-weight: 700; background: rgba(255,255,255,.12); }
+.clog-new { background: rgba(80,200,120,.28); }
+.clog-chg { background: rgba(240,180,60,.28); }
+.clog-fix { background: rgba(110,160,240,.28); }
+#clog-body ul { list-style: none; padding-left: 0 !important; }
