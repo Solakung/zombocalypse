@@ -60,5 +60,45 @@ const rnd = Math.random;
   Math.random = rnd; await db.ref("garden/h/seed/tomato").set(1);
   const rs = await Promise.allSettled([1, 2, 3].map((i) => g.run("h", { a: "plant", i: 4, c: "tomato" }, WINTER + 9e6)));
   assert.strictEqual(rs.filter((x) => x.status === "fulfilled").length, 1);
+  // ===== ⬆️ อัปเกรดสวน (แยกตามฝ่าย / ผสม 4 แบบ)
+  { Math.random = rnd;
+    for (const fac of ["human", "zombie"]) { assert.strictEqual(G.UP[fac].length, G.UP_MAX); let prev = { p: 0, g: 0, b: 0, m: 0 };
+      G.UP[fac].forEach((t, i) => { Object.keys(prev).forEach((k) => assert(t.eff[k] >= prev[k], `${fac} L${i + 1} ${k} must not decrease`)); prev = t.eff; t.cost.forEach(([id, q]) => { assert(q >= 1 && q <= 99, "cost cap " + id); assert(new RegExp("^  " + id + ": \\{", "m").test(sc) && wl.test(id), "cost item exists " + fac + " " + id); }); });
+      assert(G.UP[fac].some((t) => t.eff.p > 0) && G.UP[fac].some((t) => t.eff.b > 0), fac + " mixed: plots + bonus"); }
+    assert(G.UP.human.some((t) => t.eff.g > 0) && G.UP.zombie.some((t) => t.eff.m > 0), "human: faster / zombie: mutation");
+    assert.deepStrictEqual(G.UP.human.at(-1).eff, G.upEff("human", 5)); assert.deepStrictEqual(G.upEff("human", 0), { p: 0, g: 0, b: 0, m: 0 }); assert.deepStrictEqual(G.upEff("zombie", 99), G.UP.zombie[4].eff);
+    // ไม่ใช่ซอมบี้ใช้ต้นทุนของมนุษย์ไม่ได้: ซอมบี้ไม่ใช้ scrap/chem (ค้นแล้วทิ้ง)
+    for (const t of G.UP.zombie) t.cost.forEach(([id]) => assert(!["scrap", "chem"].includes(id), "zombie cost must not need scrap/chem"));
+    await db.ref().update({ "users/u1": { username: "u1", faction: "human", hp: 80, zone: "safe" }, "users/u2": { username: "u2", faction: "zombie", hp: 80, zone: "safe" }, "users/u3": { username: "u3", faction: "human", hp: 80, zone: "ruins" }, "users/u4": { username: "u4", faction: "human", hp: 80, zone: "safe" }, "base/u1": { lv: 1 }, "base/u2": { lv: 1 }, "base/u3": { lv: 1 }, "base/u4": { lv: 0 } });
+    let u = await g.run("u1", { a: "state" }, NOW); assert.strictEqual(u.up.lv, 0); assert.strictEqual(u.n, 4); assert.strictEqual(u.up.next.cost[0][0], "scrap"); assert.strictEqual(u.up.tiers.length, 5);
+    await rej(g.run("u1", { a: "upgrade" }, NOW), "ของไม่พอ"); await rej(g.run("u3", { a: "upgrade" }, NOW), "Safe Zone"); await rej(g.run("u4", { a: "upgrade" }, NOW), "ที่พักขั้น 1");
+    await db.ref("inventory/u1").set({ scrap: { id: "scrap", qty: 99 }, rope_coil: { id: "rope_coil", qty: 1 }, herb_bundle: { id: "herb_bundle", qty: 9 }, chem: { id: "chem", qty: 9 }, steel_plate: { id: "steel_plate", qty: 9 }, battery_pack: { id: "battery_pack", qty: 9 } });
+    u = await g.run("u1", { a: "upgrade" }, NOW); assert.strictEqual(u.lv, 1); assert.strictEqual(u.n, 5, "+1 plot"); assert.strictEqual(u.plots.length, 5); assert.strictEqual((await db.ref("inventory/u1/scrap/qty").get()).val(), 69); assert.strictEqual((await db.ref("garden/u1/u").get()).val(), 1);
+    // ระดับ 2 ต้องใช้ rope_coil 2 (มี 1) → ไม่หักอะไร (คืนของที่หักไปแล้ว)
+    await rej(g.run("u1", { a: "upgrade" }, NOW), "ของไม่พอ"); assert.strictEqual((await db.ref("inventory/u1/scrap/qty").get()).val(), 69, "rollback scrap"); assert.strictEqual((await db.ref("garden/u1/u").get()).val(), 1);
+    await db.ref("inventory/u1/rope_coil").set({ id: "rope_coil", qty: 2 });
+    u = await g.run("u1", { a: "upgrade" }, NOW); assert.strictEqual(u.lv, 2); assert.strictEqual(u.n, 5); assert.strictEqual(u.up.eff.g, 6);
+    // เวลาโตลดลง 6% ตอนปลูกหลังอัปเกรด (ฤดูฝน herb = 45 นาที × 0.7)
+    await db.ref("garden/u1/seed/herb").set(1); u = await g.run("u1", { a: "plant", i: 1, c: "herb" }, NOW); assert.strictEqual(u.plots[0].total, Math.round(45 * MIN * 0.7 * 0.94)); assert.strictEqual(u.crops.herb.g, Math.round(45 * MIN * 0.7 * 0.94));
+    // กดซ้อนพร้อมกัน: ระดับขึ้นแค่ 1 (ระดับ 3 ต้อง scrap 60 + herb 6 + chem 3; ใส่ของพอสำหรับ 2 ครั้ง)
+    await db.ref("inventory/u1").update({ scrap: { id: "scrap", qty: 99 }, herb_bundle: { id: "herb_bundle", qty: 99 }, chem: { id: "chem", qty: 99 } });
+    const rs2 = await Promise.allSettled([1, 2, 3].map(() => g.run("u1", { a: "upgrade" }, NOW))); assert.strictEqual(rs2.filter((x) => x.status === "fulfilled").length, 1, "one upgrade only"); assert.strictEqual((await db.ref("garden/u1/u").get()).val(), 3);
+    assert.strictEqual((await db.ref("inventory/u1/scrap/qty").get()).val(), 99 - 60, "paid once");
+    // ถึงระดับสูงสุด: ระดับ 4 (แปลง +2 รวม 6) และ 5 แล้วอัปต่อไม่ได้
+    await db.ref("inventory/u1").update({ scrap: { id: "scrap", qty: 99 }, steel_plate: { id: "steel_plate", qty: 9 }, battery_pack: { id: "battery_pack", qty: 9 } });
+    u = await g.run("u1", { a: "upgrade" }, NOW + 1000); assert.strictEqual(u.n, 6); await db.ref("inventory/u1/scrap").set({ id: "scrap", qty: 99 }); u = await g.run("u1", { a: "upgrade" }, NOW + 2000); assert.strictEqual(u.lv, 5); assert.strictEqual(u.up.next, null); assert.strictEqual(u.n, 6);
+    await rej(g.run("u1", { a: "upgrade" }, NOW + 3000), "ระดับสูงสุด");
+    // โอกาสได้เพิ่ม +1 ชิ้น (ระดับ 5 = 20%): สุ่มต่ำ → ได้ +1, สุ่มสูง → ไม่ได้ (ใส่ปุ๋ยกันศัตรูพืชไม่ให้ปนผล)
+    const put = async (c) => { await db.ref("garden/u1/p/2").set({ c, t: NOW, e: NOW, w: 0, f: 1 }); };
+    await db.ref("inventory/u1/herb_bundle").set({ id: "herb_bundle", qty: 10 }); await put("herb"); Math.random = () => 0.05; let hv = await g.run("u1", { a: "harvest", i: 2 }, NOW + 5000); assert(hv.got.some(([id, q]) => id === "herb_bundle" && q === 3 + 1 + 1), "fert +1 and upgrade bonus +1: " + JSON.stringify(hv.got));
+    await db.ref("inventory/u1/herb_bundle").set({ id: "herb_bundle", qty: 10 }); await put("herb"); let calls = 0; Math.random = () => (calls++ === 0 ? 0.9 : 0.99); hv = await g.run("u1", { a: "harvest", i: 2 }, NOW + 6000); assert(hv.got.some(([id, q]) => id === "herb_bundle" && q === 4), "no bonus when roll high: " + JSON.stringify(hv.got)); Math.random = rnd;
+    // ซอมบี้: ทางอัปเกรดของตัวเอง ใช้เนื้อเน่า (ไม่ใช่ scrap) และโอกาสกลายพันธุ์เพิ่ม
+    u = await g.run("u2", { a: "state" }, NOW); assert.deepStrictEqual(u.up.next.cost, [["rotten_meat", 30]]); assert.strictEqual(u.up.tiers[0].d, "แปลง +1");
+    await db.ref("inventory/u2").set({ rotten_meat: { id: "rotten_meat", qty: 99 }, water: { id: "water", qty: 9 }, mutant_gland: { id: "mutant_gland", qty: 9 } });
+    u = await g.run("u2", { a: "upgrade" }, NOW); assert.strictEqual(u.n, 5); u = await g.run("u2", { a: "upgrade" }, NOW); assert.strictEqual(u.lv, 2); assert.strictEqual(u.up.eff.b, 15);
+    await db.ref("inventory/u2/rotten_meat").set({ id: "rotten_meat", qty: 99 }); u = await g.run("u2", { a: "upgrade" }, NOW); assert.strictEqual(u.up.eff.m, 4); assert.strictEqual((await db.ref("inventory/u2/mutant_gland/qty").get()).val(), 8);
+    // ซอมบี้กลายพันธุ์ที่ระดับ 3: เกณฑ์ MUTATE 8% + 4% = 12% → สุ่ม 0.10 ได้ของแถม (ระดับ 0 จะไม่ได้)
+    await db.ref("garden/u2/p/1").set({ c: "fungus", t: NOW, e: NOW, w: 0, f: 1 }); calls = 0; Math.random = () => (calls++ === 0 ? 0.99 : 0.10); hv = await g.run("u2", { a: "harvest", i: 1 }, NOW + 7000); assert(hv.notes.some((n) => n.includes("กลายพันธุ์")), "mutation at 10% roll with upgrade: " + JSON.stringify(hv)); Math.random = rnd;
+    await db.ref("garden/u2/p/1").set({ c: "fungus", t: NOW, e: NOW, w: 0, f: 1 }); await db.ref("garden/u2/u").set(0); calls = 0; Math.random = () => (calls++ === 0 ? 0.99 : 0.10); hv = await g.run("u2", { a: "harvest", i: 1 }, NOW + 8000); assert(!hv.notes.some((n) => n.includes("กลายพันธุ์")), "no mutation at 10% roll without upgrade"); Math.random = rnd; }
   console.log("locks:", JSON.stringify((await db.ref("locks").get()).val())); console.log("GARDEN ALL OK"); process.exit(0);
 })().catch((e) => { Math.random = rnd; console.error("FAIL", e); process.exit(1); });

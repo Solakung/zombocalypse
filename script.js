@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1044";
+const APP_VERSION = "2026-10-06.1052";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -9643,8 +9643,27 @@ function gardenRows(body) {
   if (shop.length) { const row = mk("div"); row.style.cssText = "display:grid;gap:6px;margin-top:8px"; shop.forEach(([k, v]) => { const b = btn(`ซื้อ ${v.i}${v.n} (${mRew([v.buy])})`, () => gardenGo("buy", { c: k, q: 1 }, () => toast(`🌱 ซื้อเมล็ด${v.n}แล้ว`)), "btn ghost"); b.disabled = !can; row.append(b); }); sb.append(row); }
   sb.open = !!state.gardenShop; sb.addEventListener("toggle", () => { state.gardenShop = sb.open; });
   box.append(sb);
+  try { gardenUpRows(box, D); } catch { /* ข้าม */ }
   body.append(box);
 }
+// ---- ⬆️ อัปเกรดสวน (functions/garden.js `upgrade`; ระดับ 1–5 แยกตามฝ่าย — ข้อมูลทั้งหมดมากับ state.gardenD.up)
+function gardenUpRows(box, D) {
+  const U = D?.up; if (!U) return;
+  const d = mk("details"), eff = U.eff || {}, parts = [];
+  if (eff.p) parts.push(`แปลง +${eff.p}`); if (eff.g) parts.push(`เวลาโต −${eff.g}%`); if (eff.b) parts.push(`โอกาสได้ผลผลิต +1 ชิ้น ${eff.b}%`); if (eff.m) parts.push(`กลายพันธุ์ +${eff.m}%`);
+  d.append(mk("summary", "", `⬆️ อัปเกรดสวน ระดับ ${U.lv}/${U.max}${parts.length ? " • " + parts.join(" • ") : ""}`));
+  const wrap = mk("div"); wrap.style.cssText = "display:grid;gap:6px;margin-top:8px";
+  U.tiers.forEach((t, i) => wrap.append(mk("span", t.done ? "" : "muted", `${t.done ? "✅" : `${i + 1}.`} ${t.n} — ${t.d}`)));
+  if (U.next) {
+    const have = (id) => state.inv?.[id]?.qty || 0, ok = U.next.cost.every(([id, q]) => have(id) >= q);
+    wrap.append(mk("span", "", `ระดับ ${U.lv + 1}: ${U.next.n} — ${U.next.d}`), mk("span", ok ? "" : "muted", "ต้องใช้ " + U.next.cost.map(([id, q]) => `${ITEMS[id]?.icon || ""}${ITEMS[id]?.name || id} ${Math.min(have(id), 999)}/${q}`).join(" • ")));
+    const b = btn(`⬆️ อัปเกรดเป็นระดับ ${U.lv + 1}`, () => gardenGo("upgrade", null, (r) => { toast(`⬆️ อัปเกรดสวนแล้ว: ${r.upgraded}`); logLine(`⬆️ คุณอัปเกรดสวนเป็นระดับ ${r.lv}: ${r.upgraded}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }), "btn primary");
+    b.disabled = !baseCan() || !ok; wrap.append(b);
+  } else wrap.append(mk("span", "", "🏆 สวนอัปเกรดถึงระดับสูงสุดแล้ว"));
+  d.append(wrap); d.open = !!state.gardenUp; d.addEventListener("toggle", () => { state.gardenUp = d.open; });
+  box.append(d);
+}
+// ---- /อัปเกรดสวน
 function gardenDone(r) {
   toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เก็บเกี่ยว ${r.cnt} แปลง: ${mRew(r.got)}`, "system");
   (r.notes || []).forEach((n) => logLine(n, "info")); try { achBump("gard", r.cnt); sfx("boss"); } catch { /* ข้าม */ }
