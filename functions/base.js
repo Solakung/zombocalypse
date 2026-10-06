@@ -1,7 +1,5 @@
 // ที่พัก (🏠): สถานีตั้งเวลา / โต๊ะงาน / อัปเกรด / ของตกแต่ง — ย้ายตรรกะมาจาก database_rules.json (base/{uid}, baseTx/{uid} และกิ่ง baseTx ของ inventory)
 // ค่าคงที่ทุกตัวต้องตรงกับ script.js (BASE_P, BASE_CAP, BASE_UP, BENCH, DECO)
-const { HttpsError } = require("firebase-functions/v2/https");
-
 const BASE_P = { w: 7200000, m: 10800000, t: 14400000 };   // เวลาต่อ 1 ชิ้น (ms)
 const BASE_CAP = { w: 4, m: 3, t: 3 };                      // เพดานสะสม
 const BASE_UP = [15, 40, 90];                               // ค่าอัปเกรดระดับ 1-3
@@ -15,36 +13,7 @@ const BENCH = {                                             // r: [วัตถ�
 };
 const DECO_COST = { d0: 10, d1: 10, d2: 15, d3: 15, d4: 20, d5: 25, d6: 30, d7: 40, d8: 50, d9: 60, d10: 80, d11: 100 };
 
-const fail = (code, msg) => { throw new HttpsError(code, msg); };
-
-// ล็อกต่อผู้เล่น: กันกดซ้อน/ยิงฟังก์ชันพร้อมกัน (โหนด locks ไม่มีในไฟล์ rules → ฝั่งไคลเอนต์เข้าไม่ได้)
-async function withLock(db, uid, now, fn) {
-  const ref = db.ref(`locks/${uid}`);
-  const res = await ref.transaction((cur) => (cur && cur.busy && now - cur.busy < 10000 ? undefined : { busy: now }));
-  if (!res.committed) fail("aborted", "กำลังประมวลผลอยู่ ลองใหม่อีกครั้ง");
-  try { return await fn(); } finally { await ref.remove().catch(() => {}); }
-}
-
-async function takeItem(db, uid, id, qty) {
-  let ok = false;
-  const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
-    ok = false;
-    if (cur === null) return cur;   // รอบแรกของ transaction ยังไม่มีค่าในแคช → ให้เซิร์ฟเวอร์ส่งค่าจริงมาแล้วรันซ้ำ (อย่า abort)
-    if (cur.id !== id || !(cur.qty >= qty)) return undefined;
-    ok = true;
-    return cur.qty - qty > 0 ? { ...cur, qty: cur.qty - qty } : null;
-  });
-  return res.committed && ok;
-}
-// ช่องชนิดเดียวกันเก็บต่อกัน (เหมือนฝั่งเกมเดิม): มีของชนิดเดียวกันอยู่แล้ว → บวก qty / ไม่มี → สร้างช่องใหม่
-// ถ้าช่องนั้นมีของคนละชนิดอยู่ (ข้อมูลผิดปกติ) จะไม่เขียนทับ — ยกเลิกทั้งคำสั่งก่อนแตะข้อมูลอื่น
-async function addItem(db, uid, id, qty) {
-  const res = await db.ref(`inventory/${uid}/${id}`).transaction((cur) => {
-    if (!cur) return { id, qty };
-    return cur.id === id && cur.qty > 0 ? { ...cur, qty: cur.qty + qty } : undefined;
-  });
-  if (!res.committed) fail("failed-precondition", "ช่องกระเป๋านี้ใช้ไม่ได้");
-}
+const { fail, withLock, takeItem, addItem } = require("./lib");
 
 function makeBase(db) {
   async function run(uid, data, now = Date.now()) {
