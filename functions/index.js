@@ -23,6 +23,7 @@ const { makeLearn } = require("./learn");
 const { makeAbility } = require("./ability");
 const { makeWar } = require("./war");
 const { makeCasino } = require("./casino");
+const { makeSlave } = require("./slave");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app", storageBucket: "zompocalypse-137a6.firebasestorage.app" });
@@ -165,4 +166,11 @@ const casinoSys = makeCasino(admin.database());
 exports.casinoAct = onCall(async (req) => {
   try { return await casinoSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("casinoAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🃏 โต๊ะสลาฟหลายผู้เล่นในคาสิโนเถื่อน (โหนด ctable/cpub/chand — เขียนโดย Admin SDK เท่านั้น)
+const slaveSys = makeSlave(admin.database());
+exports.slaveAct = onCall(async (req) => {
+  try { return await slaveSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("slaveAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const { fail, withLock, takeItem, grantAll, dayIdx, dayEnd } = require("./lib");
 
 const ri = (n) => crypto.randomInt(n);
-const MIN_BET = 5, MAX_BET = 500, LOSS_CAP = 2000, FEE = 0.10, HP_RATE = 3, HP_DAY = 60, LOAN_MAX = 500, LOAN_INT = 0.25, LOAN_MS = 48 * 3600000, NOLOAN_MS = 7 * 86400000, STALE_MS = 10 * 60000;
+const MIN_BET = 5, MAX_BET = 500, SLOT_MAX = 100, LOSS_CAP = 2000, FEE = 0.10, HP_RATE = 3, HP_DAY = 60, LOAN_MAX = 500, LOAN_INT = 0.25, LOAN_MS = 48 * 3600000, NOLOAN_MS = 7 * 86400000, STALE_MS = 10 * 60000;
 // มูลค่าของเป็นชิป (ต่อชิ้น) — ของที่ไม่อยู่ในตารางแลกไม่ได้
 const VAL = { scrap: 2, water: 3, canned_food: 5, bread: 4, fruit: 4, bandage: 6, moss: 3, energy_drink: 8, medkit: 28, antidote: 14, serum: 30, trauma_kit: 55, army_meal: 20, stim_shot: 24, chem: 5, rotten_meat: 3, steel_plate: 22, copper_wire: 7, battery_pack: 12, circuit_board: 30, gunpowder: 9, duct_tape: 5, rusty_nails: 3, cloth_roll: 5, rope_coil: 5, herb_bundle: 6, fuel_can: 10, leather_scrap: 6, chem_catalyst: 20, mutant_gland: 28, lab_sample: 22, data_chip: 60, gold_watch: 120, survivor_badge: 70, old_photo: 40, lab_core: 150, boss_trophy: 200, fish: 6, golden_fish: 40 };
 // ร้านแลกของ: [รหัส, ราคาชิป, โควตาต่อวัน, ฝ่าย]  (deco_/theme_ ของตกแต่งเฉพาะบ่อน)
@@ -79,7 +79,7 @@ function makeCasino(db) {
       const [pS, cS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`casino/${uid}`).get()]);
       const p = pS.val(); if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
       const gm = p.role === "gm" || p.role === "owner", c = col(cS.val()), di = dayIdx(now);
-      const st = { chips: Number(c.chips) || 0, debt: c.debt || null, lock: Number(c.lock) || 0, nl: Number(c.nl) || 0, day: c.day && c.day.d === di ? { d: di, loss: Number(c.day.loss) || 0, hp: Number(c.day.hp) || 0, buy: col(c.day.buy) } : { d: di, loss: 0, hp: 0, buy: {} }, g: col(c.g) };
+      const st = { chips: Number(c.chips) || 0, debt: c.debt || null, lock: Number(c.lock) || 0, nl: Number(c.nl) || 0, day: c.day && c.day.d === di ? { ...col(c.day), d: di, loss: Number(c.day.loss) || 0, hp: Number(c.day.hp) || 0, buy: col(c.day.buy) } : { d: di, loss: 0, hp: 0, buy: {} }, g: col(c.g) };
       const upd = {}; let note = [];
       // ----- ครบกำหนดหนี้ → ยึดของ + ซ้อมเตือน
       if (st.debt && st.debt.due < now) {
@@ -101,7 +101,7 @@ function makeCasino(db) {
         ok: true, inZone, chips: st.chips, debt: st.debt, lockLeft, capLeft, lossToday: st.day.loss, cap: LOSS_CAP, hpToday: st.day.hp, hpMax: HP_DAY, noLoan: Math.max(0, st.nl - now), min: MIN_BET, max: MAX_BET, loanMax: LOAN_MAX, fee: FEE, hpRate: HP_RATE,
         games: { bj: pubG("bj"), hl: pubG("hl"), vp: pubG("vp") }, note, warn: "การพนันไม่เคยทำให้ใครรวย", end: dayEnd(now)
       }, extra || {});
-      if (a === "state") { if (Object.keys(upd).length) await save(); return view({ rates: VAL, shop: SHOP.map(([id, price, day]) => ({ id, price, day, left: Math.max(0, day - (Number(st.day.buy[id]) || 0)) })), slotRtp: Math.round(slotRtp() * 1000) / 10 }); }
+      if (a === "state") { if (Object.keys(upd).length) await save(); return view({ rates: VAL, shop: SHOP.map(([id, price, day]) => ({ id, price, day, left: Math.max(0, day - (Number(st.day.buy[id]) || 0)) })), slotRtp: Math.round(slotRtp() * 1000) / 10, slotMax: SLOT_MAX }); }
       if (a === "gmChips") {
         if (!gm) fail("permission-denied", "เฉพาะ GM/Owner"); const to = String(data.to || uid), n = Math.trunc(Number(data.n)); if (!Number.isFinite(n) || Math.abs(n) > 1e6) fail("invalid-argument", "จำนวนไม่ถูกต้อง");
         const r = await db.ref(`casino/${to}/chips`).transaction((x) => Math.max(0, (Number(x) || 0) + n)); if (to === uid) st.chips = r.snapshot.val(); if (Object.keys(upd).length) await save(); return view({ gm: true, to, chips2: r.snapshot.val() });
@@ -139,7 +139,7 @@ function makeCasino(db) {
       // ============ เกม ============
       needPlay();
       if (a === "slots") {
-        const b = bet(data.bet), r = [STRIP[ri(20)], STRIP[ri(20)], STRIP[ri(20)]], m = slotPay(r), ret = Math.floor(b * m); st.chips += ret - b; settle(b, ret); await save(); return view({ game: "slots", reels: r, mult: m, bet: b, ret, net: ret - b });
+        const b = bet(data.bet); if (b > SLOT_MAX) fail("invalid-argument", `สล็อตเดิมพันได้สูงสุด ${SLOT_MAX} ชิป`); const r = [STRIP[ri(20)], STRIP[ri(20)], STRIP[ri(20)]], m = slotPay(r), ret = Math.floor(b * m); st.chips += ret - b; settle(b, ret); await save(); return view({ game: "slots", reels: r, mult: m, bet: b, ret, net: ret - b });
       }
       if (a === "roulette") {
         const list = Array.isArray(data.bets) ? data.bets.slice(0, 8) : []; if (!list.length) fail("invalid-argument", "ยังไม่ได้วางเดิมพัน"); let total = 0; const bs = list.map((x) => { const t = String(x.t), n = Number(x.n), amt = Math.trunc(Number(x.a)); if (!R_TYPES.includes(t) || !(amt >= MIN_BET) || (t === "num" && !(Number.isInteger(n) && n >= 0 && n <= 36))) fail("invalid-argument", "เดิมพันไม่ถูกต้อง"); total += amt; return { t, n, a: amt }; });
@@ -187,4 +187,4 @@ function makeCasino(db) {
   }
   return { run };
 }
-module.exports = { makeCasino, VAL, SHOP, SLOT3, slotRtp, slotPay, STRIP, roulettePay, sicPay, baccarat, baccPay, vpEval, VP_PAY, hiloMult, bjVal, deck, REDS, MIN_BET, MAX_BET, LOSS_CAP, FEE };
+module.exports = { makeCasino, VAL, SHOP, SLOT3, slotRtp, slotPay, STRIP, roulettePay, sicPay, baccarat, baccPay, vpEval, VP_PAY, hiloMult, bjVal, deck, REDS, MIN_BET, MAX_BET, SLOT_MAX, LOSS_CAP, FEE };

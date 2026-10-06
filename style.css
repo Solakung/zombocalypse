@@ -897,3 +897,17 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .casino-res { margin-top: 10px; padding: 10px; border-radius: 10px; background: rgba(176, 32, 74, .12); border: 1px solid #7a2b3f; }
 .casino-res-n { font-size: 18px; font-weight: 700; margin: 8px 0; word-break: break-word; }
 .casino-res-main { font-weight: 700; }
+
+/* ---- โต๊ะสลาฟ ---- */
+.sl-seats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 6px; margin: 8px 0; }
+.sl-seat { background: rgba(255, 255, 255, .05); border: 1px solid rgba(255, 255, 255, .12); border-radius: 10px; padding: 6px 8px; display: grid; gap: 2px; font-size: 13px; }
+.sl-seat.turn { border-color: #e6a24c; box-shadow: 0 0 0 2px rgba(230, 162, 76, .35); }
+.sl-seat.me b::after { content: " (คุณ)"; font-weight: 400; opacity: .7; }
+.sl-mid { text-align: center; margin: 8px 0; }
+.sl-lastcards, .sl-hand { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 6px 0; }
+.sl-card { min-width: 44px; min-height: 60px; padding: 4px 6px; border-radius: 8px; border: 2px solid #8a8a8a; background: #f4f1ea; color: #111; font-size: 18px; font-weight: 700; }
+.sl-card.red { color: #c0243a; }
+.sl-card.sel { transform: translateY(-8px); border-color: #e6a24c; box-shadow: 0 4px 10px rgba(230, 162, 76, .5); }
+.sl-card:disabled { opacity: 1; }
+.sl-timer { font-weight: 700; }
+.sl-timer.sl-late { color: #ff6b6b; }
