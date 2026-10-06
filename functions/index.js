@@ -27,6 +27,7 @@ const { makeSlave } = require("./slave");
 const { makeMutate } = require("./mutate");
 const { makeHc } = require("./hc");
 const { makeZwar } = require("./zwar");
+const { makeForge } = require("./forge");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app", storageBucket: "zompocalypse-137a6.firebasestorage.app" });
@@ -197,4 +198,11 @@ const zwarSys = makeZwar(admin.database(), admin);
 exports.zwAct = onCall(async (req) => {
   try { return await zwarSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("zwAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🔨 คราฟต์อาวุธระดับต้น–กลาง (สูตรฝั่งเซิร์ฟเวอร์ — สร้างช่องอาวุธในกระเป๋าด้วย Admin SDK)
+const forgeSys = makeForge(admin.database());
+exports.forgeAct = onCall(async (req) => {
+  try { return await forgeSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("forgeAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

@@ -51,6 +51,7 @@ const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r
 const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data);   // 🧬 มิวเตชันซอมบี้ขั้น 5–8 (functions/mutate.js)
 const hcCall = (data) => httpsCallable(fns, "hcAct")(data).then((r) => r.data);   // 📡 ภารกิจ HC: ค้นพบธารา/ส่ง DNA (functions/hc.js)
 const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data);   // ⚔️ แต้มศึกชิงโซนรายสัปดาห์ (functions/zwar.js)
+const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.data);   // 🔨 คราฟต์อาวุธระดับต้น–กลาง (functions/forge.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -58,7 +59,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0635";
+const APP_VERSION = "2026-10-06.0640";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -382,7 +383,15 @@ const RECIPES = {
   toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 },
   exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 },
   fish_grill: { need: { fish: 1, scrap: 1 }, out: "fish_grill", qty: 1 },
-  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 }
+  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 },
+  // อาวุธระดับต้น–กลาง: คราฟต์ผ่านฟังก์ชัน forgeAct (srv) — สูตรต้องตรง functions/forge.js (ไม่เกี่ยวกับ rules)
+  wooden_bat: { need: { scrap: 8 }, out: "wooden_bat", qty: 1, srv: 1 },
+  pocket_knife: { need: { scrap: 6, leather_scrap: 1 }, out: "pocket_knife", qty: 1, srv: 1 },
+  crowbar: { need: { scrap: 10, duct_tape: 1 }, out: "crowbar", qty: 1, srv: 1 },
+  knife: { need: { scrap: 8, leather_scrap: 1, duct_tape: 1 }, out: "knife", qty: 1, srv: 1 },
+  spiked_bat: { need: { scrap: 8, rusty_nails: 3 }, out: "spiked_bat", qty: 1, srv: 1 },
+  fire_axe: { need: { scrap: 14, steel_plate: 1 }, out: "fire_axe", qty: 1, srv: 1 },
+  crossbow: { need: { scrap: 12, rope_coil: 2, steel_plate: 1 }, out: "crossbow", qty: 1, srv: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -1571,6 +1580,16 @@ async function craft(id) {
   if (state.zone !== "safe") { toast("ต้องคราฟต์ที่ Safe Zone"); return false; }
   for (const [m, n] of Object.entries(r.need)) if ((state.inv[m]?.qty || 0) < n) { toast("วัตถุดิบไม่พอ"); return false; }
   let okc = false;
+  if (r.srv) {   // อาวุธ: ฟังก์ชัน forgeAct หักวัตถุดิบ + สร้างช่องอาวุธให้เอง (ติดล็อกให้ลองใหม่ 1 ครั้ง)
+    state.busy = true;
+    try {
+      try { await forgeCall({ a: "craft", id }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); await forgeCall({ a: "craft", id }); }
+      questBump("craft"); okc = true;
+      if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+    } catch (e) { toast(errMsg(e)); }
+    finally { state.busy = false; }
+    return okc;
+  }
   state.busy = true;
   const u = {};
   for (const [m, n] of Object.entries(r.need)) {
