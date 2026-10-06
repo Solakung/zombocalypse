@@ -44,7 +44,7 @@ const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) =>
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0300";
+const APP_VERSION = "2026-10-07.0600";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -613,7 +613,8 @@ function notifyTab(t) {
   if (p && !p.classList.contains("tab-on")) document.querySelector(`.tabbar [data-tab="${t}"]`)?.classList.add("unread");
 }
 function notifyChat() { if (!document.querySelector(".layout .panel.chat").classList.contains("tab-on")) document.querySelector('.tabbar [data-tab="chat"]').classList.add("unread"); }
-document.querySelectorAll(".tabbar button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+document.querySelectorAll(".tabbar button[data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+$("tab-hub2")?.addEventListener("click", () => hubOpen());   // แท็บ "กิจกรรม" เปิดแผ่นศูนย์กิจกรรม (ไม่ใช่แผงในหน้า)
 setTab("chat");
 
 /* =========================================================
@@ -719,9 +720,9 @@ function openGuide() {
   ]);
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
-    "🎲 ปุ่ม “🎲” บนแถบบน: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
-    "🎁 ปุ่ม “🎁” บนแถบบน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
-    "🎟️ ปุ่ม “🎟️ n” บนแถบบน: ภารกิจซีซัน — ภารกิจรายวัน 3 ข้อ/รายสัปดาห์ 4 ข้อ ได้ XP สะสมปลดรางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน) กดรับเองก่อนซีซันจบ",
+    "🎲 🎲 ผจญภัย: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
+    "🎁 🎁 รายวัน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
+    "🎟️ แท็บ “🎲 กิจกรรม” (แถบล่างบนมือถือ / ปุ่มบนแถบบนบนคอม) → 🎟️ ซีซัน: ภารกิจซีซัน — ภารกิจรายวัน 3 ข้อ/รายสัปดาห์ 4 ข้อ ได้ XP สะสมปลดรางวัล 30 ระดับ รีเซ็ตทุกซีซัน (28 วัน) กดรับเองก่อนซีซันจบ",
     "🎭 เหตุการณ์สุ่ม: ระหว่างค้นหานอก Safe Zone มีโอกาสเจอสถานการณ์ให้เลือกทาง (บางทางต้องใช้ของ) ผลลัพธ์สุ่ม อาจได้ของหรือเสีย HP แต่จะไม่ทำให้ตาย",
     "🔥 เข้าเล่นวันละครั้งนับเป็นเช็กอิน (ปุ่มภารกิจ) — สะสม 3/5/7 วันต่อสัปดาห์ได้รางวัลเพิ่ม",
     "🔥 ปุ่ม “🔥 n/28” บนแถบบน: ปฏิทินเช็กอินประจำซีซัน (28 วัน) นับสะสมวันที่เข้าเล่น ไม่ต้องติดกัน มีรางวัลวันที่ 3/7/14/21/28 กดรับเอง — รางวัลซีซันเก่ารับได้จนกว่าจะเริ่มนับซีซันใหม่",
@@ -9204,18 +9205,9 @@ function mDigest() {
 }
 
 // ---- หน้าต่าง กลับมา/เช็กอิน ----
-function mwOpen() {
-  if (!$("mw-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "mw-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
-    const box = mk("div", "modal-box"); box.style.maxWidth = "460px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
-    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🔥 เช็กอิน & ยินดีต้อนรับกลับ"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const body = mk("div"); body.id = "mw-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
-    box.append(head, body); m.append(box); document.body.append(m);
-  }
-  $("mw-modal").classList.remove("hidden"); mwRender();
-}
+function mwOpen() { hubOpen("ck"); }
 function mwRender() {
-  const body = $("mw-body"); if (!body || $("mw-modal").classList.contains("hidden")) return; body.innerHTML = "";
+  const body = $("mw-body"); if (!body || !hubOn("ck")) return; body.innerHTML = "";
   const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
   const B = state.back;
   if (cbPending()) {
@@ -9247,6 +9239,7 @@ function mwRender() {
 function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
   try { passTick(); } catch { /* ข้าม */ }
+  try { hubBtn(); } catch { /* ข้าม */ }
   try { actTick(); } catch { /* ข้าม */ }
   try { advTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
@@ -9262,6 +9255,47 @@ function mTick() {
     const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
     if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
   }
+}
+
+/* =========================================================
+   49.4) 🎲 ศูนย์กิจกรรม — หน้าต่างเดียวรวม 🎟️ ซีซัน • 🎁 รายวัน • 🎲 ผจญภัย • 🔥 เช็กอิน
+   มือถือก่อน: เป็นแผ่นเลื่อนขึ้นจากด้านล่าง เปิดจากแท็บ "กิจกรรม" ในแถบล่าง (คอม: ปุ่มบนแถบบน) • จุดแจ้งเตือนรวมจุดเดียว
+   ตรรกะของแต่ละแท็บยังอยู่ที่ passRender / actRender / advRender / mwRender เดิม (แค่ย้ายมาแสดงในแผ่นนี้)
+   ========================================================= */
+const hub2 = { tab: "pass" };
+const HUB2_TABS = [["pass", "🎟️", "ซีซัน"], ["act", "🎁", "รายวัน"], ["adv", "🎲", "ผจญภัย"], ["ck", "🔥", "เช็กอิน"]];
+const hubOn = (t) => { const m = $("hub2-modal"); return !!m && !m.classList.contains("hidden") && hub2.tab === t; };
+function hubTabDot(t) { try { return t === "pass" ? passDot() : t === "act" ? actDot() : t === "adv" ? advDot() : ckUnclaimed().length > 0 || cbPending(); } catch { return false; } }
+const hubDot = () => HUB2_TABS.some(([t]) => hubTabDot(t));
+function hubBtn() {   // ปุ่มบนแถบบน (คอม) + แท็บล่าง (มือถือ) + จุดในแผ่น
+  let b = $("btn-hub2");
+  if (!b) { const ref = $("btn-quests") || $("btn-profile"); if (!ref) return; b = btn("🎲 กิจกรรม", () => hubOpen(), "btn ghost mini"); b.id = "btn-hub2"; b.title = "ซีซัน • รายวัน • ผจญภัย • เช็กอิน"; ref.before(b); }
+  const d = hubDot(); b.classList.toggle("btn-dot", d); $("tab-hub2")?.classList.toggle("unread", d);
+  const m = $("hub2-modal"); if (m && !m.classList.contains("hidden")) m.querySelectorAll(".hub2-tab").forEach((x) => x.classList.toggle("dot", hubTabDot(x.dataset.t)));
+}
+function hubShow() {
+  const m = $("hub2-modal"); if (!m) return;
+  m.querySelectorAll(".hub2-tab").forEach((x) => { x.classList.toggle("on", x.dataset.t === hub2.tab); x.classList.toggle("dot", hubTabDot(x.dataset.t)); x.setAttribute("aria-selected", x.dataset.t === hub2.tab); });
+  m.querySelectorAll(".hub2-pane").forEach((x) => x.classList.toggle("hidden", x.dataset.t !== hub2.tab));
+}
+function hubOpen(tab) {
+  if (tab) hub2.tab = tab;
+  if (!$("hub2-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "hub2-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "ศูนย์กิจกรรม");
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });   // แตะนอกแผ่นเพื่อปิด
+    const box = mk("div", "modal-box hub");
+    const top = mk("div", "sheet-top"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🎲 ศูนย์กิจกรรม"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const tabs = mk("div", "hub2-tabs"); tabs.setAttribute("role", "tablist");
+    HUB2_TABS.forEach(([t, ic, l]) => { const b = mk("button", "hub2-tab"); b.type = "button"; b.dataset.t = t; b.setAttribute("role", "tab"); b.append(mk("span", "ti", ic), document.createTextNode(l)); b.addEventListener("click", () => hubOpen(t)); tabs.append(b); });
+    top.append(head, tabs);
+    const pane = (t, ...kids) => { const d = mk("div", "hub2-pane hidden"); d.dataset.t = t; kids.forEach((k) => d.append(k)); return d; };
+    const body = (id) => { const d = mk("div", "hub2-body"); d.id = id; return d; }, sub = (id) => { const d = mk("div", "subtabs"); d.id = id; return d; };
+    box.append(top, pane("pass", body("pass-body")), pane("act", sub("act-tabs"), body("act-body")), pane("adv", sub("adv-tabs"), body("adv-body")), pane("ck", body("mw-body")));
+    m.append(box); document.body.append(m);
+  }
+  $("hub2-modal").classList.remove("hidden"); hubShow();
+  const t = hub2.tab;
+  if (t === "pass") { passRender(); passKick(); } else if (t === "act") { actRender(); actRefresh(); } else if (t === "adv") { advRender(); advRefresh(); } else mwRender();
 }
 
 /* =========================================================
@@ -9294,25 +9328,13 @@ function passTick() {
   }
   passBtn();
 }
-function passBtn() {
-  let b = $("btn-pass");
-  if (!b) { const ck = $("btn-ck") || $("btn-profile"); if (!ck) return; b = btn("🎟️", passOpen, "btn ghost mini"); b.id = "btn-pass"; b.title = "ภารกิจซีซัน"; ck.before(b); }
-  b.classList.toggle("btn-dot", passDot());
-  b.textContent = state.pass ? `🎟️ ${Math.min(state.pass.tiers, Math.floor(state.pass.xp / state.pass.tierXp))}` : "🎟️";
-}
-function passOpen() {
-  if (!$("pass-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "pass-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
-    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
-    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎟️ ภารกิจซีซัน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const body = mk("div"); body.id = "pass-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
-    box.append(head, body); m.append(box); document.body.append(m);
-  }
-  $("pass-modal").classList.remove("hidden"); passRender();
+function passBtn() { hubBtn(); }
+function passOpen() { hubOpen("pass"); }
+function passKick() {
   if (!state.passBusy) { state.passBusy = true; passSync().catch((e) => toast(fnErr(e))).finally(() => { state.passBusy = false; passBtn(); passRender(); }); }
 }
 function passRender() {
-  const m = $("pass-modal"), body = $("pass-body"); if (!m || !body || m.classList.contains("hidden")) return; body.innerHTML = "";
+  const body = $("pass-body"); if (!body || !hubOn("pass")) return; body.innerHTML = "";
   const P = state.pass, card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
   const d = seaDef(); if (!P) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
   const tier = Math.min(P.tiers, Math.floor(P.xp / P.tierXp)), inTier = P.xp % P.tierXp;
@@ -9358,7 +9380,7 @@ function encShow(enc) {
   if (!enc || state.boss || document.querySelector(".modal:not(.hidden):not(#enc-modal)")) return;   // ชนกับหน้าต่างอื่น → ปล่อยไว้ (เซิร์ฟเวอร์เก็บไว้ 30 นาที ค้นหาครั้งหน้าจะเด้งใหม่)
   state.enc = enc;
   if (!$("enc-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "enc-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const m = mk("div", "modal sheet hidden"); m.id = "enc-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
     const box = mk("div", "modal-box"); box.style.maxWidth = "440px";
     const head = mk("div", "modal-head"); head.append(mk("h2", "")); head.firstChild.id = "enc-title";
     const body = mk("div"); body.id = "enc-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.6";
@@ -9409,11 +9431,7 @@ function actDot() {
   const c = acs.crate, h = acs.hunt, w = acs.world;
   return !!(c && !c.claimed) || !!(h && h.done && !h.got) || !!(w && w.mine >= w.min && w.ms.some((m) => m.ok && !m.got));
 }
-function actBtn() {
-  let b = $("btn-act");
-  if (!b) { const ref = $("btn-pass") || $("btn-ck") || $("btn-profile"); if (!ref) return; b = btn("🎁", actOpen, "btn ghost mini"); b.id = "btn-act"; b.title = "กิจกรรมประจำวัน"; ref.before(b); }
-  b.classList.toggle("btn-dot", actDot());
-}
+function actBtn() { hubBtn(); }
 function actTick() {
   if (!state.profile || !state.ach?.loaded) return;
   const now = Date.now();
@@ -9424,24 +9442,14 @@ function actTick() {
   });
   actBtn();
 }
-function actOpen() {
-  if (!$("act-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "act-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
-    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
-    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎁 กิจกรรมประจำวัน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div"); tabs.id = "act-tabs"; tabs.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px";
-    const body = mk("div"); body.id = "act-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
-    box.append(head, tabs, body); m.append(box); document.body.append(m);
-  }
-  $("act-modal").classList.remove("hidden"); actRender(); actRefresh();
-}
+function actOpen() { hubOpen("act"); }
 function actRefresh() {
   const t = acs.tab; if (acs[t + "Busy"]) return; acs[t + "Busy"] = true;
   actSync(t).catch((e) => toast(fnErr(e))).finally(() => { acs[t + "Busy"] = false; actBtn(); actRender(); });
 }
 const actLeft = (t) => passMs(t - serverNow());
 function actRender() {
-  const m = $("act-modal"), body = $("act-body"); if (!m || !body || m.classList.contains("hidden")) return;
+  const body = $("act-body"); if (!body || !hubOn("act")) return;
   const tabs = $("act-tabs"); tabs.innerHTML = "";
   actTabs.forEach(([k, l]) => { const b = btn(l, () => { acs.tab = k; actRender(); actRefresh(); }, "btn mini " + (acs.tab === k ? "primary" : "ghost")); tabs.append(b); });
   body.innerHTML = ""; const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; }, t = acs.tab, D = acs[t];
@@ -9502,11 +9510,7 @@ const advTabs = [["dive", "🕳️ ดิ่งลึก"], ["nem", "👹 คู
 const advCalls = { dive: (a, x) => diveCall({ a, ...(x || {}) }), nem: (a, x) => nemCall({ a, ...(x || {}) }), radio: (a, x) => radioCall({ a, ...(x || {}) }), caravan: (a, x) => caravanCall({ a, ...(x || {}) }) };
 async function advSync(tab, a = "state", x) { const r = await advCalls[tab](a, x); adv[tab] = r; adv[tab + "At"] = Date.now(); return r; }
 function advDot() { const c = adv.caravan, r = adv.radio; return !!(c && c.open && c.here) || !!(r && !r.heard && !r.solved && state.zone === r.zone); }
-function advBtn() {
-  let b = $("btn-adv");
-  if (!b) { const ref = $("btn-act") || $("btn-pass") || $("btn-profile"); if (!ref) return; b = btn("🎲", advOpen, "btn ghost mini"); b.id = "btn-adv"; b.title = "ผจญภัย"; ref.before(b); }
-  b.classList.toggle("btn-dot", advDot());
-}
+function advBtn() { hubBtn(); }
 function advTick() {
   if (!state.profile || !state.ach?.loaded) return;
   const now = Date.now();
@@ -9518,17 +9522,7 @@ function advTick() {
   });
   advBtn();
 }
-function advOpen() {
-  if (!$("adv-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "adv-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
-    const box = mk("div", "modal-box"); box.style.maxWidth = "480px"; box.style.maxHeight = "85vh"; box.style.overflowY = "auto";
-    const head = mk("div", "modal-head"); head.append(mk("h2", "", "🎲 ผจญภัย"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div"); tabs.id = "adv-tabs"; tabs.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:10px";
-    const body = mk("div"); body.id = "adv-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.5";
-    box.append(head, tabs, body); m.append(box); document.body.append(m);
-  }
-  $("adv-modal").classList.remove("hidden"); advRender(); advRefresh();
-}
+function advOpen() { hubOpen("adv"); }
 function advRefresh() { const t = adv.tab; if (adv[t + "Busy"]) return; adv[t + "Busy"] = true; advSync(t).catch((e) => toast(fnErr(e))).finally(() => { adv[t + "Busy"] = false; advBtn(); advRender(); }); }
 const advGo = async (tab, a, x, ok) => {   // เรียกคำสั่ง → อัปเดตสถานะ → แสดงผล
   if (adv.busy) return; adv.busy = true;
@@ -9537,7 +9531,7 @@ const advGo = async (tab, a, x, ok) => {   // เรียกคำสั่ง 
 };
 const advLeft = (t) => passMs(t - serverNow());
 function advRender() {
-  const m = $("adv-modal"), body = $("adv-body"); if (!m || !body || m.classList.contains("hidden")) return;
+  const body = $("adv-body"); if (!body || !hubOn("adv")) return;
   const tabs = $("adv-tabs"); tabs.innerHTML = "";
   advTabs.forEach(([k, l]) => tabs.append(btn(l, () => { adv.tab = k; advRender(); advRefresh(); }, "btn mini " + (adv.tab === k ? "primary" : "ghost"))));
   body.innerHTML = ""; const card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; }, t = adv.tab, D = adv[t];
@@ -9602,7 +9596,7 @@ function nemShow(n, again) {
   if (!n || state.boss || document.querySelector(".modal:not(.hidden):not(#nem-modal)")) return;
   state.nemOn = true;
   if (!$("nem-modal")) {
-    const m = mk("div", "modal hidden"); m.id = "nem-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    const m = mk("div", "modal sheet hidden"); m.id = "nem-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
     const box = mk("div", "modal-box"); box.style.maxWidth = "440px";
     const head = mk("div", "modal-head"); const h = mk("h2", ""); h.id = "nem-title"; head.append(h);
     const body = mk("div"); body.id = "nem-body"; body.style.cssText = "display:grid;gap:10px;margin-top:12px;font-size:14px;line-height:1.6";
