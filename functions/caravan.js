@@ -25,7 +25,27 @@ const GOODS = [
   { id: "seed_shroom", q: 2, cost: [["army_meal", 1], ["scrap", 6]], stock: 4, f: "h" },
   { id: "seed_bloodroot", q: 2, cost: [["mutant_gland", 1], ["rotten_meat", 6]], stock: 4, f: "z" },
   { id: "seed_maggot", q: 3, cost: [["rotten_meat", 8]], stock: 6, f: "z" },
-  { id: "night_goggles", q: 1, cost: [["circuit_board", 1], ["battery_pack", 2], ["scrap", 10]], stock: 2 }
+  { id: "night_goggles", q: 1, cost: [["circuit_board", 1], ["battery_pack", 2], ["scrap", 10]], stock: 2 },
+  // ไอเทมชุดที่ 2 (อาหาร/น้ำ/ยา/บัฟ) — ยังไม่มีทางค้นเจอจนกว่าจะย้ายระบบค้นหา จึงขายที่นี่/คราฟต์ที่ forge.js ก่อน (อาหารมนุษย์ f:"h" เพราะซอมบี้กินไม่ได้)
+  { id: "instant_noodle", q: 3, cost: [["canned_food", 2]], stock: 8, f: "h" },
+  { id: "cereal_bar", q: 2, cost: [["bread", 2], ["scrap", 2]], stock: 6, f: "h" },
+  { id: "smoked_meat", q: 2, cost: [["canned_food", 3]], stock: 6, f: "h" },
+  { id: "mushroom_stew", q: 1, cost: [["herb_bundle", 3], ["canned_food", 2]], stock: 3, f: "h" },
+  { id: "mre_pack", q: 1, cost: [["army_meal", 2], ["scrap", 6]], stock: 3, f: "h" },
+  { id: "sports_drink", q: 2, cost: [["water", 3], ["scrap", 4]], stock: 6 },
+  { id: "desal_water", q: 2, cost: [["scrap", 5]], stock: 6 },
+  { id: "antibiotic", q: 2, cost: [["chem", 4]], stock: 5 },
+  { id: "iv_drip", q: 1, cost: [["medkit", 1], ["water", 3]], stock: 3 },
+  { id: "blood_pack", q: 1, cost: [["medkit", 1], ["chem", 3]], stock: 3 },
+  { id: "morphine", q: 1, cost: [["chem", 6], ["medkit", 1]], stock: 2 },
+  { id: "field_surgery_kit", q: 1, cost: [["trauma_kit", 1], ["steel_plate", 2], ["chem_catalyst", 1]], stock: 1 },
+  { id: "coffee_can", q: 3, cost: [["scrap", 4]], stock: 8 },
+  { id: "rum_bottle", q: 1, cost: [["scrap", 8], ["fuel_can", 1]], stock: 3 },
+  { id: "adrenaline_shot", q: 1, cost: [["chem", 5], ["energy_drink", 1]], stock: 3 },
+  { id: "focus_pill", q: 2, cost: [["chem", 4], ["energy_drink", 1]], stock: 4 },
+  { id: "combat_stim", q: 1, cost: [["chem", 8], ["stim_shot", 1]], stock: 2 },
+  { id: "reflex_booster", q: 1, cost: [["chem_catalyst", 2], ["chem", 4]], stock: 2 },
+  { id: "berserker_serum", q: 1, cost: [["mutant_gland", 2], ["chem", 4]], stock: 2, f: "z" }
 ];
 const GOOD_KEY = (g) => `${g.id}${g.tag || ""}`;
 const hash = (s) => { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };

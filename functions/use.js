@@ -1,5 +1,5 @@
 // 🍽️ ใช้ไอเทม (กิน/ดื่ม/ยา/บัฟ/สเตตัส) ที่ฝั่งเซิร์ฟเวอร์ — พอร์ต `useItem` ใน script.js (หัวข้อ 10) • ไม่แตะ rules ใหม่ (ปลดกิ่ง eatSlot ใน rules ออกแล้ว)
-// - ผลของไอเทมมาตรฐานอยู่ในตาราง CONSUMABLES ด้านล่าง (ต้องตรง ITEMS ใน script.js — มีเทสต์เทียบ) • ไอเทม custom_food (แอดมินเสก) อ่านผลจากช่องในกระเป๋าเอง
+// - ผลของไอเทมมาตรฐานอยู่ในตาราง CONSUMABLES ด้านล่าง (ต้องตรง ITEMS ใน script.js — มีเทสต์เทียบ) • รองรับฟิลด์ผลแบบเดียวกับ custom_food: food/water/heal/stamina, s_* (ถาวร), b_*+bmin (บัฟ), e_*+emin (สถานะ), c_* (รักษาสถานะ) • ไอเทม custom_food (แอดมินเสก) อ่านผลจากช่องในกระเป๋าเอง
 // - หิว/น้ำ/พลังงานเก็บแบบ "ค่า + timestamp" (ค่าจริง = ค่าที่เก็บ − รอบที่ผ่านไป) — hungerShift/พลังงานต้องตรงสูตรฝั่งเกม (hungerShift, getRegenRate, curStamina)
 // - ไม่ทำฝั่งฟังก์ชัน (ยังเป็นของไคลเอนต์): ภูมิต้านพิษของยาแก้พิษ (LS pimm), ตัวนับเควสต์/ความสำเร็จ/มื้ออาหาร — ไคลเอนต์ทำต่อหลังฟังก์ชันตอบสำเร็จ
 const { fail, withLock } = require("./lib");
@@ -13,7 +13,7 @@ const STAT_CAP = 99, STAT_MIN = { str: -5, hp: -2, st: -3, regen: -1, agi: -5, t
 const STAT_DEF = { human: ["str", "hp", "st", "regen"], zombie: ["str", "hp", "agi", "tough"] };
 const FX_TYPES = { bleed: { icon: "🩸", name: "เลือดไหล" }, poison: { icon: "☠️", name: "พิษ" }, hot: { icon: "💚", name: "ฟื้นฟู" }, stun: { icon: "😵", name: "มึนงง" }, dice: { icon: "🎯", name: "ทอยลูกเต๋า" } };
 const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
-const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit", "exp_serum"];
+const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit", "exp_serum", "field_surgery_kit"];
 const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"], exp_serum: ["bleed", "poison"] };
 const INFECT_CURES = ["medkit", "moss", "serum", "trauma_kit"];
 // ผลของไอเทมมาตรฐาน (ตรง ITEMS ใน script.js เฉพาะ type consumable)
@@ -23,7 +23,44 @@ const CONSUMABLES = {
   super_ration: { name: "เสบียงพิเศษ", heal: 50, food: 100, water: 100, gmOnly: true }, antidote: { name: "ยาแก้พิษ" }, serum: { name: "เซรั่มต้านเชื้อ" }, trauma_kit: { name: "ชุดช่วยชีวิตขั้นสูง", heal: 80 },
   army_meal: { name: "อาหารทหาร", food: 60, water: 10 }, water_jug: { name: "น้ำสะอาดแกลลอน", water: 70 }, soup: { name: "ซุปอุ่น", heal: 10, food: 30, water: 15 }, stim_shot: { name: "ยากระตุ้น", stamina: 60 },
   choco_bar: { name: "ช็อกโกแลตแท่ง", food: 10, stamina: 15 }, rotten_meat: { name: "เนื้อเน่า", food: 20, zombieOnly: true }, exp_serum: { name: "ซีรั่มทดลอง", heal: 60 },
-  fish_grill: { name: "ปลาย่าง", heal: 10, food: 40 }, fish_stew: { name: "ซุปปลา", heal: 25, food: 45, water: 25 }
+  fish_grill: { name: "ปลาย่าง", heal: 10, food: 40 }, fish_stew: { name: "ซุปปลา", heal: 25, food: 45, water: 25 },
+  // ไอเทมชุดที่ 2 (ตรง ITEMS ใน script.js — สร้างจาก items.draft.json)
+  instant_noodle: { name: "บะหมี่กึ่งสำเร็จรูป", food: 25, water: -5 },
+  potato_chips: { name: "มันฝรั่งทอดกรอบ", food: 15, stamina: 5 },
+  canned_sardine: { name: "ซาร์ดีนกระป๋อง", food: 30, water: -5, stamina: 5 },
+  cereal_bar: { name: "ซีเรียลบาร์", food: 25, stamina: 15 },
+  canned_tuna: { name: "ทูน่ากระป๋อง", food: 35, heal: 3 },
+  wild_berries: { name: "เบอร์รี่ป่า", food: 12, water: 10, e_poison: 1, emin: 1 },
+  smoked_meat: { name: "เนื้อรมควัน", food: 45, water: -8 },
+  honey_jar: { name: "ขวดน้ำผึ้ง", food: 25, heal: 10 },
+  mushroom_stew: { name: "ซุปเห็ดป่า", food: 40, heal: 15, b_regen: 1, bmin: 8 },
+  mre_pack: { name: "เสบียงสนาม MRE", food: 70, water: 20 },
+  soda_can: { name: "น้ำอัดลมกระป๋อง", water: 25, stamina: 5 },
+  spring_water: { name: "น้ำพุธรรมชาติ", water: 40 },
+  mineral_bottle: { name: "น้ำแร่ขวดแก้ว", water: 45 },
+  herbal_tea: { name: "ชาสมุนไพร", water: 20, heal: 8, c_stun: 1 },
+  sports_drink: { name: "เครื่องดื่มเกลือแร่", water: 40, stamina: 15 },
+  desal_water: { name: "น้ำกลั่นจากทะเล", food: -5, water: 60 },
+  gauze_roll: { name: "ผ้าก๊อซม้วน", heal: 12, c_bleed: 1 },
+  antiseptic: { name: "น้ำยาฆ่าเชื้อ", heal: 8, c_poison: 1 },
+  painkillers: { name: "ยาแก้ปวด", heal: 10, stamina: 15, b_tough: 2, bmin: 10 },
+  antibiotic: { name: "ยาปฏิชีวนะ", heal: 15, c_poison: 1 },
+  suture_kit: { name: "ชุดเย็บแผล", heal: 35, c_bleed: 1 },
+  herbal_salve: { name: "ยาขี้ผึ้งสมุนไพร", heal: 25, c_poison: 1 },
+  iv_drip: { name: "น้ำเกลือ IV", water: 30, heal: 40 },
+  morphine: { name: "มอร์ฟีน", heal: 90, b_str: -2, b_agi: -3, bmin: 8 },
+  blood_pack: { name: "ถุงเลือด", heal: 65, stamina: -10 },
+  field_surgery_kit: { name: "ชุดผ่าตัดสนาม", heal: 90, stamina: -20, c_bleed: 1, c_poison: 1 },
+  coffee_can: { name: "กาแฟกระป๋อง", water: -5, stamina: 25 },
+  smelling_salts: { name: "ยาดมกระตุ้น", stamina: 10, c_stun: 1 },
+  rum_bottle: { name: "เหล้ารัม", heal: 15, stamina: 30, b_agi: -2, bmin: 5 },
+  adrenaline_shot: { name: "อะดรีนาลีน", stamina: 50, b_str: 3, b_tough: -2, bmin: 5 },
+  focus_pill: { name: "ยาเพิ่มสมาธิ", food: -10, b_agi: 4, bmin: 10 },
+  regen_gel: { name: "เจลฟื้นฟูเซลล์", e_hot: 2, emin: 6 },
+  combat_stim: { name: "ยากระตุ้นรบ", heal: -10, stamina: 40, b_str: 4, b_agi: 3, bmin: 10 },
+  berserker_serum: { name: "เซรั่มคลั่ง", b_str: 9, b_tough: -3, bmin: 8 },
+  reflex_booster: { name: "ยาเร่งรีเฟล็กซ์", food: -15, b_agi: 8, bmin: 8 },
+  mutagen_vial: { name: "หลอดมิวทาเจน", b_str: 5, b_hp: 3, bmin: 10, e_poison: 1, emin: 2 }
 };
 const col = (x) => (x && typeof x === "object" ? x : {});
 const sgn = (n) => (n > 0 ? "+" : "") + n;
@@ -88,7 +125,7 @@ function makeUse(db, admin) {
       if (stamina > 0 && curSt < maxSt) { const n = Math.min(maxSt, curSt + stamina); u[`users/${uid}/stamina`] = n; u[`users/${uid}/staminaTs`] = SV(); msgs.push(`พลังงาน +${n - curSt}`); }
       if (stamina < 0 && curSt > 0) { const n = Math.max(0, curSt + stamina); u[`users/${uid}/stamina`] = n; u[`users/${uid}/staminaTs`] = SV(); msgs.push(`พลังงาน −${curSt - n}`); }
       // ---- ไอเทมสเตตัส (custom_food ที่มี s_* / b_*)
-      const statItem = custom && hasStatFx(def);
+      const statItem = hasStatFx(def);   // ทั้ง custom_food และไอเทมมาตรฐานชุดที่ 2 ที่มีฟิลด์ s_*/b_*
       if (statItem) {
         const mine = STAT_DEF[fac];
         if (stats) mine.filter((k) => (def["s_" + k] > 0 && baseStat(k) < STAT_CAP) || (def["s_" + k] < 0 && baseStat(k) > STAT_MIN[k])).forEach((k) => {
@@ -103,15 +140,16 @@ function makeUse(db, admin) {
         }
       }
       // ---- สถานะพิเศษ / รักษา
+      let strongBlocked = false;
       const cure = (t) => { u[`effects/${uid}/${t}`] = null; msgs.push(`หาย${FX_TYPES[t].name}`); };
-      if (custom) {
+      {
         if (def.emin > 0) FX_KEYS.filter((t) => def["e_" + t]).forEach((t) => {
           u[`effects/${uid}/${t}`] = { bstart: SV(), mins: def.emin, v: def["e_" + t], tick: SV() };
           msgs.push(`${FX_TYPES[t].icon} ${FX_TYPES[t].name}${t === "dice" ? " " + sgn(def.e_dice) : ""} นาน ${def.emin} นาที`);
         });
-        FX_CURE_KEYS.filter((t) => def["c_" + t] && !def["e_" + t] && effActive(t)).forEach(cure);
+        // ไอเทมมาตรฐานชุดที่ 2: พิษแรงรักษาได้เฉพาะ STRONG_CURE (ไอเทม custom ของแอดมินรักษาได้ทุกระดับ เหมือนเดิม)
+        FX_CURE_KEYS.filter((t) => def["c_" + t] && !def["e_" + t] && effActive(t)).forEach((t) => { if (!custom && t === "poison" && effV("poison") >= POISON_STRONG && !STRONG_CURE.includes(it.id)) { strongBlocked = true; return; } cure(t); });
       }
-      let strongBlocked = false;
       (FX_CURES[it.id] || []).filter(effActive).forEach((t) => { if (t === "poison" && effV("poison") >= POISON_STRONG && !STRONG_CURE.includes(it.id)) { strongBlocked = true; return; } cure(t); });
       if (it.id === "antidote") msgs.push("🛡️ ภูมิต้านพิษ 10 นาที");   // ตัวภูมิเก็บฝั่งไคลเอนต์ (LS) — ไคลเอนต์ตั้งเองหลังสำเร็จ
       if (strongBlocked) { if (!msgs.length) fail("failed-precondition", "☠️ พิษแรงเกินกว่าไอเทมนี้จะรักษาได้ ต้องใช้ยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง"); msgs.push("แต่พิษแรงยังไม่หาย (ต้องยาแก้พิษหรือชุดช่วยชีวิตขั้นสูง)"); }

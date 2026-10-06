@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0723";
+const APP_VERSION = "2026-10-06.0751";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -177,7 +177,7 @@ const FX_TYPES = {
 const FX_KEYS = Object.keys(FX_TYPES), FX_CURE_KEYS = ["bleed", "poison", "stun"];
 const FX_TICK = 15000, FX_MAX_TICKS = 40, POISON_STAMINA = 2, FX_MAX_MIN = 720;
 // พิษ 2 ระดับ: อ่อน (v=1) ทุกไอเทมรักษาได้ / แรง (v≥2) เฉพาะยาแก้พิษกับชุดช่วยชีวิตขั้นสูง (ข้อจำกัดนี้อยู่ฝั่งเกม rules ไม่ได้บังคับ) • ยาแก้พิษให้ภูมิต้านพิษ 10 นาที (เก็บในเครื่อง)
-const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit", "exp_serum"], ANTI_IMM_MS = 600000;
+const POISON_STRONG = 2, STRONG_CURE = ["antidote", "trauma_kit", "exp_serum", "field_surgery_kit"], ANTI_IMM_MS = 600000;
 const poisonImmLeft = () => Math.max(0, (LS.get(lsKey("pimm"), 0) || 0) - serverNow());
 const fxName = (t) => (t === "poison" && effV("poison") >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name);
 const FX_CURES = { bandage: ["bleed"], medkit: ["bleed", "poison"], moss: ["poison"], antidote: ["poison"], trauma_kit: ["bleed", "poison"], exp_serum: ["bleed", "poison"] };   // ไอเทมในเกมที่รักษาสถานะได้ (ต้องตรงกับ rules)
@@ -360,7 +360,44 @@ const ITEMS = {
   gold_watch: { name: "นาฬิกาทอง", icon: "🕰️", type: "material" },
   lab_keycard: { name: "บัตรผ่านห้องแล็บ", icon: "🪪", type: "material" },
   data_chip: { name: "ชิปข้อมูลวิจัย", icon: "💾", type: "material" },
-  boss_trophy: { name: "ถ้วยรางวัลบอส", icon: "🏆", type: "material" }
+  boss_trophy: { name: "ถ้วยรางวัลบอส", icon: "🏆", type: "material" },
+  // ===== ไอเทมชุดที่ 2: อาหาร/น้ำ/ยา/บัฟ 36 ชิ้น (ใช้ผ่าน useAct — ผลต้องตรง CONSUMABLES ใน functions/use.js; ที่มาดูหัวข้อ "ไอเทมชุดที่ 2" ใน MIGRATION.md) =====
+  instant_noodle: { name: "บะหมี่กึ่งสำเร็จรูป", icon: "🍜", type: "consumable", food: 25, water: -5 },
+  potato_chips: { name: "มันฝรั่งทอดกรอบ", icon: "🍟", type: "consumable", food: 15, stamina: 5 },
+  canned_sardine: { name: "ซาร์ดีนกระป๋อง", icon: "🐟", type: "consumable", food: 30, water: -5, stamina: 5 },
+  cereal_bar: { name: "ซีเรียลบาร์", icon: "🥜", type: "consumable", food: 25, stamina: 15 },
+  canned_tuna: { name: "ทูน่ากระป๋อง", icon: "🥫", type: "consumable", food: 35, heal: 3 },
+  wild_berries: { name: "เบอร์รี่ป่า", icon: "🫐", type: "consumable", food: 12, water: 10, e_poison: 1, emin: 1 },
+  smoked_meat: { name: "เนื้อรมควัน", icon: "🍖", type: "consumable", food: 45, water: -8 },
+  honey_jar: { name: "ขวดน้ำผึ้ง", icon: "🍯", type: "consumable", food: 25, heal: 10 },
+  mushroom_stew: { name: "ซุปเห็ดป่า", icon: "🥘", type: "consumable", food: 40, heal: 15, b_regen: 1, bmin: 8 },
+  mre_pack: { name: "เสบียงสนาม MRE", icon: "🍱", type: "consumable", food: 70, water: 20 },
+  soda_can: { name: "น้ำอัดลมกระป๋อง", icon: "🥤", type: "consumable", water: 25, stamina: 5 },
+  spring_water: { name: "น้ำพุธรรมชาติ", icon: "🏞️", type: "consumable", water: 40 },
+  mineral_bottle: { name: "น้ำแร่ขวดแก้ว", icon: "🍶", type: "consumable", water: 45 },
+  herbal_tea: { name: "ชาสมุนไพร", icon: "🍵", type: "consumable", water: 20, heal: 8, c_stun: 1 },
+  sports_drink: { name: "เครื่องดื่มเกลือแร่", icon: "🧃", type: "consumable", water: 40, stamina: 15 },
+  desal_water: { name: "น้ำกลั่นจากทะเล", icon: "🌊", type: "consumable", food: -5, water: 60 },
+  gauze_roll: { name: "ผ้าก๊อซม้วน", icon: "🩹", type: "consumable", heal: 12, c_bleed: 1 },
+  antiseptic: { name: "น้ำยาฆ่าเชื้อ", icon: "🧴", type: "consumable", heal: 8, c_poison: 1 },
+  painkillers: { name: "ยาแก้ปวด", icon: "💊", type: "consumable", heal: 10, stamina: 15, b_tough: 2, bmin: 10 },
+  antibiotic: { name: "ยาปฏิชีวนะ", icon: "💊", type: "consumable", heal: 15, c_poison: 1 },
+  suture_kit: { name: "ชุดเย็บแผล", icon: "🧵", type: "consumable", heal: 35, c_bleed: 1 },
+  herbal_salve: { name: "ยาขี้ผึ้งสมุนไพร", icon: "🌿", type: "consumable", heal: 25, c_poison: 1 },
+  iv_drip: { name: "น้ำเกลือ IV", icon: "🏥", type: "consumable", water: 30, heal: 40 },
+  morphine: { name: "มอร์ฟีน", icon: "💉", type: "consumable", heal: 90, b_str: -2, b_agi: -3, bmin: 8 },
+  blood_pack: { name: "ถุงเลือด", icon: "🩸", type: "consumable", heal: 65, stamina: -10 },
+  field_surgery_kit: { name: "ชุดผ่าตัดสนาม", icon: "🧰", type: "consumable", heal: 90, stamina: -20, c_bleed: 1, c_poison: 1 },
+  coffee_can: { name: "กาแฟกระป๋อง", icon: "☕", type: "consumable", water: -5, stamina: 25 },
+  smelling_salts: { name: "ยาดมกระตุ้น", icon: "🧂", type: "consumable", stamina: 10, c_stun: 1 },
+  rum_bottle: { name: "เหล้ารัม", icon: "🍾", type: "consumable", heal: 15, stamina: 30, b_agi: -2, bmin: 5 },
+  adrenaline_shot: { name: "อะดรีนาลีน", icon: "💉", type: "consumable", stamina: 50, b_str: 3, b_tough: -2, bmin: 5 },
+  focus_pill: { name: "ยาเพิ่มสมาธิ", icon: "💊", type: "consumable", food: -10, b_agi: 4, bmin: 10 },
+  regen_gel: { name: "เจลฟื้นฟูเซลล์", icon: "🧴", type: "consumable", e_hot: 2, emin: 6 },
+  combat_stim: { name: "ยากระตุ้นรบ", icon: "💊", type: "consumable", heal: -10, stamina: 40, b_str: 4, b_agi: 3, bmin: 10 },
+  berserker_serum: { name: "เซรั่มคลั่ง", icon: "🧪", type: "consumable", b_str: 9, b_tough: -3, bmin: 8 },
+  reflex_booster: { name: "ยาเร่งรีเฟล็กซ์", icon: "⚡", type: "consumable", food: -15, b_agi: 8, bmin: 8 },
+  mutagen_vial: { name: "หลอดมิวทาเจน", icon: "☣️", type: "consumable", b_str: 5, b_hp: 3, bmin: 10, e_poison: 1, emin: 2 }
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
@@ -392,7 +429,25 @@ const RECIPES = {
   knife: { need: { scrap: 8, leather_scrap: 1, duct_tape: 1 }, out: "knife", qty: 1, srv: 1 },
   spiked_bat: { need: { scrap: 8, rusty_nails: 3 }, out: "spiked_bat", qty: 1, srv: 1 },
   fire_axe: { need: { scrap: 14, steel_plate: 1 }, out: "fire_axe", qty: 1, srv: 1 },
-  crossbow: { need: { scrap: 12, rope_coil: 2, steel_plate: 1 }, out: "crossbow", qty: 1, srv: 1 }
+  crossbow: { need: { scrap: 12, rope_coil: 2, steel_plate: 1 }, out: "crossbow", qty: 1, srv: 1 },
+  // ไอเทมชุดที่ 2: ยา/เครื่องดื่ม/เกราะ/อุปกรณ์ (srv — functions/forge.js)
+  gauze_roll: { need: { cloth_roll: 1, scrap: 1 }, out: "gauze_roll", qty: 2, srv: 1 },
+  antiseptic: { need: { chem: 1, herb_bundle: 1 }, out: "antiseptic", qty: 1, srv: 1 },
+  painkillers: { need: { herb_bundle: 2, chem: 1 }, out: "painkillers", qty: 1, srv: 1 },
+  suture_kit: { need: { cloth_roll: 1, copper_wire: 1, antiseptic: 1 }, out: "suture_kit", qty: 1, srv: 1 },
+  herbal_salve: { need: { herb_bundle: 3, water: 1 }, out: "herbal_salve", qty: 1, srv: 1 },
+  herbal_tea: { need: { herb_bundle: 1, water: 1 }, out: "herbal_tea", qty: 1, srv: 1 },
+  regen_gel: { need: { chem_catalyst: 1, antiseptic: 1, water: 1 }, out: "regen_gel", qty: 1, srv: 1 },
+  cardboard_armor: { need: { cloth_roll: 2, duct_tape: 2 }, out: "cardboard_armor", qty: 1, srv: 1 },
+  leather_jacket: { need: { leather_scrap: 4, cloth_roll: 1 }, out: "leather_jacket", qty: 1, srv: 1 },
+  hunter_cloak: { need: { leather_scrap: 6, herb_bundle: 2, rope_coil: 1 }, out: "hunter_cloak", qty: 1, srv: 1 },
+  welder_apron: { need: { leather_scrap: 3, steel_plate: 1, cloth_roll: 2 }, out: "welder_apron", qty: 1, srv: 1 },
+  diver_suit: { need: { rope_coil: 2, cloth_roll: 3, fuel_can: 1 }, out: "diver_suit", qty: 1, srv: 1 },
+  kevlar_vest: { need: { cloth_roll: 4, steel_plate: 2, duct_tape: 2 }, out: "kevlar_vest", qty: 1, srv: 1 },
+  compass: { need: { battery_pack: 1, copper_wire: 1, steel_plate: 1 }, out: "compass", qty: 1, srv: 1 },
+  earplugs: { need: { cloth_roll: 1, duct_tape: 1 }, out: "earplugs", qty: 1, srv: 1 },
+  survival_bracelet: { need: { rope_coil: 1, duct_tape: 1, scrap: 2 }, out: "survival_bracelet", qty: 1, srv: 1 },
+  night_goggles: { need: { circuit_board: 1, battery_pack: 2, steel_plate: 1, leather_scrap: 1 }, out: "night_goggles", qty: 1, srv: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -1641,26 +1696,36 @@ async function repairWeapon(slot) {
 
 // รื้ออาวุธเอาเศษวัสดุ (เบต้า) — ได้ ~40% ของค่าซ่อมเต็ม ยิ่งสึกยิ่งได้น้อย / อาวุธหายถาวร
 // รื้อเกราะ (มนุษย์ • Safe Zone): ได้เศษวัสดุคืน ไม่คืนสารเคมี — เพดานตามกฎ: เสื้อเก่า 2 • เกราะเศษเหล็ก/เสื้อปราบจลาจล 4 • เกราะทหาร 6
-const ARMOR_SALV = { rag_vest: 2, scrap_plate: 4, riot_vest: 4, army_vest: 6 };
-const armorYield = (it) => { const b = it && ARMOR_SALV[it.id]; return b ? Math.max(1, Math.floor(b * Math.max(0, Math.min(100, T("salv_pct", 100))) / 100)) : 0; };
+// รื้อเกราะ: ทำผ่านฟังก์ชัน forgeAct (dismantle) — ได้วัสดุคืนตาม "ระดับความหายาก" (ธรรมดา 50% • ไม่ธรรมดา 60% • หายาก 75% • ตำนาน 90% ของวัสดุประกอบ ปัดลง) ไม่คืนสารเคมี • ตารางต้องตรง ARMOR_SALV ใน functions/forge.js (มีเทสต์เทียบ)
+const SALV_PCT = { C: 0.5, U: 0.6, R: 0.75, E: 0.9 }, SALV_RAR = { C: "ธรรมดา", U: "ไม่ธรรมดา", R: "หายาก", E: "ตำนาน" };
+const ARMOR_SALV = {
+  rag_vest: { r: "C", m: { scrap: 5 } }, scrap_plate: { r: "U", m: { scrap: 10 } }, riot_vest: { r: "U", m: { scrap: 8, cloth_roll: 2 } }, army_vest: { r: "R", m: { scrap: 12, steel_plate: 1, cloth_roll: 2 } },
+  cardboard_armor: { r: "C", m: { cloth_roll: 2, duct_tape: 2 } }, leather_jacket: { r: "C", m: { leather_scrap: 4, cloth_roll: 1 } }, hunter_cloak: { r: "U", m: { leather_scrap: 6, herb_bundle: 2, rope_coil: 1 } },
+  welder_apron: { r: "U", m: { leather_scrap: 3, steel_plate: 1, cloth_roll: 2 } }, diver_suit: { r: "U", m: { rope_coil: 2, cloth_roll: 3, fuel_can: 1 } }, hazmat_suit: { r: "U", m: { scrap: 15, cloth_roll: 3 } },
+  kevlar_vest: { r: "R", m: { cloth_roll: 4, steel_plate: 2, duct_tape: 2 } }, bomb_suit: { r: "E", m: { steel_plate: 6, cloth_roll: 5, circuit_board: 1 } }
+};
+function armorSalv(it) {   // รายการ [รหัสวัสดุ, จำนวน] ที่จะได้คืน (ว่าง = รื้อไม่ได้)
+  const a = it && ARMOR_SALV[it.id]; if (!a) return [];
+  const k = SALV_PCT[a.r] * Math.max(0, Math.min(100, T("salv_pct", 100))) / 100, out = [];
+  Object.entries(a.m).forEach(([m, n], i) => { const q = Math.max(i === 0 && k > 0 ? 1 : 0, Math.floor(n * k + 1e-9)); if (q > 0) out.push([m, q]); });
+  return out;
+}
+const armorYield = (it) => armorSalv(it).reduce((t, [, q]) => t + q, 0);
+const salvTxt = (list) => list.map(([m, q]) => `${ITEMS[m]?.icon || ""}${ITEMS[m]?.name || m} ×${q}`).join(" ");
 async function dismantleArmor(slot) {
   if (state.busy) return;
   const it = state.inv[slot], p = state.profile; if (!it || !p || !armorYield(it) || it.id !== slot) return;
   if (p.faction !== "human") return toast("เฉพาะมนุษย์ที่รื้อเกราะได้");
   if (state.zone !== "safe") return toast("รื้อได้เฉพาะใน Safe Zone");
-  const def = ITEMS[it.id], qty = it.qty || 1;
+  const def = ITEMS[it.id], qty = it.qty || 1, list = armorSalv(it);
   if (p.arm === slot && qty <= 1) return toast("ถอดเกราะชิ้นนี้ก่อนค่อยรื้อ");
+  if (!confirm(`รื้อ ${def.name} 1 ชิ้น? (ระดับ${SALV_RAR[ARMOR_SALV[it.id].r]})\nได้คืน ${salvTxt(list)}\n⚠ ได้คืนน้อยกว่าวัสดุที่ใช้ประกอบ และไม่คืนสารเคมี ช่องที่เต็ม 99 ส่วนเกินจะหาย`)) return;
   state.busy = true;
   try {
-    const realHave = (await get(ref(db, `inventory/${state.uid}/scrap/qty`))).val() || 0;
-    const y = armorYield(it), after = Math.min(99, realHave + y);
-    if (!confirm(`รื้อ ${def.name} 1 ชิ้น?\nได้ เศษผ้าและวัสดุ ${y} ชิ้น (มี ${realHave} → ${after}${realHave + y > 99 ? " · เกิน 99 ส่วนเกินจะหาย" : ""})\n⚠ ได้คืนน้อยกว่าที่ใช้ทำ และเอากลับมาไม่ได้`)) { state.busy = false; return; }
-    const u = {};
-    if (qty <= 1) u[`inventory/${state.uid}/${slot}`] = null; else u[`inventory/${state.uid}/${slot}/qty`] = qty - 1;
-    u[`inventory/${state.uid}/scrap`] = { id: "scrap", qty: after }; u[`salvage/${state.uid}/slot`] = slot; u[`salvage/${state.uid}/ts`] = serverTimestamp();
-    await update(ref(db), u);
-    toast(`รื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`); logLine(`🔩 คุณรื้อ ${def.name} ได้เศษวัสดุ ${after - realHave} ชิ้น`, "info");
-  } catch (e) { toast(errMsg(e)); } finally { state.busy = false; }
+    const go = async () => { try { return await forgeCall({ a: "dismantle", slot }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); return await forgeCall({ a: "dismantle", slot }); } };   // ติดล็อกลองใหม่ 1 ครั้ง
+    const r = await go(), g = salvTxt(r.got || []);
+    toast(`รื้อ ${def.name} ได้ ${g}${r.lost?.length ? " (บางส่วนเกินช่อง 99 จึงหาย)" : ""}`); logLine(`🔩 คุณรื้อ ${def.name} ได้ ${g}`, "info");
+  } catch (e) { toast(fnErr(e)); } finally { state.busy = false; }
 }
 async function dismantleWeapon(slot) {
   if (state.busy) return;
@@ -3937,7 +4002,7 @@ function renderEvo() {
    marketTx/{uid} = { op: buy|cancel|claim, lid|pid, ts }  ← "ตั๋ว" ที่ rules ใช้ตรวจ (เขียนในอัปเดตเดียวกับการย้ายของ)
    ทุกการเขียนข้อมูลตลาดทำผ่าน Cloud Function marketAct (functions/market.js) — rules ปิดการเขียนตรงแล้ว • ค่าคงที่ต้องตรงกับไฟล์นั้น • ใช้ function declaration (hoist) ไม่ต้องแก้ index.html/style.css
    ========================================================= */
-const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat", "duct_tape", "rusty_nails", "cloth_roll", "rope_coil", "herb_bundle", "copper_wire", "leather_scrap", "fuel_can", "gunpowder", "steel_plate", "battery_pack", "circuit_board", "chem_catalyst", "mutant_gland", "survivor_badge", "old_photo", "gold_watch", "lab_keycard", "data_chip", "boss_trophy"];
+const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat", "duct_tape", "rusty_nails", "cloth_roll", "rope_coil", "herb_bundle", "copper_wire", "leather_scrap", "fuel_can", "gunpowder", "steel_plate", "battery_pack", "circuit_board", "chem_catalyst", "mutant_gland", "survivor_badge", "old_photo", "gold_watch", "lab_keycard", "data_chip", "boss_trophy", "instant_noodle", "potato_chips", "canned_sardine", "cereal_bar", "canned_tuna", "wild_berries", "smoked_meat", "honey_jar", "mushroom_stew", "mre_pack", "soda_can", "spring_water", "mineral_bottle", "herbal_tea", "sports_drink", "desal_water", "gauze_roll", "antiseptic", "painkillers", "antibiotic", "suture_kit", "herbal_salve", "iv_drip", "morphine", "blood_pack", "field_surgery_kit", "coffee_can", "smelling_salts", "rum_bottle", "adrenaline_shot", "focus_pill", "regen_gel", "combat_stim", "berserker_serum", "reflex_booster", "mutagen_vial"];
 const MKT_SLOTS = 3, MKT_MAX = 99;
 const mktIdsFor = () => MKT_IDS.filter((id) => id !== "rotten_meat" || state.profile?.faction === "zombie");
 const mktHave = (id) => state.inv?.[id]?.qty || 0;

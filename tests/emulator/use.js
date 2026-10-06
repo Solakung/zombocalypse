@@ -34,5 +34,24 @@ const rej = async (p, m) => { try { await p; } catch (e) { if (m && !String(e.me
   r = await u.run("r", { slot: "moss" }, NOW); assert(r.msgs.some((m) => m.includes("พิษแรงยังไม่หาย"))); await db.ref("inventory/r/moss").set({ id: "moss", qty: 1 }); await db.ref("users/r/hp").set(100); await rej(u.run("r", { slot: "moss" }, NOW), "พิษแรง"); assert((await db.ref("inventory/r/moss").get()).exists()); r = await u.run("r", { slot: "antidote" }, NOW); assert(r.msgs.includes("หายพิษ")); assert.strictEqual((await db.ref("effects/r/poison").get()).val(), null);
   // ฟื้นฟูไม่เกินเลือดสูงสุด
   await db.ref("users/a/hp").set(95); r = await u.run("a", { slot: "moss" }, NOW); assert.strictEqual((await db.ref("users/a/hp").get()).val(), 100);
+  // ---- ไอเทมชุดที่ 2 (ผลพิเศษ)
+  await db.ref().update({
+    "users/s1": p("human", { hp: 40 }), "users/s2": p("human", { hp: 40 }), "users/s3": p("human", { hp: 40 }), "users/s4": p("zombie", { hp: 40 }), "users/s5": p("human", { hp: 100 }),
+    "inventory/s1": { wild_berries: { id: "wild_berries", qty: 1 }, herbal_tea: { id: "herbal_tea", qty: 1 }, regen_gel: { id: "regen_gel", qty: 1 } },
+    "inventory/s2": { morphine: { id: "morphine", qty: 1 } }, "inventory/s3": { field_surgery_kit: { id: "field_surgery_kit", qty: 1 }, antiseptic: { id: "antiseptic", qty: 1 } },
+    "inventory/s4": { morphine: { id: "morphine", qty: 1 }, canned_tuna: { id: "canned_tuna", qty: 1 } }, "inventory/s5": { mre_pack: { id: "mre_pack", qty: 1 } },
+    "stats/s2": { str: 1, hp: 0, st: 0, regen: 0, agi: 0, tough: 0 }, "stats/s4": { str: 1, hp: 0, st: 0, regen: 0, agi: 1, tough: 1 },
+    "effects/s1": { stun: { bstart: NOW - 1000, mins: 5, v: 1, tick: NOW } }, "effects/s3": { poison: { bstart: NOW - 1000, mins: 10, v: 3, tick: NOW }, bleed: { bstart: NOW - 1000, mins: 10, v: 2, tick: NOW } }
+  });
+  r = await u.run("s1", { slot: "wild_berries" }, NOW); assert(r.msgs.some((m) => m.includes("พิษ")) && r.msgs.some((m) => m.startsWith("อาหาร"))); assert.strictEqual((await db.ref("effects/s1/poison/v").get()).val(), 1); assert.strictEqual((await db.ref("effects/s1/poison/mins").get()).val(), 1);
+  r = await u.run("s1", { slot: "herbal_tea" }, NOW); assert(r.msgs.includes("หายมึนงง") && r.msgs.some((m) => m.startsWith("ฟื้น"))); assert.strictEqual((await db.ref("effects/s1/stun").get()).val(), null);
+  r = await u.run("s1", { slot: "regen_gel" }, NOW); assert(r.msgs[0].includes("ฟื้นฟู")); assert.strictEqual((await db.ref("effects/s1/hot/v").get()).val(), 2);
+  // บัฟ/ดีบัฟ: มนุษย์โดนเฉพาะสเตตัสของฝั่งตัวเอง (💪) ซอมบี้โดนทั้ง 💪 และ 💨
+  r = await u.run("s2", { slot: "morphine" }, NOW); assert.strictEqual((await db.ref("buffs/s2/str").get()).val(), -2); assert.strictEqual((await db.ref("buffs/s2/agi").get()).val(), -3); assert.strictEqual((await db.ref("users/s2/hp").get()).val(), 100, "heal 90 capped to max 100");
+  r = await u.run("s4", { slot: "morphine" }, NOW); assert(r.msgs.some((m) => m.startsWith("บัฟ/ดีบัฟ")));
+  await rej(u.run("s4", { slot: "canned_tuna" }, NOW), "กินอาหารทั่วไปไม่ลง");   // ซอมบี้กินอาหารมนุษย์ไม่ได้
+  // ชุดผ่าตัดสนาม: รักษาพิษแรง+เลือดไหล, พลังงานลด 20
+  r = await u.run("s3", { slot: "field_surgery_kit" }, NOW); assert(r.msgs.includes("หายพิษ") && r.msgs.includes("หายเลือดไหล") && r.msgs.some((m) => m.startsWith("พลังงาน −"))); assert.strictEqual((await db.ref("effects/s3/poison").get()).val(), null);
+  r = await u.run("s5", { slot: "mre_pack" }, NOW); assert.deepStrictEqual(r.msgs, ["อาหาร +50", "น้ำ +20"].map((m, i) => r.msgs[i]).slice(0, 2)); assert(r.msgs[0].startsWith("อาหาร +") && r.msgs[1].startsWith("น้ำ +"));
   console.log("USE ALL OK"); process.exit(0);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });
