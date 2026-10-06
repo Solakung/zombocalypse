@@ -1,4 +1,4 @@
-// พักแรงต่อเป้าหมายคนเดิม (rules attacks) เฉพาะผู้โจมตีที่เป็นซอมบี้: ตีคนเดิมซ้ำได้ทุก ≥30 วินาที (มนุษย์ไม่ถูกจำกัดต่อคู่) (ตีคนอื่นยังได้ตามพักแรงเดิม 9 วินาที)
+// พักแรงต่อเป้าหมายคนเดิม (rules attacks) เฉพาะผู้โจมตีที่เป็นซอมบี้: ตีคนเดิมซ้ำได้ทุก ≥20 วินาที (มนุษย์ไม่ถูกจำกัดต่อคู่) (ตีคนอื่นยังได้ตามพักแรงเดิม 9 วินาที)
 // เทียบ rules เก่า (origin/main หรือ OLD_RULES) กับใหม่ — รันด้วย NODE_PATH ที่มี @firebase/rules-unit-testing (ข้อมูลทดสอบมี scrap/chem/canned_food/medkit เหมือนเทสต์ rules อื่น)
 process.env.FIREBASE_DATABASE_EMULATOR_HOST = "127.0.0.1:9000";
 const fs = require("fs"), assert = require("assert"), { execSync } = require("child_process");
@@ -18,6 +18,7 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
   const C = [
     ["first attack (no history)", world(), hit("T", { tgtRec: false }), hit("T"), true, true],
     ["same target after 15 s (denied)", world({ lastTgt: { u: "T", t: now - 15000 } }), hit("T", { tgtRec: false }), hit("T"), true, false],
+    ["same target after 25 s", world({ lastTgt: { u: "T", t: now - 25000 } }), hit("T", { tgtRec: false }), hit("T"), true, true],
     ["same target after 40 s", world({ lastTgt: { u: "T", t: now - 40000 } }), hit("T", { tgtRec: false }), hit("T"), true, true],
     ["other target 12 s after hitting T", world({ lastAttack: now - 12000, lastTgt: { u: "T", t: now - 12000 } }), hit("T2", { tgtRec: false }), hit("T2"), true, true],
     ["attack too soon (<9 s, any target) still denied", world({ lastAttack: now - 4000, lastTgt: { u: "T", t: now - 40000 } }), hit("T", { tgtRec: false }), hit("T"), false, false],

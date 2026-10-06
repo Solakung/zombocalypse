@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0955";
+const APP_VERSION = "2026-10-06.1006";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2714,8 +2714,8 @@ function attackCooldownLeft() {
   return Math.max(0, ATTACK_COOLDOWN - (serverNow() - last));
 }
 
-// พักแรงต่อเป้าหมายคนเดิม (เฉพาะผู้โจมตีที่เป็นซอมบี้): ตีคนเดิมซ้ำได้ทุก 30 วินาที (ตีคนอื่นได้ตามพักแรงปกติ 10 วินาที) — ต้องตรง rules (attacks: users/{uid}/lastTgt = {u, t} เขียนพร้อมคำสั่งโจมตี)
-const PAIR_COOLDOWN = 30000;
+// พักแรงต่อเป้าหมายคนเดิม (เฉพาะผู้โจมตีที่เป็นซอมบี้): ตีคนเดิมซ้ำได้ทุก 20 วินาที (ตีคนอื่นได้ตามพักแรงปกติ 10 วินาที) — ต้องตรง rules (attacks: users/{uid}/lastTgt = {u, t} เขียนพร้อมคำสั่งโจมตี)
+const PAIR_COOLDOWN = 20000;
 function pairCooldownLeft(uid) {
   if (state.profile?.faction !== "zombie") return 0;   // จำกัดเฉพาะซอมบี้ตีเป้าหมายคนเดิม (มนุษย์ตีซอมบี้ซ้ำได้ตามพักแรงปกติ — ไม่งั้นสู้ซอมบี้ไม่ทัน)
   const t = state.profile?.lastTgt;
