@@ -867,3 +867,9 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 @media (max-width: 380px) { .tabbar button { font-size: 11px; padding: 0 2px; } }
 .sheet .modal-box.hub { min-height: min(72vh, 560px); min-height: min(72dvh, 560px); align-content: start; }
 @media (max-width: 400px) { .hub2-tab { font-size: 11px; min-height: 50px; } .hub2-tab .ti { font-size: 16px; } .hub2-tabs { gap: 3px; } }
+
+/* ---------- 🧭 แถบโค้ชบทเรียน (มือถือก่อน) ---------- */
+.coach { flex: 0 0 100%; order: 20; grid-column: 1 / -1; display: flex; gap: 8px; align-items: center; justify-content: space-between; padding: 6px 8px 6px 10px; border: 1px solid var(--hazard); border-radius: 10px; background: linear-gradient(90deg, #2a2418, var(--panel-2)); font-size: 13.5px; }
+.coach-t { min-width: 0; flex: 1; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; cursor: pointer; }
+.coach .btn { flex: 0 0 auto; min-height: 36px; padding: 4px 12px; white-space: nowrap; }
+@media (max-width: 900px) { .coach { order: 4; } }

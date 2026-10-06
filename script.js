@@ -44,13 +44,14 @@ const gardenCall = (data) => httpsCallable(fns, "gardenAct")(data).then((r) => r
 const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data);   // 📖 สมุดสะสมชุด/ความสมบูรณ์ (functions/col.js)
 const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.data);   // 🛋️ บ้านของฉัน/จัดห้อง/เยี่ยมห้อง (functions/home.js)
 const profCall = (data) => httpsCallable(fns, "profAct")(data).then((r) => r.data);   // 🪪 โปรไฟล์ตกแต่ง/รูปอัปโหลด (functions/profile.js)
+const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.data);   // 🧭 บทเรียนแนะนำการเล่น (functions/learn.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.2100";
+const APP_VERSION = "2026-10-08.0100";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -729,6 +730,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "🧭 แถบโค้ชบนสุดของหน้าเกม: บทเรียนแนะนำการเล่น 12 ขั้น แยกมนุษย์/ซอมบี้ (ต่อจากภารกิจวันแรก) ปุ่ม “ไปเลย” พาเปิดหน้าต่างที่เกี่ยวข้อง ทุกขั้นมีรางวัล ครบแล้วรับของปิดท้าย",
     "🪪 ตกแต่งโปรไฟล์ (หน้าต่างโปรไฟล์ → ปุ่ม “ตกแต่งโปรไฟล์”): เลือกอวาตาร์ กรอบ แบนเนอร์ ฉายา (ปลดล็อกจากความก้าวหน้า) หรืออัปโหลดรูปเอง — ระบบแปลงเป็น webp ไม่เกิน 100 KB ให้เองและลบข้อมูลตำแหน่งในรูป เปลี่ยนได้ชั่วโมงละครั้ง รูปผิดกฎกด 🚩 รายงานได้",
     "🛋️ จัดห้อง (หน้าต่างที่พัก → แท็บ “จัดห้อง”): เลือกของจากถาด แตะในภาพเพื่อวาง/ย้าย แล้วบันทึก • ธีมห้อง 13 แบบ • ของตกแต่งใหม่ 48 ชิ้น (ซื้อด้วยวัสดุ หรือได้จากหีบ/ซีซัน/สมุดสะสม/ห้องยอดนิยม) • คนอื่นเห็นห้องของคุณในหน้าประวัติ กด ❤️ ถูกใจได้วันละ 5 ห้อง ห้องยอดนิยมประจำสัปดาห์ได้รางวัล",
     "🌱 แปลงปลูก (ในหน้าต่างที่พัก): ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยว ฤดูกาลมีผลกับเวลาโต รับเมล็ดฟรีวันละครั้ง ได้เมล็ดเพิ่มจากหีบ/พ่อค้าเร่/ดิ่งลึก/เหตุการณ์สุ่ม • ซอมบี้เลี้ยงเชื้อรา/หนอนแทน",
@@ -9268,6 +9270,7 @@ function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
   try { passTick(); } catch { /* ข้าม */ }
   try { colTick(); hubBtn(); } catch { /* ข้าม */ }
+  try { coachTick(); } catch { /* ข้าม */ }
   try { actTick(); } catch { /* ข้าม */ }
   try { advTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
@@ -9283,6 +9286,71 @@ function mTick() {
     const want = cbPending() || (wbOn() && (state.mAway || 0) >= WB_MS);
     if (want && !state.boss && !document.querySelector(".modal:not(.hidden)")) { try { mwOpen(); } catch { /* ข้าม */ } }
   }
+}
+
+/* =========================================================
+   49.2) 🧭 บทเรียนแนะนำการเล่น (Coach) — เส้นทาง 12 ขั้น แยกมนุษย์/ซอมบี้ (functions/learn.js — learnAct) • ไม่แตะ rules
+   - แถบโค้ชบนสุดของหน้าเกมบอกขั้นต่อไป + ปุ่ม "ไปเลย" พาเปิดหน้าต่างที่เกี่ยวข้อง • รายการเต็มกดที่แถบ • ต่อจากภารกิจวันแรก (🧭 เริ่มต้น) 6 ข้อเดิม
+   ========================================================= */
+const coachGoTo = (go) => {
+  const g = String(go || "");
+  try {
+    if (g === "bag") setTab("bag"); else if (g === "zone") setTab("chat"); else if (g === "players") setTab("map");
+    else if (g === "base") { state.baseView = "in"; openBase(); } else if (g === "baseedit") { state.baseView = "edit"; openBase(); }
+    else if (g === "market") $("btn-market")?.click(); else if (g.startsWith("hub:")) hubOpen(g.slice(4));
+  } catch (e) { console.warn("coach go", e); }
+  $("coach-modal")?.classList.add("hidden");
+};
+async function coachSync(a = "state", x) { const r = await learnCall({ a, ...(x || {}) }); state.coachD = r; state.coachAt = Date.now(); return r; }
+function coachTick() {
+  if (!state.profile || !state.ach?.loaded || state.profile.hp === undefined) return;
+  const now = Date.now(); if (state.coachDone) return coachBar();
+  if (!state.coachBusy && (!state.coachAt || now - state.coachAt > 120000) && !document.hidden) {
+    state.coachBusy = true; state.coachAt = now;
+    coachSync().catch(() => { /* ฟังก์ชันยังไม่ deploy → ซ่อนแถบเงียบ ๆ */ }).finally(() => { state.coachBusy = false; try { coachBar(); coachRender(); } catch { /* ข้าม */ } });
+  }
+  coachBar();
+}
+function coachBar() {
+  let b = $("coach"); const D = state.coachD, tb = document.querySelector(".topbar");
+  const onbLeftN = (() => { try { return onbOn() && state.onb ? onbLeft() : 0; } catch { return 0; } })();
+  if (!tb || (!D && !onbLeftN) || (D && D.allGot && D.finalGot)) { if (b) b.classList.add("hidden"); if (D && D.allGot && D.finalGot) state.coachDone = true; return; }
+  if (!b) { b = mk("div"); b.id = "coach"; b.className = "coach"; tb.append(b); }
+  b.classList.remove("hidden"); b.innerHTML = "";
+  if (onbLeftN) {   // ยังทำภารกิจวันแรกไม่ครบ → ชี้ไปที่ภารกิจวันแรกก่อน
+    b.append(mk("span", "coach-t", `🧭 ภารกิจวันแรก ${ONB_STEPS.length - onbLeftN}/${ONB_STEPS.length} — ทำตามขั้นตอนเพื่อรับของ`), btn("เปิดดู", () => onbOpen(), "btn primary mini")); return;
+  }
+  const i = D.next < 0 ? -1 : D.next, s = i >= 0 ? D.steps[i] : null;
+  if (!s) { b.append(mk("span", "coach-t", "🎉 ทำบทเรียนครบแล้ว — รับของรางวัลปิดท้าย"), btn("รับรางวัล", async () => { try { const r = await coachSync("claim", { id: "final" }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🧭 จบบทเรียน: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } coachBar(); }, "btn primary mini")); return; }
+  const lbl = mk("span", "coach-t", `🧭 บทเรียน ${D.done + 1}/${D.steps.length}: ${s.t}${s.ok ? "" : s.n > 1 ? ` (${s.v}/${s.n})` : ""}`);
+  lbl.addEventListener("click", coachOpen); b.append(lbl);
+  if (s.ok) b.append(btn("🎁 รับ", () => coachClaim(s.id), "btn primary mini")); else b.append(btn("ไปเลย", () => coachGoTo(s.go), "btn primary mini"));
+}
+async function coachClaim(id) {
+  if (state.coachBusy) return; state.coachBusy = true;
+  try { const r = await coachSync("claim", { id }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🧭 บทเรียนสำเร็จ: ${mRew(r.rewarded)}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }
+  catch (e) { toast(fnErr(e)); } finally { state.coachBusy = false; coachBar(); coachRender(); }
+}
+function coachOpen() {
+  if (!$("coach-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "coach-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), top = mk("div", "sheet-top"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🧭 บทเรียนแนะนำการเล่น"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini")); top.append(head);
+    const body = mk("div", "hub2-body"); body.id = "coach-body"; body.style.marginTop = "12px"; box.append(top, body); m.append(box); document.body.append(m);
+  }
+  $("coach-modal").classList.remove("hidden"); coachRender();
+  if (!state.coachBusy) { state.coachBusy = true; coachSync().catch((e) => toast(fnErr(e))).finally(() => { state.coachBusy = false; coachBar(); coachRender(); }); }
+}
+function coachRender() {
+  const body = $("coach-body"), m = $("coach-modal"); if (!body || !m || m.classList.contains("hidden")) return; body.innerHTML = "";
+  const D = state.coachD; if (!D) { body.append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const h = mk("div", "world-row"); h.append(mk("b", "", `${D.fac === "zombie" ? "🧟 เส้นทางซอมบี้" : "🧑 เส้นทางมนุษย์"} • ${D.done}/${D.steps.length} ขั้น`), worldBar(D.done / D.steps.length, `${D.done}/${D.steps.length}`), mk("div", "muted", `ทำทีละขั้นตามลำดับหรือข้ามไปก่อนก็ได้ ทุกขั้นมีรางวัล • ครบทุกขั้นรับ ${mRew(D.final)}`)); body.append(h);
+  D.steps.forEach((s, i) => {
+    const c = mk("div", "world-row" + (i === D.next ? " evt-live" : "")); c.append(mk("div", "", `${s.got ? "✅" : s.ok ? "🎯" : i === D.next ? "👉" : "⬜"} ${i + 1}. ${s.t}`));
+    if (!s.got) c.append(mk("div", "muted", s.d), mk("div", "muted", `${s.n > 1 ? `ความคืบหน้า ${s.v}/${s.n} • ` : ""}รางวัล ${mRew(s.r)}`));
+    if (!s.got) { const row = mk("div"); row.style.cssText = "display:flex;gap:8px;margin-top:6px"; if (s.ok) row.append(btn("🎁 รับรางวัล", () => coachClaim(s.id), "btn primary mini")); else row.append(btn("ไปเลย", () => coachGoTo(s.go), "btn ghost mini")); c.append(row); }
+    body.append(c);
+  });
+  if (D.allGot) { const f = mk("div", "world-row evt-live"); f.append(mk("div", "", D.finalGot ? "✅ รับรางวัลปิดท้ายแล้ว" : `🎉 รางวัลปิดท้าย: ${mRew(D.final)}`)); if (!D.finalGot) f.append(btn("🎁 รับรางวัลปิดท้าย", async () => { try { const r = await coachSync("claim", { id: "final" }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🧭 จบบทเรียน: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } coachBar(); coachRender(); }, "btn primary mini")); body.append(f); }
 }
 
 /* =========================================================

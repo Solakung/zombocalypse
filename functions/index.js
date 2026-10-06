@@ -19,6 +19,7 @@ const { makeGarden } = require("./garden");
 const { makeCol } = require("./col");
 const { makeHome } = require("./home");
 const { makeProfile } = require("./profile");
+const { makeLearn } = require("./learn");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -133,4 +134,11 @@ const profSys = makeProfile(admin.database(), () => admin.storage().bucket());
 exports.profAct = onCall({ memory: "512MiB", timeoutSeconds: 60 }, async (req) => {
   try { return await profSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("profAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🧭 บทเรียนแนะนำการเล่น 12 ขั้น แยกมนุษย์/ซอมบี้ (โหนด learn — ไม่มีใน rules)
+const learnSys = makeLearn(admin.database());
+exports.learnAct = onCall(async (req) => {
+  try { return await learnSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("learnAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
