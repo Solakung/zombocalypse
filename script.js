@@ -8,6 +8,7 @@ import {
   onDisconnect, query, orderByKey, limitToLast, runTransaction, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-database.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js";
+import { getStorage, ref as sref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js";
 
 /* =========================================================
    1) ตั้งค่า Firebase
@@ -27,6 +28,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 const fns = getFunctions(app, "asia-southeast1");   // Cloud Functions: ระบบที่ย้ายตรรกะตรวจสอบจาก rules ไปไว้ฝั่งเซิร์ฟเวอร์ (ตอนนี้: ที่พัก 🏠)
+const storage = getStorage(app);   // รูปโปรไฟล์ (raw/{uid} ต้นฉบับชั่วคราว → profile/{uid}.webp ที่ระบบแปลงให้) — กฎอยู่ที่ storage.rules
 const baseCall = (data) => httpsCallable(fns, "baseAct")(data).then((r) => r.data);
 const marketCall = (data) => httpsCallable(fns, "marketAct")(data).then((r) => r.data);   // ตลาด/ตลาดมืด/ฝากของ (functions/market.js)
 const passCall = (data) => httpsCallable(fns, "passAct")(data).then((r) => r.data);   // 🎟️ ภารกิจซีซัน (functions/pass.js)
@@ -41,13 +43,14 @@ const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) =>
 const gardenCall = (data) => httpsCallable(fns, "gardenAct")(data).then((r) => r.data);   // 🌱 แปลงปลูก (functions/garden.js)
 const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data);   // 📖 สมุดสะสมชุด/ความสมบูรณ์ (functions/col.js)
 const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.data);   // 🛋️ บ้านของฉัน/จัดห้อง/เยี่ยมห้อง (functions/home.js)
+const profCall = (data) => httpsCallable(fns, "profAct")(data).then((r) => r.data);   // 🪪 โปรไฟล์ตกแต่ง/รูปอัปโหลด (functions/profile.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.1800";
+const APP_VERSION = "2026-10-07.2100";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -639,6 +642,7 @@ $("btn-profile").addEventListener("click", () => {
   get(ref(db, "bios/" + state.uid)).then((s) => { $("prof-bio").value = s.val() || ""; }).catch(() => {});
   $("profile-modal").classList.remove("hidden");
 });
+$("prof-card-open")?.addEventListener("click", () => { try { profOpen(); } catch (e) { console.warn("prof", e); } });
 $("prof-bio-save").addEventListener("click", async () => {
   const t = $("prof-bio").value.trim().slice(0, 300);
   try {
@@ -657,6 +661,7 @@ async function showBio(uid, name, fac) {
   achBioLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
   homeVisitFill(uid, name, fac).then((ok) => { if (ok) return; return baseSceneBio(uid, fac).then((o) => { if (!o || $("bio-modal").classList.contains("hidden")) return; let h = $("bio-scene"); if (!h) { h = mk("div"); h.id = "bio-scene"; h.style.margin = "8px 0"; $("bio-text").before(h); } baseSceneFill(h, o); }); }).catch(() => {});
   baseDecoLine(uid).then((t) => { if (t && !$("bio-modal").classList.contains("hidden")) $("bio-text").textContent += "\n\n" + t; });
+  try { profVisitFill(uid); } catch { /* ข้าม */ }
   try { gftBioRow(uid, name, fac); gftVisit(uid); } catch (e) { console.warn("gift ui", e); }
 }
 $("prof-close").addEventListener("click", () => $("profile-modal").classList.add("hidden"));
@@ -724,6 +729,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "🪪 ตกแต่งโปรไฟล์ (หน้าต่างโปรไฟล์ → ปุ่ม “ตกแต่งโปรไฟล์”): เลือกอวาตาร์ กรอบ แบนเนอร์ ฉายา (ปลดล็อกจากความก้าวหน้า) หรืออัปโหลดรูปเอง — ระบบแปลงเป็น webp ไม่เกิน 100 KB ให้เองและลบข้อมูลตำแหน่งในรูป เปลี่ยนได้ชั่วโมงละครั้ง รูปผิดกฎกด 🚩 รายงานได้",
     "🛋️ จัดห้อง (หน้าต่างที่พัก → แท็บ “จัดห้อง”): เลือกของจากถาด แตะในภาพเพื่อวาง/ย้าย แล้วบันทึก • ธีมห้อง 13 แบบ • ของตกแต่งใหม่ 48 ชิ้น (ซื้อด้วยวัสดุ หรือได้จากหีบ/ซีซัน/สมุดสะสม/ห้องยอดนิยม) • คนอื่นเห็นห้องของคุณในหน้าประวัติ กด ❤️ ถูกใจได้วันละ 5 ห้อง ห้องยอดนิยมประจำสัปดาห์ได้รางวัล",
     "🌱 แปลงปลูก (ในหน้าต่างที่พัก): ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยว ฤดูกาลมีผลกับเวลาโต รับเมล็ดฟรีวันละครั้ง ได้เมล็ดเพิ่มจากหีบ/พ่อค้าเร่/ดิ่งลึก/เหตุการณ์สุ่ม • ซอมบี้เลี้ยงเชื้อรา/หนอนแทน",
     "🎲 🎲 ผจญภัย: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
@@ -2914,6 +2920,7 @@ function buildAdmin() {
 
 $("btn-admin").addEventListener("click", () => {
   if (!isStaff()) return;
+  try { profGmSection(); } catch { /* ข้าม */ }
   $("adm-clear-zone").value = state.zone; watchMutes();
   $("admin-modal").classList.remove("hidden"); loadDash();
 });
@@ -9592,6 +9599,122 @@ async function homeVisitFill(uid, name, fac) {
   const row = mk("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px"; row.append(mk("span", "muted", `❤️ ${r.likes} (สัปดาห์นี้ ${r.wlikes})`));
   if (!r.self) { const b = btn(r.liked ? "❤️ ถูกใจแล้ววันนี้" : `🤍 ถูกใจห้องนี้ (เหลือ ${r.left})`, () => { b.disabled = true; homeCall({ a: "like", to: uid }).then((q) => { toast(`❤️ ถูกใจแล้ว${q.rew ? ` • ได้ ${mRew(q.rew)}` : ""}`); try { achBump("like"); } catch { /* ข้าม */ } b.textContent = "❤️ ถูกใจแล้ววันนี้"; }).catch((e) => { toast(fnErr(e)); b.disabled = false; }); }, "btn primary mini"); b.disabled = r.liked || r.left <= 0; row.append(b); }
   h.append(row); return true;
+}
+
+/* =========================================================
+   49.47) 🪪 โปรไฟล์ตกแต่งตัวตน — อวาตาร์ • กรอบ • แบนเนอร์ • ฉายา • รูปอัปโหลด (functions/profile.js — profAct • storage.rules)
+   - ปลดล็อกจากความก้าวหน้าจริง (ตรวจฝั่งเซิร์ฟเวอร์) • การ์ดโปรไฟล์โชว์ในหน้าประวัติของผู้เล่นอื่น
+   - รูปอัปโหลด: ส่งไฟล์ต้นฉบับไป Storage → ระบบแปลงเป็น webp < 100 KB ให้เอง (ผู้เล่นไม่ต้องแปลงมาก่อน) • ขึ้นทันที มีปุ่มรายงาน + เครื่องมือ GM
+   ========================================================= */
+const FR_CSS = {
+  fr_none: "border:2px solid #3a424c", fr_tan: "border:3px solid #b87333", fr_steel: "border:3px solid #9aa4ac", fr_gold: "border:3px solid #e0b84a;box-shadow:0 0 8px #e0b84a88", fr_mint: "border:3px solid #6fd6a0;box-shadow:0 0 6px #6fd6a066",
+  fr_blood: "border:3px solid #b0243a;box-shadow:0 0 8px #b0243a88", fr_neon: "border:3px solid #39f0ff;box-shadow:0 0 10px #39f0ff,inset 0 0 6px #39f0ff66", fr_rain: "border:4px double #7fb6e8", fr_heart: "border:3px solid #ff6f9f;box-shadow:0 0 8px #ff6f9f88",
+  fr_lab: "border:3px dashed #8fe8ff", fr_dash: "border:3px dotted #e0a030", fr_royal: "border:4px solid transparent;background:linear-gradient(#222,#222) padding-box,linear-gradient(135deg,#e0b84a,#b03a4a,#6a5ac8) border-box"
+};
+const BN_CSS = {
+  bn_dusk: "linear-gradient(135deg,#6a3a5a,#e98a52)", bn_night: "radial-gradient(circle at 80% 25%,#e8e6c8 0 6%,transparent 7%),linear-gradient(180deg,#0d1230,#2a2f66)", bn_forest: "repeating-linear-gradient(100deg,#1f3a28 0 14px,#2a4d34 14px 26px)",
+  bn_ruins: "linear-gradient(180deg,#5a6068,#2a2d32)", bn_lab: "repeating-linear-gradient(0deg,#cfd8dc 0 10px,#b0bec5 10px 11px)", bn_nest: "radial-gradient(circle at 30% 60%,#3a1f3f,transparent 60%),#17101f",
+  bn_rain: "repeating-linear-gradient(105deg,#35607a 0 6px,#2a4d66 6px 9px)", bn_gold: "linear-gradient(135deg,#8a5a1a,#f0c060,#8a5a1a)", bn_snow: "radial-gradient(circle at 20% 30%,#fff 0 2px,transparent 3px),radial-gradient(circle at 70% 60%,#fff 0 2px,transparent 3px),linear-gradient(180deg,#7a8a98,#b8c4cc)",
+  bn_garden: "linear-gradient(180deg,#27382c,#4c7a4a)", bn_fire: "linear-gradient(0deg,#e0432f,#f0a030 50%,#3a1a10)", bn_aurora: "linear-gradient(120deg,#0d1230,#1fa87a,#6a5ac8,#0d1230)"
+};
+const bnBg = (id) => BN_CSS[id] || "linear-gradient(135deg,#2a3038,#3a424c)";
+const avBg = (id) => { let h = 0; for (const c of String(id || "x")) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `linear-gradient(135deg,hsl(${h % 360} 35% 28%),hsl(${(h + 50) % 360} 40% 40%))`; };
+const profImgCache = new Map();
+async function profImgUrl(uid, v) {
+  const k = uid + ":" + v; if (profImgCache.has(k)) return profImgCache.get(k);
+  const u = await getDownloadURL(sref(storage, `profile/${uid}.webp`)); profImgCache.set(k, u); return u;
+}
+// การ์ดโปรไฟล์: card = { name, av, avic, fr, bn, tin, up, uu, hid } — uid ใช้ดึงรูปอัปโหลด
+function profCardEl(card, uid, small) {
+  const w = mk("div"); w.style.cssText = `position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--panel-2)`;
+  const bn = mk("div"); bn.style.cssText = `height:${small ? 56 : 84}px;background:${bnBg(card.bn)}`; w.append(bn);
+  const sz = small ? 56 : 76, row = mk("div"); row.style.cssText = `display:flex;gap:12px;align-items:flex-end;padding:0 12px 10px;margin-top:-${sz / 2}px`;
+  const av = mk("div"); av.style.cssText = `flex:none;width:${sz}px;height:${sz}px;border-radius:50%;overflow:hidden;display:grid;place-items:center;font-size:${sz * 0.5}px;background:${avBg(card.av || card.name)};${FR_CSS[card.fr] || FR_CSS.fr_none};box-sizing:border-box`;
+  const useUp = card.up && card.uu !== false && !card.hid;
+  if (useUp && uid) { av.textContent = card.avic || "🧑"; profImgUrl(uid, card.up.v).then((u) => { const im = document.createElement("img"); im.src = u; im.alt = ""; im.style.cssText = "width:100%;height:100%;object-fit:cover;display:block"; av.textContent = ""; av.append(im); }).catch(() => { /* ใช้อวาตาร์เกมแทน */ }); }
+  else av.textContent = card.avic || (card.fac === "zombie" ? "🧟" : "🧑");
+  const tx = mk("div"); tx.style.cssText = "min-width:0;padding-top:" + (small ? 18 : 30) + "px";
+  const nm = mk("b", "", card.name || "—"); nm.style.cssText = "display:block;font-size:" + (small ? 15 : 17) + "px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+  tx.append(nm, mk("span", "muted", card.tin || (card.fac === "zombie" ? "🧟 ซอมบี้" : "🧑 มนุษย์")));
+  row.append(av, tx); w.append(row);
+  if (card.hid) w.append(Object.assign(mk("div", "muted", "🚩 รูปนี้ถูกซ่อนชั่วคราว (รอตรวจสอบ)"), { style: "padding:0 12px 10px;font-size:12px" }));
+  return w;
+}
+// ---- หน้าต่างตกแต่งโปรไฟล์ของตัวเอง ----
+async function profGo(a, x, ok) {
+  if (state.profBusy) return; state.profBusy = true;
+  try { const r = await profCall({ a, ...(x || {}) }); state.profD = r; if (ok) ok(r); } catch (e) { toast(fnErr(e)); } finally { state.profBusy = false; try { profRender(); } catch { /* ข้าม */ } }
+}
+function profOpen() {
+  if (!$("pcard-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "pcard-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), top = mk("div", "sheet-top"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🪪 ตกแต่งโปรไฟล์"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini")); top.append(head);
+    const body = mk("div", "hub2-body"); body.id = "pcard-body"; body.style.marginTop = "12px"; box.append(top, body); m.append(box); document.body.append(m);
+  }
+  $("pcard-modal").classList.remove("hidden"); profRender(); profGo("state");
+}
+function profRender() {
+  const body = $("pcard-body"), m = $("pcard-modal"); if (!body || !m || m.classList.contains("hidden")) return; body.innerHTML = "";
+  const D = state.profD; if (!D) { body.append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const me = state.profile || {}, avs = Object.fromEntries(D.avatars.map((x) => [x.id, x.ic]));
+  const card = { name: me.username, fac: me.faction, av: D.cur.av, avic: avs[D.cur.av], fr: D.cur.fr, bn: D.cur.bn, tin: (D.titles.find((x) => x.id === D.cur.ti) || {}).n, up: D.up, uu: D.up ? state.profUU !== false : false, hid: D.hid };
+  body.append(profCardEl(card, state.uid));
+  const sec = (title, list, key, kind) => {
+    const c = mk("div", "world-row"); c.append(mk("b", "", title)); const g = mk("div"); g.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin-top:8px";
+    list.forEach((it) => {
+      const on = D.cur[key] === it.id, b = mk("button"); b.type = "button"; b.className = "btn mini " + (on ? "primary" : "ghost"); b.style.cssText = "min-height:56px;display:grid;gap:2px;place-items:center;padding:4px;white-space:normal;line-height:1.2;font-size:12px";
+      if (kind === "av") b.append(Object.assign(mk("span", "", it.ic), { style: "font-size:24px" })); else if (kind === "fr") { const d = mk("span"); d.style.cssText = `width:26px;height:26px;border-radius:50%;box-sizing:border-box;display:block;${FR_CSS[it.id] || ""}`; b.append(d); } else if (kind === "bn") { const d = mk("span"); d.style.cssText = `width:60px;height:22px;border-radius:5px;display:block;background:${bnBg(it.id)}`; b.append(d); }
+      b.append(mk("span", "", it.ok ? it.n : `🔒 ${it.need}`)); if (!it.ok) b.style.opacity = ".55";
+      b.addEventListener("click", () => { if (!it.ok) return toast(`🔒 ปลดล็อกด้วย: ${it.need}`); profGo("set", { [key]: it.id }); }); g.append(b);
+    }); c.append(g); body.append(c);
+  };
+  // รูปอัปโหลด
+  const up = mk("div", "world-row"); up.append(mk("b", "", "🖼️ รูปของคุณ"), mk("div", "muted", "เลือกรูปอะไรก็ได้จากเครื่อง — ระบบจะย่อ ครอปเป็นสี่เหลี่ยมจัตุรัส ลบข้อมูลตำแหน่ง/กล้อง และแปลงเป็น webp ขนาดไม่เกิน 100 KB ให้เอง • เปลี่ยนได้ชั่วโมงละ 1 ครั้ง • ต้องไม่ผิดกฎ (ผู้เล่นรายงานได้ GM ลบ/แบนได้)"));
+  const fi = document.createElement("input"); fi.type = "file"; fi.accept = "image/*"; fi.style.display = "none";
+  const upBtn = btn(D.up ? "📤 เปลี่ยนรูป" : "📤 อัปโหลดรูป", () => fi.click(), "btn primary"); upBtn.disabled = D.banned || D.nextUp > 0; upBtn.style.marginTop = "8px";
+  if (D.banned) up.append(mk("div", "muted", "บัญชีนี้ถูกจำกัดการอัปโหลดรูป")); else if (D.nextUp > 0) up.append(mk("div", "muted", `เปลี่ยนรูปได้อีกครั้งใน ${passMs(D.nextUp)}`));
+  fi.addEventListener("change", async () => {
+    const f = fi.files && fi.files[0]; fi.value = ""; if (!f) return;
+    if (f.size > 10 * 1024 * 1024) return toast("ไฟล์ใหญ่เกิน 10 MB");
+    if (f.type && !f.type.startsWith("image/")) return toast("ต้องเป็นไฟล์รูปภาพ");
+    if (state.profBusy) return; state.profBusy = true; upBtn.disabled = true; upBtn.textContent = "กำลังอัปโหลดและแปลงรูป…";
+    try {
+      await uploadBytes(sref(storage, "raw/" + state.uid), f, { contentType: f.type || "image/jpeg" });
+      const r = await profCall({ a: "commit" }); state.profD = r; toast(`🖼️ แปลงเป็น webp ${r.up.kb} KB แล้ว`); logLine(`🖼️ เปลี่ยนรูปโปรไฟล์แล้ว (${r.up.kb} KB)`, "system"); profImgCache.clear();
+    } catch (e) { toast(String(e?.code || "").includes("storage/") ? "อัปโหลดไม่สำเร็จ (Storage ยังไม่พร้อม/ไฟล์ไม่ผ่านกติกา)" : fnErr(e)); }
+    finally { state.profBusy = false; try { profRender(); } catch { /* ข้าม */ } }
+  });
+  up.append(fi, upBtn);
+  if (D.up) {
+    up.append(mk("div", "muted", `รูปปัจจุบัน ${D.up.kb} KB (webp)`));
+    const row = mk("div"); row.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px";
+    row.append(btn(state.profUU === false ? "ใช้รูปของฉัน" : "ใช้อวาตาร์เกมแทน", () => { state.profUU = state.profUU === false; profGo("set", { useUp: state.profUU !== false }); }, "btn ghost"), btn("🗑️ ลบรูป", () => { if (confirm("ลบรูปที่อัปโหลด?")) profGo("removeUp", null, () => { profImgCache.clear(); toast("ลบรูปแล้ว"); }); }, "btn ghost"));
+    up.append(row);
+  }
+  body.append(up);
+  sec("🙂 อวาตาร์เกม", D.avatars, "av", "av"); sec("⭕ กรอบ", D.frames, "fr", "fr"); sec("🏞️ แบนเนอร์", D.banners, "bn", "bn"); sec("🏅 ฉายา", D.titles, "ti", "ti");
+}
+// ---- การ์ดของผู้เล่นอื่นในหน้าประวัติ ----
+async function profVisitFill(uid) {
+  let r; try { r = await profCall({ a: "visit", uid }); } catch { return; }
+  if (!r?.ok || $("bio-modal").classList.contains("hidden")) return;
+  let h = $("bio-card"); if (h) h.remove(); h = mk("div"); h.id = "bio-card"; h.style.margin = "0 0 8px"; $("bio-text").before(h);
+  h.append(profCardEl(r.card, uid));
+  const c = r.card;
+  if (!r.self && c.up) { const rb = btn(r.reported ? "🚩 รายงานแล้ว" : "🚩 รายงานรูปนี้", () => { rb.disabled = true; profCall({ a: "report", uid }).then((q) => toast(q.hidden ? "🚩 รายงานแล้ว — รูปถูกซ่อนชั่วคราวเพื่อรอตรวจ" : "🚩 รายงานแล้ว ขอบคุณ")).catch((e) => { toast(fnErr(e)); rb.disabled = false; }); }, "btn ghost mini"); rb.disabled = r.reported; rb.style.marginTop = "6px"; h.append(rb); }
+  if (r.canGm && c.up !== undefined && (c.up || c.hid)) {
+    const g = mk("div"); g.style.cssText = "display:flex;gap:6px;margin-top:6px;flex-wrap:wrap";
+    g.append(btn("🗑️ ลบรูป + ห้ามอัปโหลด", () => { if (confirm("ลบรูปนี้และห้ามผู้เล่นอัปโหลดอีก? (แบนบัญชีให้ทำที่หน้า Admin)")) profCall({ a: "gmRemove", uid, mode: "delete" }).then(() => { toast("ลบรูปแล้ว"); profVisitFill(uid); }).catch((e) => toast(fnErr(e))); }, "btn danger mini"), btn("✅ ไม่ผิด (เลิกซ่อน)", () => profCall({ a: "gmRemove", uid, mode: "keep" }).then(() => { toast("เลิกซ่อนแล้ว"); profVisitFill(uid); }).catch((e) => toast(fnErr(e))), "btn ghost mini"));
+    h.append(g);
+  }
+}
+// ---- GM: รายการรูปที่ถูกรายงาน (ในหน้า Admin) ----
+function profGmSection() {
+  if ($("pgm-box")) return; const anchor = $("adm-reset-stats")?.closest(".adm-section"); if (!anchor) return;
+  const sec = mk("div", "adm-section"); sec.id = "pgm-box"; sec.append(mk("h3", "", "🖼️ รูปโปรไฟล์ที่ถูกรายงาน"));
+  const list = mk("div"); list.style.cssText = "display:grid;gap:6px"; const load = () => { list.innerHTML = ""; list.append(mk("span", "muted", "กำลังโหลด…")); profCall({ a: "gmList" }).then((r) => { list.innerHTML = ""; if (!r.rows.length) list.append(mk("span", "muted", "ไม่มีรายการ")); r.rows.forEach((x) => { const row = mk("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap"; row.append(mk("span", "", `${x.hid ? "🙈" : "👁️"} ${x.name} • รายงาน ${x.n} ครั้ง`), btn("เปิดดู", () => { try { showBio(x.uid, x.name, "human"); } catch { /* ข้าม */ } }, "btn ghost mini")); list.append(row); }); }).catch((e) => { list.innerHTML = ""; list.append(mk("span", "muted", fnErr(e))); }); };
+  sec.append(btn("รีเฟรชรายการ", load, "btn ghost mini"), list); anchor.after(sec); load();
 }
 
 /* =========================================================
