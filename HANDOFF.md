@@ -4,8 +4,8 @@
 
 ## 1) ภาพรวมระบบ
 - ฝั่งเกม: `index.html` + `script.js` (**~1.15 MB รวมไว้ไฟล์เดียว** มีหัวข้อ `/* ===== NN) ... */` ~130 จุด ใช้ `grep -n "^   [0-9]*[.)]" script.js` หาตำแหน่ง) + `style.css` (ต่อท้ายไฟล์ทุกฟีเจอร์) + `sw.js` + `version.json` — **ทุกครั้งที่แก้เกมต้องรัน `node bump.js` (เลขเวอร์ชัน)** ไม่งั้นผู้เล่นได้แคชเก่า
-- ฝั่งเซิร์ฟเวอร์: `functions/` (Node 22, region `asia-southeast1`, Admin SDK ข้าม rules) — ไฟล์ละระบบ: `base market pass events daily camp world dive nemesis radio caravan garden col home profile learn ability war casino slave mutate hc`; ลงทะเบียนใน `functions/index.js` (รูปแบบ `onCall` + ล็อก error เหมือนกันทุกตัว)
-- ข้อมูล: `database_rules.json` (**219 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
+- ฝั่งเซิร์ฟเวอร์: `functions/` (Node 22, region `asia-southeast1`, Admin SDK ข้าม rules) — ไฟล์ละระบบ: `base market pass events daily camp world dive nemesis radio caravan garden col home profile learn ability war casino slave mutate hc zwar`; ลงทะเบียนใน `functions/index.js` (รูปแบบ `onCall` + ล็อก error เหมือนกันทุกตัว)
+- ข้อมูล: `database_rules.json` (**219 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc zwrl`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
 - เอกสารรายระบบ: `MIGRATION.md` (หัวข้อต่อระบบ: ข้อมูล/กติกา/ข้อควรระวัง/วิธีทดสอบ) • ออกแบบไอเทมชุดต่อไป: `ITEMS_DESIGN.md` + `items.draft.json` • บทพูด NPC: `npc-*.json`
 
 ## 2) ขั้นตอน deploy (ลำดับสำคัญ)
@@ -28,7 +28,7 @@
 - ทดสอบทั้งหมดอยู่ที่ `tests/` (ดู `tests/README.md`) — ต้องรัน Firebase emulator เอง
 
 ## 5) งานค้าง/ช่องโหว่ที่รู้ (เรียงตามความสำคัญ)
-1. **แต้มศึกใหญ่รายสัปดาห์ (`coop/{zh|zz}{สัปดาห์}{โซน}/{uid}.n`) โกงได้**: rules `coop/$key/$uid` ไม่ตรวจว่าทำกิจกรรมจริง (เพิ่มได้ ≤300 ต่อ 4 วินาที) → ควรย้ายการนับแต้มเป็นฟังก์ชันแบบเดียวกับ `hc.js` ก่อนมีรางวัลจริง (`war.js` อ่านค่านี้อยู่)
+1. ~~แต้มศึกใหญ่รายสัปดาห์โกงได้~~ → ย้ายเป็นฟังก์ชัน `zwAct` (`functions/zwar.js`) แล้ว (จำกัดด้วยถังโทเค็น; ยืนยันเหตุการณ์จริงไม่ได้เพราะค้นหา/สู้ยังเป็นฝั่งไคลเอนต์ — ดู `MIGRATION.md`)
 2. **คาสิโนเกมเดี่ยวไม่มีเพดานชนะต่อวัน** (สล็อตตั้งเดิมพัน ≤100 แล้ว; โป๊กเกอร์รอยัล ×250 ที่เดิมพัน 500 = 125,000) — ควรเพิ่มเพดานชนะรายวันแบบ `day.tw` ของโต๊ะสลาฟ (`slave.js`)
 3. **อาวุธใหม่ 20 ชนิด** (`ITEMS_DESIGN.md`): รหัสอาวุธฝังใน rules ~14 จุด (regex ดรอป/รื้อ/บอสโลก/ตรวจ `wpn`) → ต้องเพิ่มรหัสทุกจุด + `config/weaponDmg`/`weaponMaxDur` หรือย้ายการสู้เป็นฟังก์ชัน (ใหญ่) • **คราฟต์อาวุธเดิม 11 ชนิด**: เสนอทำเป็น `craftAct` (สูตรฝั่งเซิร์ฟเวอร์ ไม่แตะ rules; ให้เฉพาะอาวุธระดับต้น–กลาง)
 4. ไอเทมชุดที่ 2 อื่นๆ (อาหาร/ยา/บัฟ/ของสะสม 42 ชิ้น) ต้องย้ายระบบค้นหา/ใช้ไอเทมเป็นฟังก์ชันก่อน (ตาม `MIGRATION.md` หัวข้อแรกๆ)

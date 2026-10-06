@@ -50,6 +50,7 @@ const slaveCall = (data) => httpsCallable(fns, "slaveAct")(data).then((r) => r.d
 const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
 const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data);   // 🧬 มิวเตชันซอมบี้ขั้น 5–8 (functions/mutate.js)
 const hcCall = (data) => httpsCallable(fns, "hcAct")(data).then((r) => r.data);   // 📡 ภารกิจ HC: ค้นพบธารา/ส่ง DNA (functions/hc.js)
+const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data);   // ⚔️ แต้มศึกชิงโซนรายสัปดาห์ (functions/zwar.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -57,7 +58,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1000";
+const APP_VERSION = "2026-10-06.0633";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -6597,6 +6598,7 @@ function coopEvent(ev, n = 1) {
   try { zwarEvent(ev, n); } catch { /* ข้าม */ }   // ศึกชิงโซน (หัวข้อ 37)
 }
 async function coopFlush() {
+  try { zwFlush(); } catch { /* ข้าม */ }
   const C = state.coop; if (!C || C.busy || !state.profile || state.profile.banned) return;
   const keys = Object.keys(C.pend).filter((k) => C.pend[k] > 0); if (!keys.length) return;
   const wait = ACH_GAP - (serverNow() - C.last);
@@ -7467,8 +7469,27 @@ const coopRaw = (k) => Object.values(state.coop?.sums?.[k] || {}).reduce((s, x) 
 function zwarEvent(ev, n) {
   const C = state.coop, w = ZW_W[ev]; if (!C || !w || !T("zw_on", 1)) return;
   const idx = zwZones().indexOf(state.zone) + 1; if (idx < 1 || !(state.profile?.hp > 0)) return;
-  const k = zwKey(coopFac(), qpKey("weekly"), idx);
-  C.pend[k] = (C.pend[k] || 0) + n * w; achBump("zwar", n * w);
+  // แต้มเขียนผ่านฟังก์ชัน zwAct (เซิร์ฟเวอร์กำหนดโซน/ฝ่าย/น้ำหนักเอง) — ที่นี่แค่สะสมจำนวนครั้งของโซนปัจจุบัน
+  const q = C.zq || (C.zq = { zone: state.zone, ev: {} });
+  if (q.zone !== state.zone) { q.zone = state.zone; q.ev = {}; }   // ย้ายโซน: ของค้างโซนเดิมทิ้ง (เซิร์ฟเวอร์ใช้โซนปัจจุบันของผู้เล่น)
+  q.ev[ev] = (q.ev[ev] || 0) + n; achBump("zwar", n * w);
+  clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 5000);
+}
+async function zwFlush() {
+  const C = state.coop, q = C?.zq; if (!q || C.zbusy || !state.profile || state.profile.banned || q.zone !== state.zone) return;
+  const ev = {}; let any = false;
+  Object.entries(q.ev).forEach(([k, v]) => { const n = Math.min(20, Math.floor(v)); if (n >= 1) { ev[k] = n; any = true; } });
+  if (!any) return;
+  C.zbusy = true;
+  try {
+    const r = await zwCall({ items: ev });
+    Object.entries(ev).forEach(([k, n]) => { q.ev[k] -= n; if (q.ev[k] <= 0) delete q.ev[k]; });
+    if (Object.keys(q.ev).length) { clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 3000); }
+    if (r?.limited) q.ev = {};   // ถังเต็ม: ทิ้งส่วนเกิน (ไม่ลองใหม่ไม่รู้จบ)
+  } catch (e) {
+    const c = e?.code || ""; console.warn("zwFlush", c);
+    if (/invalid-argument|permission-denied|unauthenticated/.test(c)) q.ev = {}; else if (/aborted|unavailable|internal|deadline/.test(c)) { clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 8000); } else q.ev = {};
+  } finally { C.zbusy = false; }
 }
 function zwarWant(want) {
   const wk = qpKey("weekly"); zwZones().forEach((z, i) => { want.add(zwKey("human", wk, i + 1)); want.add(zwKey("zombie", wk, i + 1)); });
