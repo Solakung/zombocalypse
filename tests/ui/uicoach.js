@@ -1,0 +1,32 @@
+const { chromium } = require("/opt/node-tools/node_modules/playwright"); const fs = require("fs");
+const R = "/home/user/zombocalypse/"; const sc = fs.readFileSync(R + "script.js", "utf8");
+const part = sc.slice(sc.indexOf("const coachGoTo = (go) => {"), sc.indexOf("/* =========================================================\n   49.3)"));
+const rewSrc = sc.match(/const mRew = .*\n/)[0], wbSrc = sc.match(/function worldBar\(.*\n/)[0];
+(async () => {
+  const br = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }); const errs = [];
+  const ctx = await br.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const pg = await ctx.newPage(); pg.on("pageerror", (e) => errs.push(String(e)));
+  await pg.route("**/*", (r) => { const u = r.request().url(); if (u.includes("script.js")) return r.fulfill({ body: "" }); if (u.startsWith("file://")) return r.continue(); return r.abort(); });
+  await pg.goto("file://" + R + "index.html");
+  const out = await pg.evaluate(async ([part, rewSrc, wbSrc]) => {
+    document.getElementById("screen-game").classList.add("active"); document.querySelectorAll(".screen").forEach((x) => { if (x.id !== "screen-game") x.classList.remove("active"); });
+    const $ = (i) => document.getElementById(i); const out = {}, went = [];
+    const mk = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; };
+    const btn = (l, f, c = "btn primary mini") => { const b = mk("button", c, l); b.type = "button"; b.addEventListener("click", f); return b; };
+    const step = (id, t, ok, v, n, go, got) => ({ id, t, d: "คำอธิบายขั้น " + t, ok, v, n, go, got: !!got, r: [["water", 2]] });
+    let D = { ok: true, fac: "human", done: 2, allGot: false, finalGot: false, final: [["theme_cozy", 1]], next: 2, steps: [step("use", "ใช้ไอเทม 3 ครั้ง", true, 3, 3, "bag", 1), step("srch", "ค้นหา 25 ครั้ง", true, 25, 25, "bag", 1), step("base", "สร้างที่พักขั้น 1", false, 0, 1, "base"), step("gard", "ปลูกและเก็บเกี่ยว", false, 0, 1, "baseedit"), step("pass", "รับ XP ซีซัน", true, 25, 1, "hub:pass")] };
+    const learnCall = async (d) => { out.last = d; if (d.a === "claim") { D = { ...D, steps: D.steps.map((s) => (s.id === d.id ? { ...s, got: true } : s)), done: D.done + 1 }; return { ...D, rewarded: [["water", 2]] }; } return D; };
+    const state = { profile: { hp: 50 }, ach: { loaded: true }, onb: {} };
+    const api = new Function("state", "mk", "btn", "$", "learnCall", "fnErr", "toast", "logLine", "sfx", "setTab", "openBase", "hubOpen", "onbOn", "onbLeft", "onbOpen", "ONB_STEPS", "seedLbl", "ITEMS", part + ";\n" + rewSrc + ";\n" + wbSrc.replace("function worldBar", "const worldBar = function") + ";\nreturn { coachTick, coachBar, coachOpen, coachRender, coachGoTo, coachClaim };")(state, mk, btn, $, learnCall, () => "err", (m) => { out.toast = m; }, () => {}, () => {}, (t) => went.push("tab:" + t), () => went.push("openBase:" + state.baseView), (t) => went.push("hub:" + t), () => true, () => 0, () => went.push("onb"), [1, 2, 3, 4, 5, 6], () => null, { water: { name: "น้ำ", icon: "💧" }, theme_cozy: { name: "ธีม", icon: "🕯️" } });
+    api.coachTick(); await new Promise((r) => setTimeout(r, 80)); api.coachBar();
+    out.bar = $("coach").innerText.replace(/\n/g, " | "); out.barBtn = [...$("coach").querySelectorAll("button")].map((b) => b.textContent);
+    $("coach").querySelector("button").click(); out.went1 = went.slice();
+    $("coach").querySelector(".coach-t").click(); await new Promise((r) => setTimeout(r, 80)); out.list = $("coach-body").innerText.replace(/\n/g, " | ").slice(0, 300);
+    out.btns = [...$("coach-body").querySelectorAll("button")].map((b) => b.textContent); const claimBtn = [...$("coach-body").querySelectorAll("button")].find((b) => b.textContent.includes("รับรางวัล")) || { click() { out.noClaim = 1; } }; claimBtn.click(); await new Promise((r) => setTimeout(r, 120)); out.claimed = out.last; out.toastClaim = out.toast;
+    out.hscroll = document.documentElement.scrollWidth > innerWidth; out.barH = Math.round($("coach").getBoundingClientRect().height);
+    $("coach-modal").classList.add("hidden");
+    return out;
+  }, [part, rewSrc, wbSrc]);
+  await pg.screenshot({ path: "shots/coach.png" });
+  console.log(JSON.stringify(out, null, 1)); console.log("errors:", errs); await br.close();
+})();

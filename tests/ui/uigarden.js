@@ -1,0 +1,34 @@
+const { chromium } = require("/opt/node-tools/node_modules/playwright"); const fs = require("fs");
+const R = "/home/user/zombocalypse/"; const sc = fs.readFileSync(R + "script.js", "utf8");
+const part = sc.slice(sc.indexOf("/* =========================================================\n   49.3)"), sc.indexOf("/* =========================================================\n   49.35)"));
+const scnHelp = sc.slice(sc.indexOf("function scnHash"), sc.indexOf("// o: { lv, deco:{d0:true..}"));
+const rewSrc = sc.match(/const mRew = .*\n/)[0], hmSrc = sc.match(/const baseHm = .*\n/)[0], wbSrc = sc.match(/function worldBar\(.*\n/)[0];
+(async () => {
+  const br = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }); const errs = [];
+  const ctx = await br.newContext({ viewport: { width: 360, height: 740 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  const pg = await ctx.newPage(); pg.on("pageerror", (e) => errs.push(String(e)));
+  await pg.route("**/*", (r) => { const u = r.request().url(); if (u.includes("script.js")) return r.fulfill({ body: "" }); if (u.startsWith("file://")) return r.continue(); return r.abort(); });
+  await pg.goto("file://" + R + "index.html");
+  const out = await pg.evaluate(async ([part, rewSrc, hmSrc, wbSrc, scnHelp]) => {
+    window.serverNow = () => Date.UTC(2026, 8, 7, 10); window.fxMoon = () => "new"; const out = {}; document.querySelectorAll(".screen").forEach((x) => x.classList.remove("active")); document.getElementById("screen-game").classList.add("active");
+    const $ = (i) => document.getElementById(i); window.$ = $; window.mk = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; };
+    window.btn = (l, f, c = "btn primary mini") => { const b = mk("button", c, l); b.type = "button"; b.addEventListener("click", f); return b; };
+    Object.assign(window, { toast: (m) => { out.toast = m; }, logLine() {}, sfx() {}, achBump: (k, n) => { out.bump = [k, n]; }, fnErr: () => "err", baseCan: () => true, ITEMS: { herb_bundle: { name: "กำสมุนไพร", icon: "🌾" }, scrap: { name: "เศษ", icon: "🧵" }, water: { name: "น้ำ", icon: "💧" } }, state: { profile: { faction: "human" } }, baseAgain: () => { window.draw(); } });
+    (0, eval)(hmSrc.replace("const baseHm", "window.baseHm")); (0, eval)(wbSrc.replace("function worldBar", "window.worldBar = function"));
+    const crops = { herb: { n: "สมุนไพรข้างรั้ว", i: "🌿", r: 0, g: 1890000, y: ["herb_bundle", 3], buy: ["scrap", 3], h: 0 }, tomato: { n: "มะเขือเทศบนดาดฟ้า", i: "🍅", r: 0, g: 5400000, y: ["fruit", 3], buy: ["scrap", 5], h: 0 } };
+    let D = { ok: true, n: 4, season: 0, daily: true, seeds: { herb: 2 }, crops, harvested: {}, water: ["water", 1], fert: ["scrap", 1], plots: [{ i: 1, c: "herb", left: 0, total: 1000, w: true, f: false }, { i: 2, c: "herb", left: 900000, total: 1890000, w: false, f: false }, { i: 3 }, { i: 4 }] };
+    window.gardenCall = async (d) => { out.last = d.a; if (d.a === "harvest") { D = { ...D, plots: D.plots.map((p) => (p.i === 1 ? { i: 1 } : p)) }; return { ...D, got: [["herb_bundle", 3]], cnt: 1, notes: ["🐛 ศัตรูพืช"] }; } if (d.a === "daily") { D = { ...D, daily: false }; return { ...D, got: [["seed_herb", 2]] }; } return D; };
+    (0, eval)(scnHelp + "\n" + part + "\n" + rewSrc.replace("const mRew = ", "window.mRew = ") + "; window.__g = { gardenRows, gardenGo };");
+    window.state = state; window.draw = () => { const b = $("gbox"); b.innerHTML = ""; window.__g.gardenRows(b); };
+    const box = document.createElement("div"); box.id = "gbox"; box.style.cssText = "padding:10px;display:grid;gap:8px;position:fixed;inset:0;background:var(--bg);overflow:auto;z-index:99"; document.body.append(box);
+    window.draw(); await new Promise((r) => setTimeout(r, 120)); window.draw();
+    out.text = box.innerText.replace(/\n/g, " | ").slice(0, 700);
+    [...box.querySelectorAll("button")].find((b) => b.textContent.includes("รับเมล็ดฟรี")).click(); await new Promise((r) => setTimeout(r, 120)); out.afterDaily = out.toast;
+    $("gbox").querySelector("[data-i=\"1\"]").dispatchEvent(new MouseEvent("click", { bubbles: true })); await new Promise((r) => setTimeout(r, 80)); out.sel = $("gbox").innerText.replace(/\n/g, " | ").slice(0, 160); [...$("gbox").querySelectorAll("button")].find((b) => b.textContent.includes("เก็บเกี่ยว")).click(); await new Promise((r) => setTimeout(r, 150)); out.afterHarvest = [out.toast, out.bump];
+    out.small = [...box.querySelectorAll("button")].filter((b) => b.getBoundingClientRect().height < 34).length;
+    out.hscroll = document.documentElement.scrollWidth > innerWidth || box.scrollWidth > box.clientWidth;
+    return out;
+  }, [part, rewSrc, hmSrc, wbSrc, scnHelp]);
+  await pg.screenshot({ path: "shots/garden360.png" });
+  console.log(JSON.stringify(out, null, 1)); console.log("errors:", errs); await br.close();
+})();
