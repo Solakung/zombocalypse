@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0834";
+const APP_VERSION = "2026-10-06.1052";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -884,6 +884,52 @@ function openGuide() {
 }
 $("btn-guide").addEventListener("click", openGuide);
 $("guide-close").addEventListener("click", () => $("guide-modal").classList.add("hidden"));
+// ---- 📰 มีอะไรใหม่ (changelog.json) — แสดงอัตโนมัติครั้งเดียวต่อรายการที่ยังไม่เคยเห็น (เก็บในเครื่อง) + เปิดดูซ้ำได้จากปุ่มในหน้าวิธีเล่น
+// รูปแบบไฟล์: { entries: [ { id, date, title, items: [ { k: "ใหม่"|"ปรับ"|"แก้", t: "ข้อความสั้น" } ] } ] } เรียงใหม่สุดไว้บน — แก้ไฟล์นี้ไฟล์เดียวเมื่อมีอัปเดต (ไม่ต้องแก้โค้ดเกม)
+const CLOG_KINDS = { "ใหม่": "clog-new", "ปรับ": "clog-chg", "แก้": "clog-fix" };
+async function clogLoad() {
+  try {
+    const r = await fetch(`changelog.json?t=${Date.now()}`, { cache: "no-store" }); if (!r.ok) return [];
+    const j = await r.json(); return Array.isArray(j?.entries) ? j.entries.filter((e) => e && typeof e.id === "string" && Array.isArray(e.items)) : [];
+  } catch { return []; }
+}
+function clogRender(entries) {
+  const box = $("clog-body"); box.textContent = "";
+  if (!entries.length) { box.append(mk("p", "muted", "ยังไม่มีบันทึกการอัปเดต")); return; }
+  entries.forEach((e) => {
+    const h = mk("div"); h.style.cssText = "margin:0 0 6px;font-weight:700";
+    h.append(mk("span", "", String(e.title || "อัปเดต")), mk("span", "muted", e.date ? `  ${String(e.date)}` : ""));
+    const ul = mk("ul"); ul.style.cssText = "margin:0 0 14px;padding-left:18px";
+    e.items.forEach((it) => {
+      const li = mk("li"); li.style.margin = "4px 0";
+      const k = typeof it === "string" ? "" : String(it.k || "");
+      if (k) li.append(mk("span", "clog-k " + (CLOG_KINDS[k] || ""), k), document.createTextNode(" "));
+      li.append(document.createTextNode(typeof it === "string" ? it : String(it.t || ""))); ul.append(li);
+    });
+    box.append(h, ul);
+  });
+}
+async function clogOpen(onlyUnseen) {
+  const all = await clogLoad(), seen = LS.get(lsKey("clog"), ""), i = all.findIndex((e) => e.id === seen);
+  const list = onlyUnseen ? (i < 0 ? all.slice(0, 3) : all.slice(0, i)).slice(0, 3) : all.slice(0, 8);   // อัตโนมัติ: เฉพาะที่ยังไม่เคยเห็น (สูงสุด 3 รายการ) • เปิดเอง: ย้อนหลัง 8 รายการ
+  if (onlyUnseen && !list.length) return false;
+  clogRender(list); $("clog-modal").classList.remove("hidden");
+  if (all[0]) LS.set(lsKey("clog"), all[0].id);
+  return true;
+}
+// เรียกหลังเข้าเกม: ผู้เล่นใหม่ (สร้างตัวภายใน 10 นาที) ไม่ต้องเห็น • ถ้ามีหน้าต่างอื่นเปิดอยู่ รอแล้วลองใหม่ (ไม่ทับกัน)
+async function clogAuto(tries = 0) {
+  try {
+    const p = state.profile; if (!p || p.banned) return;
+    if (typeof p.createdAt === "number" && serverNow() - p.createdAt < 600000) { const a = await clogLoad(); if (a[0]) LS.set(lsKey("clog"), a[0].id); return; }
+    if (document.querySelector(".modal:not(.hidden)")) { if (tries < 6) setTimeout(() => clogAuto(tries + 1), 20000); return; }
+    await clogOpen(true);
+  } catch { /* ข้าม */ }
+}
+$("clog-open").addEventListener("click", () => { $("guide-modal").classList.add("hidden"); clogOpen(false); });
+$("clog-close").addEventListener("click", () => $("clog-modal").classList.add("hidden"));
+// ---- /มีอะไรใหม่
+
 
 // เดินเวลาสถานะ: bleed/poison ลด HP (poison ลดพลังงานด้วย) ย้อนหลังได้ไม่เกิน FX_MAX_TICKS รอบ ไม่ทำให้ตาย (เหลือ ≥ 1 HP) / hot ฟื้นรอบละครั้ง / หมดเวลาแล้วลบทิ้ง
 async function effectTick() {
@@ -1189,6 +1235,7 @@ function startGame() {
   if (state.started) return;
   state.started = true;
   state.sessionStart = serverNow() - 30000;
+  setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
     state.stats = s.val(); state.statsLoaded = true;
@@ -9596,8 +9643,27 @@ function gardenRows(body) {
   if (shop.length) { const row = mk("div"); row.style.cssText = "display:grid;gap:6px;margin-top:8px"; shop.forEach(([k, v]) => { const b = btn(`ซื้อ ${v.i}${v.n} (${mRew([v.buy])})`, () => gardenGo("buy", { c: k, q: 1 }, () => toast(`🌱 ซื้อเมล็ด${v.n}แล้ว`)), "btn ghost"); b.disabled = !can; row.append(b); }); sb.append(row); }
   sb.open = !!state.gardenShop; sb.addEventListener("toggle", () => { state.gardenShop = sb.open; });
   box.append(sb);
+  try { gardenUpRows(box, D); } catch { /* ข้าม */ }
   body.append(box);
 }
+// ---- ⬆️ อัปเกรดสวน (functions/garden.js `upgrade`; ระดับ 1–5 แยกตามฝ่าย — ข้อมูลทั้งหมดมากับ state.gardenD.up)
+function gardenUpRows(box, D) {
+  const U = D?.up; if (!U) return;
+  const d = mk("details"), eff = U.eff || {}, parts = [];
+  if (eff.p) parts.push(`แปลง +${eff.p}`); if (eff.g) parts.push(`เวลาโต −${eff.g}%`); if (eff.b) parts.push(`โอกาสได้ผลผลิต +1 ชิ้น ${eff.b}%`); if (eff.m) parts.push(`กลายพันธุ์ +${eff.m}%`);
+  d.append(mk("summary", "", `⬆️ อัปเกรดสวน ระดับ ${U.lv}/${U.max}${parts.length ? " • " + parts.join(" • ") : ""}`));
+  const wrap = mk("div"); wrap.style.cssText = "display:grid;gap:6px;margin-top:8px";
+  U.tiers.forEach((t, i) => wrap.append(mk("span", t.done ? "" : "muted", `${t.done ? "✅" : `${i + 1}.`} ${t.n} — ${t.d}`)));
+  if (U.next) {
+    const have = (id) => state.inv?.[id]?.qty || 0, ok = U.next.cost.every(([id, q]) => have(id) >= q);
+    wrap.append(mk("span", "", `ระดับ ${U.lv + 1}: ${U.next.n} — ${U.next.d}`), mk("span", ok ? "" : "muted", "ต้องใช้ " + U.next.cost.map(([id, q]) => `${ITEMS[id]?.icon || ""}${ITEMS[id]?.name || id} ${Math.min(have(id), 999)}/${q}`).join(" • ")));
+    const b = btn(`⬆️ อัปเกรดเป็นระดับ ${U.lv + 1}`, () => gardenGo("upgrade", null, (r) => { toast(`⬆️ อัปเกรดสวนแล้ว: ${r.upgraded}`); logLine(`⬆️ คุณอัปเกรดสวนเป็นระดับ ${r.lv}: ${r.upgraded}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }), "btn primary");
+    b.disabled = !baseCan() || !ok; wrap.append(b);
+  } else wrap.append(mk("span", "", "🏆 สวนอัปเกรดถึงระดับสูงสุดแล้ว"));
+  d.append(wrap); d.open = !!state.gardenUp; d.addEventListener("toggle", () => { state.gardenUp = d.open; });
+  box.append(d);
+}
+// ---- /อัปเกรดสวน
 function gardenDone(r) {
   toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เก็บเกี่ยว ${r.cnt} แปลง: ${mRew(r.got)}`, "system");
   (r.notes || []).forEach((n) => logLine(n, "info")); try { achBump("gard", r.cnt); sfx("boss"); } catch { /* ข้าม */ }

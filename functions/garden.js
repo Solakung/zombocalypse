@@ -1,4 +1,4 @@
-// 🌱 แปลงปลูก (Garden) ในที่พัก: ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยวผลผลิต • ฤดูกาลมีผลกับเวลาโต • มีเหตุการณ์เล็ก ๆ ตอนเก็บเกี่ยว
+// 🌱 แปลงปลูก (Garden) ในที่พัก: ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยวผลผลิต • ⬆️ อัปเกรดสวน (upgrade) ระดับ 1–5 แยกตามฝ่าย • ฤดูกาลมีผลกับเวลาโต • มีเหตุการณ์เล็ก ๆ ตอนเก็บเกี่ยว
 // ข้อมูลที่ garden/{uid} (ไม่มีใน rules → เขียนได้เฉพาะฟังก์ชันนี้) • เมล็ดพันธุ์เป็นตัวนับ garden/{uid}/seed/{พืช} (lib.js: id "seed_<พืช>")
 // ไม่แตะ หิว/น้ำ/พลังงาน/HP • ผลผลิตเป็นไอเทมเดิมที่อยู่ใน whitelist กระเป๋าอยู่แล้ว
 const { fail, withLock, takeItem, grantAll, dayIdx, dayEnd } = require("./lib");
@@ -26,9 +26,31 @@ const FERT = { human: ["scrap", 1], zombie: ["rotten_meat", 1] };
 const WATER_COST = ["water", 1];
 const MUT = { human: [["serum", 1], ["chem_catalyst", 1], ["medkit", 1]], zombie: [["mutant_gland", 1], ["serum", 1]] };
 const PEST = 0.12, MUTATE = 0.08;
+// ⬆️ อัปเกรดสวน (ระดับ 1–5 แยกตามฝ่าย — เก็บที่ garden/{uid}/u) ผสม 4 แบบ: เพิ่มแปลง / เวลาโตลดลง / โอกาสได้ผลผลิตเพิ่ม +1 ชิ้น / โอกาสกลายพันธุ์ (ซอมบี้)
+// eff = ผลสะสมรวมของระดับนั้น {p: แปลงเพิ่ม, g: เวลาโตลด %, b: โอกาส +1 ชิ้น %, m: กลายพันธุ์เพิ่ม %} • cost ต้องไม่เกิน 99 ต่อชนิด (เพดานช่องกระเป๋า) • ซอมบี้ไม่ได้เศษวัสดุ/สารเคมีจากการค้น จึงใช้เนื้อเน่า/ต่อมมิวแทนต์
+const UP_MAX = 5;
+const UP = {
+  human: [
+    { n: "🌿 ขยายแปลงริมรั้ว", d: "แปลง +1", cost: [["scrap", 30]], eff: { p: 1, g: 0, b: 0, m: 0 } },
+    { n: "💧 ระบบรดน้ำฝน", d: "เวลาโต −6%", cost: [["scrap", 45], ["rope_coil", 2]], eff: { p: 1, g: 6, b: 0, m: 0 } },
+    { n: "🧺 ปุ๋ยหมัก", d: "เก็บเกี่ยวมีโอกาส 10% ได้เพิ่ม +1 ชิ้น", cost: [["scrap", 60], ["herb_bundle", 6], ["chem", 3]], eff: { p: 1, g: 6, b: 10, m: 0 } },
+    { n: "🌿 แถวปลูกใหม่", d: "แปลง +1 อีก (รวม +2)", cost: [["scrap", 80], ["steel_plate", 2]], eff: { p: 2, g: 6, b: 10, m: 0 } },
+    { n: "🏆 สวนชุมชน", d: "เวลาโตลดรวม −14% และโอกาสได้เพิ่มรวม 20%", cost: [["scrap", 99], ["steel_plate", 3], ["battery_pack", 2]], eff: { p: 2, g: 14, b: 20, m: 0 } }
+  ],
+  zombie: [
+    { n: "🪱 ขุดบ่อเพิ่ม", d: "แปลง +1", cost: [["rotten_meat", 30]], eff: { p: 1, g: 0, b: 0, m: 0 } },
+    { n: "🍖 บ่มซาก", d: "เก็บเกี่ยวมีโอกาส 15% ได้เพิ่ม +1 ชิ้น", cost: [["rotten_meat", 45], ["water", 3]], eff: { p: 1, g: 0, b: 15, m: 0 } },
+    { n: "🧬 เชื้อกลายพันธุ์", d: "โอกาสกลายพันธุ์ +4% (รวม 12%)", cost: [["rotten_meat", 60], ["mutant_gland", 1]], eff: { p: 1, g: 0, b: 15, m: 4 } },
+    { n: "🪱 บ่อสำรอง", d: "แปลง +1 อีก (รวม +2)", cost: [["rotten_meat", 80], ["mutant_gland", 2]], eff: { p: 2, g: 0, b: 15, m: 4 } },
+    { n: "👑 รังเพาะพันธุ์", d: "เวลาโต −10% • โอกาสได้เพิ่มรวม 25% • กลายพันธุ์รวม +8%", cost: [["rotten_meat", 99], ["mutant_gland", 4]], eff: { p: 2, g: 10, b: 25, m: 8 } }
+  ]
+};
+const ZERO = { p: 0, g: 0, b: 0, m: 0 };
+const upLv = (u) => Math.max(0, Math.min(UP_MAX, Math.trunc(Number(u)) || 0));
+const upEff = (fac, lv) => (upLv(lv) > 0 ? UP[fac][upLv(lv) - 1].eff : ZERO);
 const DAILY_SEEDS = { human: ["herb", "mossb", "tomato"], zombie: ["fungus", "bog"] };
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
-const growMs = (c, now) => Math.round(CROPS[c].g * CROPS[c].s[seaIdx(now) % 4]);
+const growMs = (c, now, cutPct = 0) => Math.round(CROPS[c].g * CROPS[c].s[seaIdx(now) % 4] * (1 - cutPct / 100));
 
 function makeGarden(db) {
   async function run(uid, data, now = Date.now()) {
@@ -38,7 +60,7 @@ function makeGarden(db) {
       const [pS, gS, bS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`garden/${uid}`).get(), db.ref(`base/${uid}/lv`).get()]);
       const p = pS.val(), g = gS.val() || {}, lv = bS.val() || 0;
       if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
-      const fac = p.faction === "zombie" ? "zombie" : "human", fk = fac === "zombie" ? "z" : "h", n = plotsFor(lv), plots = g.p || {}, seed = g.seed || {}, hv = g.h || {};
+      const fac = p.faction === "zombie" ? "zombie" : "human", fk = fac === "zombie" ? "z" : "h", ul = upLv(g.u), ef = upEff(fac, ul), n = lv >= 1 ? plotsFor(lv) + ef.p : 0, plots = g.p || {}, seed = g.seed || {}, hv = g.h || {};
       const di = dayIdx(now);
       const need = () => { if (p.zone !== "safe" || !(p.hp > 0)) fail("failed-precondition", "ต้องอยู่ที่ Safe Zone และมีชีวิต"); if (n < 1) fail("failed-precondition", "ต้องมีที่พักขั้น 1 ขึ้นไปก่อน"); };
       const idxOf = () => { const i = Number(data.i); if (!Number.isInteger(i) || i < 1 || i > n) fail("invalid-argument", "ไม่มีแปลงนี้"); return i; };
@@ -47,8 +69,9 @@ function makeGarden(db) {
         ok: true, n, season: seaIdx(now) % 4, daily: g.d !== di, dEnd: dayEnd(now),
         plots: Array.from({ length: n }, (_, k) => { const r = plots[k + 1]; return r ? { i: k + 1, c: r.c, e: r.e, w: !!r.w, f: !!r.f, ready: now >= r.e, left: Math.max(0, r.e - now), total: r.e - r.t } : { i: k + 1 }; }),
         seeds: Object.fromEntries(Object.entries(seed).filter(([c, q]) => CROPS[c] && q > 0)), harvested: hv,
-        crops: Object.fromEntries(Object.entries(CROPS).filter(([, c]) => c.f === fk).map(([id, c]) => [id, { n: c.n, i: c.i, r: c.r, g: growMs(id, now), y: c.y, buy: c.buy || null, h: hv[id] || 0 }])),
-        fert: FERT[fac], water: WATER_COST
+        crops: Object.fromEntries(Object.entries(CROPS).filter(([, c]) => c.f === fk).map(([id, c]) => [id, { n: c.n, i: c.i, r: c.r, g: growMs(id, now, ef.g), y: c.y, buy: c.buy || null, h: hv[id] || 0 }])),
+        fert: FERT[fac], water: WATER_COST,
+        up: { lv: ul, max: UP_MAX, eff: ef, tiers: UP[fac].map((t, i) => ({ n: t.n, d: t.d, cost: t.cost, done: i < ul })), next: ul < UP_MAX ? { n: UP[fac][ul].n, d: UP[fac][ul].d, cost: UP[fac][ul].cost } : null }
       }, extra || {});
       if (a === "state") return view();
 
@@ -78,7 +101,7 @@ function makeGarden(db) {
         let okSeed = false;   // transaction รอบแรกอาจได้ null (ยังไม่มีแคช) → อย่า abort ให้เซิร์ฟเวอร์ส่งค่าจริงมาแล้วรันซ้ำ
         const took = await db.ref(`garden/${uid}/seed/${cid}`).transaction((x) => { okSeed = false; if (x === null) return x; if (!((Number(x) || 0) >= 1)) return undefined; okSeed = true; return (Number(x) - 1) || null; });
         if (!took.committed || !okSeed) fail("failed-precondition", "ไม่มีเมล็ดพันธุ์ชนิดนี้");
-        const rec = { c: cid, t: now, e: now + growMs(cid, now) };
+        const rec = { c: cid, t: now, e: now + growMs(cid, now, ef.g) };
         try { await set("p/" + i, rec); } catch (e) { await grantAll(db, uid, [["seed_" + cid, 1]]); throw e; }
         plots[i] = rec; seed[cid] = Math.max(0, (seed[cid] || 0) - 1);
         return view();
@@ -95,6 +118,22 @@ function makeGarden(db) {
         await set("p/" + i, r);
         return view();
       }
+      if (a === "upgrade") {
+        need();
+        if (ul >= UP_MAX) fail("failed-precondition", "สวนอัปเกรดถึงระดับสูงสุดแล้ว");
+        const tier = UP[fac][ul], took = [];
+        for (const [id, q] of tier.cost) {
+          if (!(await takeItem(db, uid, id, q))) { for (const [rid, rq] of took) await grantAll(db, uid, [[rid, rq]]); fail("failed-precondition", "ของไม่พอสำหรับอัปเกรดนี้"); }
+          took.push([id, q]);
+        }
+        let okLv = false;   // กันอัปซ้อน: ตั้งระดับเฉพาะเมื่อยังเท่าที่อ่านมา (รอบแรกของ transaction อาจได้ null)
+        try { await db.ref(`garden/${uid}/u`).transaction((x) => { okLv = false; if (x === null) { if (ul !== 0) return x; okLv = true; return 1; } if (upLv(x) !== ul) return undefined; okLv = true; return ul + 1; }); }
+        catch (e) { for (const [rid, rq] of took) await grantAll(db, uid, [[rid, rq]]); throw e; }
+        if (!okLv) { for (const [rid, rq] of took) await grantAll(db, uid, [[rid, rq]]); fail("aborted", "อัปเกรดไม่สำเร็จ ลองใหม่อีกครั้ง"); }
+        g.u = ul + 1;
+        const ul2 = ul + 1, ef2 = upEff(fac, ul2), n2 = plotsFor(lv) + ef2.p;
+        return Object.assign(view(), { upgraded: tier.n, lv: ul2, ok: true, n: n2, plots: Array.from({ length: n2 }, (_, k) => { const r = plots[k + 1]; return r ? { i: k + 1, c: r.c, e: r.e, w: !!r.w, f: !!r.f, ready: now >= r.e, left: Math.max(0, r.e - now), total: r.e - r.t } : { i: k + 1 }; }), up: { lv: ul2, max: UP_MAX, eff: ef2, tiers: UP[fac].map((t, i) => ({ n: t.n, d: t.d, cost: t.cost, done: i < ul2 })), next: ul2 < UP_MAX ? { n: UP[fac][ul2].n, d: UP[fac][ul2].d, cost: UP[fac][ul2].cost } : null } });
+      }
       if (a === "harvest") {
         need();
         const targets = data.i === "all" ? Object.keys(plots).map(Number).filter((k) => k <= n && plots[k] && now >= plots[k].e) : [idxOf()];
@@ -107,8 +146,9 @@ function makeGarden(db) {
           let [id, q] = c.y; q += r.f ? 1 : 0;
           let ev = null;
           if (!r.f && Math.random() < PEST) { q = Math.max(1, q - 1); ev = `🐛 ศัตรูพืชกัดแปลง ${c.i}${c.n} (ได้น้อยลง 1)`; }
+          if (ef.b > 0 && Math.random() * 100 < ef.b) { q += 1; ev = ev || `🌟 ${c.i}${c.n} ได้ผลผลิตเพิ่ม +1`; }   // อัปเกรดสวน: โอกาสได้เพิ่ม
           const list = [[id, q]];
-          if (Math.random() < MUTATE) { const m = pick(MUT[fac]); list.push(m); ev = `✨ ${c.i}${c.n} กลายพันธุ์! ได้ของแถมพิเศษ`; }
+          if (Math.random() < MUTATE + ef.m / 100) { const m = pick(MUT[fac]); list.push(m); ev = `✨ ${c.i}${c.n} กลายพันธุ์! ได้ของแถมพิเศษ`; }
           if (!(await grantAll(db, uid, list))) { if (cnt) break; fail("failed-precondition", "ช่องกระเป๋าเต็ม (99 ชิ้น) — เคลียร์ของก่อนเก็บเกี่ยว"); }
           list.forEach(([k, v]) => { got[k] = (got[k] || 0) + v; });
           await set("p/" + i, null); delete plots[i];
@@ -123,4 +163,4 @@ function makeGarden(db) {
   }
   return { run };
 }
-module.exports = { makeGarden, CROPS, plotsFor, growMs, DAILY_SEEDS, MUT, FERT };
+module.exports = { makeGarden, CROPS, plotsFor, growMs, DAILY_SEEDS, MUT, FERT, UP, UP_MAX, upEff };

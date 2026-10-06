@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-06.0834">
+  <link rel="stylesheet" href="style.css?v=2026-10-06.1052">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -186,9 +186,20 @@
     <div class="modal-box" style="max-width: 440px;">
       <div class="modal-head">
         <h2 id="guide-title">วิธีเล่น</h2>
-        <button id="guide-close" class="btn ghost mini">ปิด</button>
+        <span class="row-btns"><button id="clog-open" class="btn ghost mini">📰 มีอะไรใหม่</button><button id="guide-close" class="btn ghost mini">ปิด</button></span>
       </div>
       <div id="guide-body" style="margin-top: 12px; font-size: 14px; line-height: 1.55;"></div>
+    </div>
+  </div>
+
+  <!-- ===== มีอะไรใหม่ (เนื้อหาอ่านจาก changelog.json) ===== -->
+  <div id="clog-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="clog-title">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <h2 id="clog-title">📰 มีอะไรใหม่</h2>
+        <button id="clog-close" class="btn ghost mini">ปิด</button>
+      </div>
+      <div id="clog-body" style="margin-top: 12px; font-size: 14px; line-height: 1.55;"></div>
     </div>
   </div>
 
@@ -524,6 +535,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-06.0834"></script>
+  <script type="module" src="script.js?v=2026-10-06.1052"></script>
 </body>
 </html>

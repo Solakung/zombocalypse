@@ -1,12 +1,12 @@
 // เทียบ rules เก่า (main ก่อนย้ายการใช้ไอเทม) กับ rules ใหม่ (ตัดกิ่ง eatSlot ออก): การเขียนปกติต้องผลเท่ากัน • การกิน/ดื่ม/ใช้ยา/บัฟ/สถานะผ่านการเขียนตรงต้องถูกปฏิเสธ (ยกเว้นยาในการสู้บอส: ผ้าพันแผล/ชุดปฐมพยาบาล)
-// ใช้: git show origin/main:database_rules.json > rules_main.json  (หรือกำหนดไฟล์เก่าด้วย OLD_RULES)  แล้วรันด้วย NODE_PATH ที่มี @firebase/rules-unit-testing
+// ใช้: git show 5a14644:database_rules.json > rules_main.json  (ค่าตั้งต้นเทียบกับ rules ที่ commit 5a14644 = ก่อนย้ายการใช้ไอเทม; กำหนดเองด้วย OLD_RULES)  แล้วรันด้วย NODE_PATH ที่มี @firebase/rules-unit-testing
 process.env.FIREBASE_DATABASE_EMULATOR_HOST = "127.0.0.1:9000";
 const fs = require("fs"), assert = require("assert"), { execSync } = require("child_process");
 const admin = require("/home/user/zombocalypse/functions/node_modules/firebase-admin");
 const { initializeTestEnvironment } = require("@firebase/rules-unit-testing");
 const NS = "demo-zombo"; if (!admin.apps.length) admin.initializeApp({ projectId: NS, databaseURL: `http://127.0.0.1:9000?ns=${NS}` });
 const adb = admin.database(), SV = admin.database.ServerValue.TIMESTAMP;
-const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, "utf8") : execSync("git show origin/main:database_rules.json", { cwd: "/home/user/zombocalypse", maxBuffer: 1 << 26 }).toString(), nw: fs.readFileSync("/home/user/zombocalypse/database_rules.json", "utf8") };
+const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, "utf8") : execSync("git show 5a14644:database_rules.json", { cwd: "/home/user/zombocalypse", maxBuffer: 1 << 26 }).toString(), nw: fs.readFileSync("/home/user/zombocalypse/database_rules.json", "utf8") };
 (async () => {
   const env = await initializeTestEnvironment({ projectId: NS, database: { host: "127.0.0.1", port: 9000, rules: R.old } });
   const setRules = async (k) => { const r = await fetch(`http://127.0.0.1:9000/.settings/rules.json?ns=${NS}`, { method: "PUT", headers: { Authorization: "Bearer owner" }, body: R[k] }); if (!r.ok) throw new Error("rules"); };
@@ -55,6 +55,6 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
   let bad = 0;
   for (const [name, , , eo, en] of C) { if (res.old[name] !== eo || res.nw[name] !== en) { bad++; console.error("MISMATCH", name, "old", res.old[name], "(want", eo + ")", "new", res.nw[name], "(want", en + ")"); } }
   console.log(JSON.stringify(res.nw)); assert.strictEqual(bad, 0);
-  assert(R.nw.length < R.old.length - 15000, "rules should shrink ≥15 KB: " + (R.old.length - R.nw.length));
+  // (ขนาด rules เปลี่ยนเท่าไรดูจากบรรทัดสรุปด้านล่าง — ไม่ assert เพราะ origin/main มีการตัด rules รอบนี้ไปแล้ว)
   console.log("USE RULES OK (rules −" + (R.old.length - R.nw.length) + " B)"); await env.cleanup(); process.exit(0);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

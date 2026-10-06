@@ -28,3 +28,5 @@ curl -X PUT -H "Authorization: Bearer owner" --data-binary @database_rules.json 
 `node uicasino.js`, `uislave.js`, `uimut.js`, `uihub.js` ฯลฯ — พิมพ์ผล JSON และ `errors: []`
 
 > หมายเหตุ: `ruleparity.js` (เทียบการคราฟต์แบบเขียนตรง) ล้าสมัยโดยตั้งใจ — คราฟต์ทุกสูตรย้ายไป `forgeAct` แล้ว ใช้ `craftrules.js` (เทียบ rules เก่า/ใหม่ของ `inventory`) แทน; `usediff.js`/`use.js`/`userules.js` ครอบคลุมระบบใช้ไอเทม
+
+> `tests/ui/uiclog.js` — หน้าต่าง "มีอะไรใหม่" (changelog.json): แสดงครั้งเดียวต่อรายการ, ผู้เล่นใหม่ไม่เห็น, เปิดซ้ำได้, ไม่ล้น 360px, ข้อความไม่ถูกตีความเป็น HTML
