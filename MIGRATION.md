@@ -112,3 +112,9 @@ Blaze + Cloud Functions: โควตาฟรี 2 ล้านครั้ง/
 - `functions/radio.js` (`radioAct`: state|listen|guess) — `radio/{สัปดาห์}` (secret อ่านไม่ได้จากไคลเอนต์); เบาะแสหมุนตามวัน; ทายได้ 5 ครั้ง/วัน บอกจำนวนหลักที่ถูกตำแหน่ง; 10 คนแรกได้ชุดใหญ่
 - `functions/caravan.js` (`caravanAct`: state|buy) — `caravan/{รอบ 6 ชม.}`; เปิด 3 ชม.แรกของรอบ โซนสุ่ม ต้องยืนในโซนถึงเห็นสินค้า; สต็อกรวมจองด้วย transaction; คืนของ/สต็อกเมื่อไม่พอ
 - ทดสอบ: สแครชแพด `sys4.js` (emulator) + `uitest3.js` (headless) — ผ่าน
+
+## 🎲 ศูนย์กิจกรรม (UI มือถือก่อน) — PR A
+- รวมปุ่ม 🎟️ 🎁 🎲 🔥 เป็นแท็บเดียวในแผ่นล่าง `#hub2-modal` (`hubOpen(tab)`); มือถือเปิดจากแท็บ "กิจกรรม" ในแถบล่าง (4 แท็บ), คอมเปิดจากปุ่ม `#btn-hub2` บนแถบบน; จุดแจ้งเตือนรวม `hubDot()`
+- ตัว render เดิม (`passRender/actRender/advRender/mwRender`) ยังอยู่ แค่เช็กการมองเห็นด้วย `hubOn(tab)` แทนโมดัลแยก; `#btn-ck` ยังถูกสร้าง (ตัวจัดการเดิมใช้) แต่ซ่อนด้วย CSS
+- CSS ใหม่ท้าย `style.css`: `.modal.sheet` (bottom sheet, ปุ่ม ≥ 44px, safe-area; คอม >900px = กล่องกลางจอ), `.hub2-tab`, `.subtabs` (แถวเลื่อนแนวนอน), เหตุการณ์สุ่ม/ศัตรูคู่อาฆาตใช้ `.sheet` ด้วย
+- ทดสอบด้วย Playwright (360×740, 390×844, 768, 1280) ไม่มี page error / ไม่มีเลื่อนแนวนอน
