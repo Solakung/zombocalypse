@@ -7,7 +7,7 @@ const crypto = require("crypto");
 const { fail, withLock, takeItem, grantAll, dayIdx, dayEnd } = require("./lib");
 
 const ri = (n) => crypto.randomInt(n);
-const MIN_BET = 5, MAX_BET = 500, SLOT_MAX = 100, LOSS_CAP = 2000, FEE = 0.10, HP_RATE = 3, HP_DAY = 60, LOAN_MAX = 500, LOAN_INT = 0.25, LOAN_MS = 48 * 3600000, NOLOAN_MS = 7 * 86400000, STALE_MS = 10 * 60000;
+const MIN_BET = 5, MAX_BET = 500, SLOT_MAX = 100, LOSS_CAP = 2000, WIN_CAP = 5000, FEE = 0.10, HP_RATE = 3, HP_DAY = 60, LOAN_MAX = 500, LOAN_INT = 0.25, LOAN_MS = 48 * 3600000, NOLOAN_MS = 7 * 86400000, STALE_MS = 10 * 60000;
 // มูลค่าของเป็นชิป (ต่อชิ้น) — ของที่ไม่อยู่ในตารางแลกไม่ได้
 const VAL = { scrap: 2, water: 3, canned_food: 5, bread: 4, fruit: 4, bandage: 6, moss: 3, energy_drink: 8, medkit: 28, antidote: 14, serum: 30, trauma_kit: 55, army_meal: 20, stim_shot: 24, chem: 5, rotten_meat: 3, steel_plate: 22, copper_wire: 7, battery_pack: 12, circuit_board: 30, gunpowder: 9, duct_tape: 5, rusty_nails: 3, cloth_roll: 5, rope_coil: 5, herb_bundle: 6, fuel_can: 10, leather_scrap: 6, chem_catalyst: 20, mutant_gland: 28, lab_sample: 22, data_chip: 60, gold_watch: 120, survivor_badge: 70, old_photo: 40, lab_core: 150, boss_trophy: 200, fish: 6, golden_fish: 40 };
 // ร้านแลกของ: [รหัส, ราคาชิป, โควตาต่อวัน, ฝ่าย]  (deco_/theme_ ของตกแต่งเฉพาะบ่อน)
@@ -79,7 +79,7 @@ function makeCasino(db) {
       const [pS, cS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`casino/${uid}`).get()]);
       const p = pS.val(); if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
       const gm = p.role === "gm" || p.role === "owner", c = col(cS.val()), di = dayIdx(now);
-      const st = { chips: Number(c.chips) || 0, debt: c.debt || null, lock: Number(c.lock) || 0, nl: Number(c.nl) || 0, day: c.day && c.day.d === di ? { ...col(c.day), d: di, loss: Number(c.day.loss) || 0, hp: Number(c.day.hp) || 0, buy: col(c.day.buy) } : { d: di, loss: 0, hp: 0, buy: {} }, g: col(c.g) };
+      const st = { chips: Number(c.chips) || 0, debt: c.debt || null, lock: Number(c.lock) || 0, nl: Number(c.nl) || 0, day: c.day && c.day.d === di ? { ...col(c.day), d: di, loss: Number(c.day.loss) || 0, hp: Number(c.day.hp) || 0, tw: Number(c.day.tw) || 0, buy: col(c.day.buy) } : { d: di, loss: 0, hp: 0, tw: 0, buy: {} }, g: col(c.g) };
       const upd = {}; let note = [];
       // ----- ครบกำหนดหนี้ → ยึดของ + ซ้อมเตือน
       if (st.debt && st.debt.due < now) {
@@ -98,7 +98,7 @@ function makeCasino(db) {
       const save = async () => { upd.chips = st.chips; upd.day = st.day; if (st.g) upd.g = Object.keys(st.g).length ? st.g : null; Object.keys(upd).forEach((k) => { if (k.startsWith("g/")) delete upd[k]; }); await db.ref(`casino/${uid}`).update(upd); };
       const pubG = (k) => { const g = st.g[k]; if (!g) return null; if (k === "bj") return { bet: g.bet, you: g.you.map(cardTxt), yv: bjVal(g.you), dealer: [cardTxt(g.dl[0]), "🂠"], can: { dbl: g.you.length === 2 && !g.dbl } }; if (k === "hl") return { bet: g.bet, card: cardTxt(g.c), rank: rank(g.c), mult: hiloMult(rank(g.c)) }; if (k === "vp") return { bet: g.bet, hand: g.hand.map(cardTxt), stage: g.stage, pay: VP_PAY }; return null; };
       const view = (extra) => Object.assign({
-        ok: true, inZone, chips: st.chips, debt: st.debt, lockLeft, capLeft, lossToday: st.day.loss, cap: LOSS_CAP, hpToday: st.day.hp, hpMax: HP_DAY, noLoan: Math.max(0, st.nl - now), min: MIN_BET, max: MAX_BET, loanMax: LOAN_MAX, fee: FEE, hpRate: HP_RATE,
+        ok: true, inZone, chips: st.chips, debt: st.debt, lockLeft, capLeft, lossToday: st.day.loss, cap: LOSS_CAP, winToday: st.day.tw, winCap: WIN_CAP, hpToday: st.day.hp, hpMax: HP_DAY, noLoan: Math.max(0, st.nl - now), min: MIN_BET, max: MAX_BET, loanMax: LOAN_MAX, fee: FEE, hpRate: HP_RATE,
         games: { bj: pubG("bj"), hl: pubG("hl"), vp: pubG("vp") }, note, warn: "การพนันไม่เคยทำให้ใครรวย", end: dayEnd(now)
       }, extra || {});
       if (a === "state") { if (Object.keys(upd).length) await save(); return view({ rates: VAL, shop: SHOP.map(([id, price, day]) => ({ id, price, day, left: Math.max(0, day - (Number(st.day.buy[id]) || 0)) })), slotRtp: Math.round(slotRtp() * 1000) / 10, slotMax: SLOT_MAX }); }
@@ -108,9 +108,10 @@ function makeCasino(db) {
       }
       if (!inZone) fail("failed-precondition", "ต้องอยู่ที่คาสิโนเถื่อนก่อน");
       if (!(p.hp > 0)) fail("failed-precondition", "ต้องมีชีวิตอยู่");
-      const needPlay = () => { if (lockLeft > 0) fail("failed-precondition", `คุณขอพักไว้ เล่นได้อีกครั้งใน ${Math.ceil(lockLeft / 3600000)} ชั่วโมง`); if (capLeft <= 0) fail("failed-precondition", "วันนี้เสียถึงเพดานแล้ว พักก่อนนะ — การพนันไม่เคยทำให้ใครรวย"); };
+      const needPlay = () => { if (lockLeft > 0) fail("failed-precondition", `คุณขอพักไว้ เล่นได้อีกครั้งใน ${Math.ceil(lockLeft / 3600000)} ชั่วโมง`); if (capLeft <= 0) fail("failed-precondition", "วันนี้เสียถึงเพดานแล้ว พักก่อนนะ — การพนันไม่เคยทำให้ใครรวย"); if (st.day.tw >= WIN_CAP) fail("failed-precondition", `วันนี้ชนะจากเกมเดี่ยวครบเพดาน ${WIN_CAP} ชิปแล้ว — พรุ่งนี้ค่อยมาใหม่`); };
       const bet = (b) => { b = Math.trunc(Number(b)); if (!(b >= MIN_BET && b <= MAX_BET)) fail("invalid-argument", `เดิมพันต้องอยู่ระหว่าง ${MIN_BET}–${MAX_BET} ชิป`); if (b > st.chips) fail("failed-precondition", "ชิปไม่พอ"); return b; };
-      const settle = (stake, ret) => { st.day.loss = Math.max(0, st.day.loss + stake - ret); };   // net สะสมต่อวัน (ชนะคืนได้ ไม่ต่ำกว่า 0)
+      const settle = (stake, ret) => { st.day.loss = Math.max(0, st.day.loss + stake - ret); st.day.tw += Math.max(0, ret - stake); };
+      const wc = (stake, ret) => Math.min(ret, stake + Math.max(0, WIN_CAP - st.day.tw));   // เพดานกำไรสุทธิรายวัน: เกมสุดท้ายที่ชนะเกินเพดานจะถูกตัดยอดจ่าย   // net สะสมต่อวัน (ชนะคืนได้ ไม่ต่ำกว่า 0)
 
       if (a === "sell") {   // แลกของเป็นชิป
         needPlay(); const id = String(data.id), q = Math.trunc(Number(data.q)); if (!VAL[id] || !(q >= 1 && q <= 99)) fail("invalid-argument", "แลกของนี้ไม่ได้");
@@ -139,33 +140,33 @@ function makeCasino(db) {
       // ============ เกม ============
       needPlay();
       if (a === "slots") {
-        const b = bet(data.bet); if (b > SLOT_MAX) fail("invalid-argument", `สล็อตเดิมพันได้สูงสุด ${SLOT_MAX} ชิป`); const r = [STRIP[ri(20)], STRIP[ri(20)], STRIP[ri(20)]], m = slotPay(r), ret = Math.floor(b * m); st.chips += ret - b; settle(b, ret); await save(); return view({ game: "slots", reels: r, mult: m, bet: b, ret, net: ret - b });
+        const b = bet(data.bet); if (b > SLOT_MAX) fail("invalid-argument", `สล็อตเดิมพันได้สูงสุด ${SLOT_MAX} ชิป`); const r = [STRIP[ri(20)], STRIP[ri(20)], STRIP[ri(20)]], m = slotPay(r), ret = wc(b, Math.floor(b * m)); st.chips += ret - b; settle(b, ret); await save(); return view({ game: "slots", reels: r, mult: m, bet: b, ret, net: ret - b });
       }
       if (a === "roulette") {
         const list = Array.isArray(data.bets) ? data.bets.slice(0, 8) : []; if (!list.length) fail("invalid-argument", "ยังไม่ได้วางเดิมพัน"); let total = 0; const bs = list.map((x) => { const t = String(x.t), n = Number(x.n), amt = Math.trunc(Number(x.a)); if (!R_TYPES.includes(t) || !(amt >= MIN_BET) || (t === "num" && !(Number.isInteger(n) && n >= 0 && n <= 36))) fail("invalid-argument", "เดิมพันไม่ถูกต้อง"); total += amt; return { t, n, a: amt }; });
         if (total > MAX_BET) fail("invalid-argument", `เดิมพันรวมไม่เกิน ${MAX_BET} ชิป`); if (total > st.chips) fail("failed-precondition", "ชิปไม่พอ");
-        const x = ri(37); let ret = 0; bs.forEach((q) => { ret += Math.floor(q.a * roulettePay(q.t, q.n, x)); }); st.chips += ret - total; settle(total, ret); await save(); return view({ game: "roulette", n: x, red: REDS.has(x), bet: total, ret, net: ret - total });
+        const x = ri(37); let ret = 0; bs.forEach((q) => { ret += Math.floor(q.a * roulettePay(q.t, q.n, x)); }); ret = wc(total, ret); st.chips += ret - total; settle(total, ret); await save(); return view({ game: "roulette", n: x, red: REDS.has(x), bet: total, ret, net: ret - total });
       }
       if (a === "sicbo") {
         const list = Array.isArray(data.bets) ? data.bets.slice(0, 8) : []; if (!list.length) fail("invalid-argument", "ยังไม่ได้วางเดิมพัน"); let total = 0; const bs = list.map((x) => { const t = String(x.t), n = Number(x.n), amt = Math.trunc(Number(x.a)); if (!["big", "small", "num"].includes(t) || !(amt >= MIN_BET) || (t === "num" && !(Number.isInteger(n) && n >= 1 && n <= 6))) fail("invalid-argument", "เดิมพันไม่ถูกต้อง"); total += amt; return { t, n, a: amt }; });
         if (total > MAX_BET) fail("invalid-argument", `เดิมพันรวมไม่เกิน ${MAX_BET} ชิป`); if (total > st.chips) fail("failed-precondition", "ชิปไม่พอ");
-        const d = [1 + ri(6), 1 + ri(6), 1 + ri(6)]; let ret = 0; bs.forEach((q) => { ret += Math.floor(q.a * sicPay(q.t, q.n, d)); }); st.chips += ret - total; settle(total, ret); await save(); return view({ game: "sicbo", dice: d, sum: d[0] + d[1] + d[2], triple: d[0] === d[1] && d[1] === d[2], bet: total, ret, net: ret - total });
+        const d = [1 + ri(6), 1 + ri(6), 1 + ri(6)]; let ret = 0; bs.forEach((q) => { ret += Math.floor(q.a * sicPay(q.t, q.n, d)); }); ret = wc(total, ret); st.chips += ret - total; settle(total, ret); await save(); return view({ game: "sicbo", dice: d, sum: d[0] + d[1] + d[2], triple: d[0] === d[1] && d[1] === d[2], bet: total, ret, net: ret - total });
       }
       if (a === "baccarat") {
-        const b = bet(data.bet), side = String(data.side); if (!["player", "banker", "tie"].includes(side)) fail("invalid-argument", "เลือกฝั่งไม่ถูกต้อง"); const g = baccarat(), ret = Math.floor(b * baccPay(side, g.win));
+        const b = bet(data.bet), side = String(data.side); if (!["player", "banker", "tie"].includes(side)) fail("invalid-argument", "เลือกฝั่งไม่ถูกต้อง"); const g = baccarat(), ret = wc(b, Math.floor(b * baccPay(side, g.win)));
         st.chips += ret - b; settle(b, ret); await save(); return view({ game: "baccarat", P: g.P.map(cardTxt), B: g.B.map(cardTxt), p: g.p, b: g.b, win: g.win, side, bet: b, ret, net: ret - b });
       }
       if (a === "hilo") {
         if (data.act === "start") { if (st.g.hl) fail("failed-precondition", "มีเกมค้างอยู่"); const b = bet(data.bet), d = deck(); st.chips -= b; st.g.hl = { bet: b, c: d.pop(), d: d.slice(0, 5), t: now }; await save(); return view({ game: "hilo", started: true }); }
         const g = st.g.hl; if (!g) fail("failed-precondition", "ยังไม่ได้เริ่มเกม"); const guess = String(data.guess); if (!["hi", "lo"].includes(guess)) fail("invalid-argument", "ทายสูงหรือต่ำ"); const r1 = rank(g.c), m = hiloMult(r1)[guess]; if (!(m > 0)) fail("invalid-argument", "ทายทางนี้ไม่ได้");
-        const c2 = g.d[ri(g.d.length)], r2 = rank(c2), win = guess === "hi" ? r2 > r1 : r2 < r1, tie = r2 === r1, ret = tie ? g.bet : win ? Math.floor(g.bet * m) : 0; delete st.g.hl; upd["g/hl"] = null; st.chips += ret; settle(g.bet, ret); await save();
+        const c2 = g.d[ri(g.d.length)], r2 = rank(c2), win = guess === "hi" ? r2 > r1 : r2 < r1, tie = r2 === r1, ret = wc(g.bet, tie ? g.bet : win ? Math.floor(g.bet * m) : 0); delete st.g.hl; upd["g/hl"] = null; st.chips += ret; settle(g.bet, ret); await save();
         return view({ game: "hilo", card1: cardTxt(g.c), card2: cardTxt(c2), win, tie, mult: m, bet: g.bet, ret, net: ret - g.bet });
       }
       if (a === "blackjack") {
         const act = String(data.act);
         if (act === "start") {
           if (st.g.bj) fail("failed-precondition", "มีเกมค้างอยู่"); const b = bet(data.bet), d = deck(); st.chips -= b; const g = { bet: b, you: [d.pop(), d.pop()], dl: [d.pop(), d.pop()], dk: d.slice(0, 20), dbl: false, t: now };
-          if (bjNat(g.you) || bjNat(g.dl)) { const ret = bjNat(g.you) && bjNat(g.dl) ? b : bjNat(g.you) ? Math.floor(b * 2.2) : 0; st.chips += ret; settle(b, ret); await save(); return view({ game: "blackjack", done: true, you: g.you.map(cardTxt), yv: bjVal(g.you), dealer: g.dl.map(cardTxt), dv: bjVal(g.dl), bet: b, ret, net: ret - b, natural: true }); }
+          if (bjNat(g.you) || bjNat(g.dl)) { const ret = wc(b, bjNat(g.you) && bjNat(g.dl) ? b : bjNat(g.you) ? Math.floor(b * 2.2) : 0); st.chips += ret; settle(b, ret); await save(); return view({ game: "blackjack", done: true, you: g.you.map(cardTxt), yv: bjVal(g.you), dealer: g.dl.map(cardTxt), dv: bjVal(g.dl), bet: b, ret, net: ret - b, natural: true }); }
           st.g.bj = g; await save(); return view({ game: "blackjack", started: true });
         }
         const g = st.g.bj; if (!g) fail("failed-precondition", "ยังไม่ได้เริ่มเกม"); const take = () => { const c = g.dk.pop(); if (c === undefined) fail("aborted", "ไพ่หมดกอง"); return c; };
@@ -174,12 +175,12 @@ function makeCasino(db) {
         else if (act !== "stand") fail("invalid-argument", "คำสั่งไม่ถูกต้อง");
         const yv = bjVal(g.you); let ret = 0;
         if (yv <= 21) { while (bjVal(g.dl) < 17) g.dl.push(take()); const dv = bjVal(g.dl); ret = dv > 21 || yv > dv ? g.bet * 2 : yv === dv ? g.bet : 0; }
-        delete st.g.bj; upd["g/bj"] = null; st.chips += ret; settle(g.bet, ret); await save(); return view({ game: "blackjack", done: true, you: g.you.map(cardTxt), yv, dealer: g.dl.map(cardTxt), dv: bjVal(g.dl), bet: g.bet, ret, net: ret - g.bet });
+        ret = wc(g.bet, ret); delete st.g.bj; upd["g/bj"] = null; st.chips += ret; settle(g.bet, ret); await save(); return view({ game: "blackjack", done: true, you: g.you.map(cardTxt), yv, dealer: g.dl.map(cardTxt), dv: bjVal(g.dl), bet: g.bet, ret, net: ret - g.bet });
       }
       if (a === "poker") {
         if (data.act === "deal") { if (st.g.vp) fail("failed-precondition", "มีเกมค้างอยู่"); const b = bet(data.bet), d = deck(); st.chips -= b; st.g.vp = { bet: b, hand: d.splice(0, 5), dk: d.slice(0, 15), stage: "hold", t: now }; await save(); return view({ game: "poker", dealt: true }); }
         const g = st.g.vp; if (!g || g.stage !== "hold") fail("failed-precondition", "ยังไม่ได้แจกไพ่"); const hold = new Set((Array.isArray(data.hold) ? data.hold : []).map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < 5));
-        const hand = g.hand.map((c, i) => (hold.has(i) ? c : g.dk.pop())), kind = vpEval(hand), ret = Math.floor(g.bet * VP_PAY[kind]); delete st.g.vp; upd["g/vp"] = null; st.chips += ret; settle(g.bet, ret); await save();
+        const hand = g.hand.map((c, i) => (hold.has(i) ? c : g.dk.pop())), kind = vpEval(hand), ret = wc(g.bet, Math.floor(g.bet * VP_PAY[kind])); delete st.g.vp; upd["g/vp"] = null; st.chips += ret; settle(g.bet, ret); await save();
         return view({ game: "poker", hand: hand.map(cardTxt), kind, kindTh: VP_NAME[kind], bet: g.bet, ret, net: ret - g.bet, held: [...hold] });
       }
       fail("invalid-argument", "ไม่รู้จักคำสั่ง");
@@ -187,4 +188,4 @@ function makeCasino(db) {
   }
   return { run };
 }
-module.exports = { makeCasino, VAL, SHOP, SLOT3, slotRtp, slotPay, STRIP, roulettePay, sicPay, baccarat, baccPay, vpEval, VP_PAY, hiloMult, bjVal, deck, REDS, MIN_BET, MAX_BET, SLOT_MAX, LOSS_CAP, FEE };
+module.exports = { makeCasino, VAL, SHOP, SLOT3, slotRtp, slotPay, STRIP, roulettePay, sicPay, baccarat, baccPay, vpEval, VP_PAY, hiloMult, bjVal, deck, REDS, MIN_BET, MAX_BET, SLOT_MAX, LOSS_CAP, WIN_CAP, FEE };

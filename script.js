@@ -50,6 +50,8 @@ const slaveCall = (data) => httpsCallable(fns, "slaveAct")(data).then((r) => r.d
 const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
 const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data);   // 🧬 มิวเตชันซอมบี้ขั้น 5–8 (functions/mutate.js)
 const hcCall = (data) => httpsCallable(fns, "hcAct")(data).then((r) => r.data);   // 📡 ภารกิจ HC: ค้นพบธารา/ส่ง DNA (functions/hc.js)
+const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data);   // ⚔️ แต้มศึกชิงโซนรายสัปดาห์ (functions/zwar.js)
+const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.data);   // 🔨 คราฟต์อาวุธระดับต้น–กลาง (functions/forge.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -57,7 +59,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1000";
+const APP_VERSION = "2026-10-06.0640";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -381,7 +383,15 @@ const RECIPES = {
   toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 },
   exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 },
   fish_grill: { need: { fish: 1, scrap: 1 }, out: "fish_grill", qty: 1 },
-  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 }
+  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 },
+  // อาวุธระดับต้น–กลาง: คราฟต์ผ่านฟังก์ชัน forgeAct (srv) — สูตรต้องตรง functions/forge.js (ไม่เกี่ยวกับ rules)
+  wooden_bat: { need: { scrap: 8 }, out: "wooden_bat", qty: 1, srv: 1 },
+  pocket_knife: { need: { scrap: 6, leather_scrap: 1 }, out: "pocket_knife", qty: 1, srv: 1 },
+  crowbar: { need: { scrap: 10, duct_tape: 1 }, out: "crowbar", qty: 1, srv: 1 },
+  knife: { need: { scrap: 8, leather_scrap: 1, duct_tape: 1 }, out: "knife", qty: 1, srv: 1 },
+  spiked_bat: { need: { scrap: 8, rusty_nails: 3 }, out: "spiked_bat", qty: 1, srv: 1 },
+  fire_axe: { need: { scrap: 14, steel_plate: 1 }, out: "fire_axe", qty: 1, srv: 1 },
+  crossbow: { need: { scrap: 12, rope_coil: 2, steel_plate: 1 }, out: "crossbow", qty: 1, srv: 1 }
 };
 
 // <<REPAIR-HELPERS  ซ่อม/รื้ออาวุธ (เฉพาะมนุษย์ใน Safe Zone, เฉพาะอาวุธมาตรฐาน 10 ชนิด — ไม่รวม admin_katana / custom)
@@ -1570,6 +1580,16 @@ async function craft(id) {
   if (state.zone !== "safe") { toast("ต้องคราฟต์ที่ Safe Zone"); return false; }
   for (const [m, n] of Object.entries(r.need)) if ((state.inv[m]?.qty || 0) < n) { toast("วัตถุดิบไม่พอ"); return false; }
   let okc = false;
+  if (r.srv) {   // อาวุธ: ฟังก์ชัน forgeAct หักวัตถุดิบ + สร้างช่องอาวุธให้เอง (ติดล็อกให้ลองใหม่ 1 ครั้ง)
+    state.busy = true;
+    try {
+      try { await forgeCall({ a: "craft", id }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); await forgeCall({ a: "craft", id }); }
+      questBump("craft"); okc = true;
+      if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+    } catch (e) { toast(errMsg(e)); }
+    finally { state.busy = false; }
+    return okc;
+  }
   state.busy = true;
   const u = {};
   for (const [m, n] of Object.entries(r.need)) {
@@ -6597,6 +6617,7 @@ function coopEvent(ev, n = 1) {
   try { zwarEvent(ev, n); } catch { /* ข้าม */ }   // ศึกชิงโซน (หัวข้อ 37)
 }
 async function coopFlush() {
+  try { zwFlush(); } catch { /* ข้าม */ }
   const C = state.coop; if (!C || C.busy || !state.profile || state.profile.banned) return;
   const keys = Object.keys(C.pend).filter((k) => C.pend[k] > 0); if (!keys.length) return;
   const wait = ACH_GAP - (serverNow() - C.last);
@@ -7467,8 +7488,27 @@ const coopRaw = (k) => Object.values(state.coop?.sums?.[k] || {}).reduce((s, x) 
 function zwarEvent(ev, n) {
   const C = state.coop, w = ZW_W[ev]; if (!C || !w || !T("zw_on", 1)) return;
   const idx = zwZones().indexOf(state.zone) + 1; if (idx < 1 || !(state.profile?.hp > 0)) return;
-  const k = zwKey(coopFac(), qpKey("weekly"), idx);
-  C.pend[k] = (C.pend[k] || 0) + n * w; achBump("zwar", n * w);
+  // แต้มเขียนผ่านฟังก์ชัน zwAct (เซิร์ฟเวอร์กำหนดโซน/ฝ่าย/น้ำหนักเอง) — ที่นี่แค่สะสมจำนวนครั้งของโซนปัจจุบัน
+  const q = C.zq || (C.zq = { zone: state.zone, ev: {} });
+  if (q.zone !== state.zone) { q.zone = state.zone; q.ev = {}; }   // ย้ายโซน: ของค้างโซนเดิมทิ้ง (เซิร์ฟเวอร์ใช้โซนปัจจุบันของผู้เล่น)
+  q.ev[ev] = (q.ev[ev] || 0) + n; achBump("zwar", n * w);
+  clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 5000);
+}
+async function zwFlush() {
+  const C = state.coop, q = C?.zq; if (!q || C.zbusy || !state.profile || state.profile.banned || q.zone !== state.zone) return;
+  const ev = {}; let any = false;
+  Object.entries(q.ev).forEach(([k, v]) => { const n = Math.min(20, Math.floor(v)); if (n >= 1) { ev[k] = n; any = true; } });
+  if (!any) return;
+  C.zbusy = true;
+  try {
+    const r = await zwCall({ items: ev });
+    Object.entries(ev).forEach(([k, n]) => { q.ev[k] -= n; if (q.ev[k] <= 0) delete q.ev[k]; });
+    if (Object.keys(q.ev).length) { clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 3000); }
+    if (r?.limited) q.ev = {};   // ถังเต็ม: ทิ้งส่วนเกิน (ไม่ลองใหม่ไม่รู้จบ)
+  } catch (e) {
+    const c = e?.code || ""; console.warn("zwFlush", c);
+    if (/invalid-argument|permission-denied|unauthenticated/.test(c)) q.ev = {}; else if (/aborted|unavailable|internal|deadline/.test(c)) { clearTimeout(C.zt); C.zt = setTimeout(zwFlush, 8000); } else q.ev = {};
+  } finally { C.zbusy = false; }
 }
 function zwarWant(want) {
   const wk = qpKey("weekly"); zwZones().forEach((z, i) => { want.add(zwKey("human", wk, i + 1)); want.add(zwKey("zombie", wk, i + 1)); });
@@ -9964,10 +10004,11 @@ function casinoRender() {
   const body = $("casino-body"), m = $("casino-modal"); if (!body || !m || m.classList.contains("hidden")) return; body.innerHTML = "";
   const D = state.csD; if (!D || D.chips === undefined) { body.append(mk("div", "muted", "กำลังโหลด…")); return; }
   const busy = !!state.csBusy, row = (...c) => { const d = mk("div", "world-row"); c.forEach((x) => x && d.append(x)); return d; };
-  const hdr = mk("div", "casino-stat"); hdr.append(mk("b", "", `🪙 ${D.chips} ชิป`), mk("span", "muted", ` • เสียสุทธิวันนี้ ${D.lossToday}/${D.cap}`));
+  const hdr = mk("div", "casino-stat"); hdr.append(mk("b", "", `🪙 ${D.chips} ชิป`), mk("span", "muted", ` • เสียสุทธิวันนี้ ${D.lossToday}/${D.cap}`), mk("span", "muted", D.winCap ? ` • ชนะวันนี้ ${D.winToday || 0}/${D.winCap}` : ""));
   if (D.debt) { const left = Math.max(0, D.debt.due - serverNow()); hdr.append(mk("div", "casino-debt", `💸 หนี้ ${D.debt.a} ชิป • ครบกำหนดใน ${Math.ceil(left / 3600000)} ชม. (ไม่จ่าย = ยึดของในกระเป๋า + หัก HP)`)); }
   if (D.lockLeft > 0) hdr.append(mk("div", "muted", `😴 พักตัวอยู่ อีก ${Math.ceil(D.lockLeft / 3600000)} ชม.`));
   if (D.capLeft <= 0) hdr.append(mk("div", "casino-debt", "วันนี้เสียถึงเพดานแล้ว — พักก่อนนะ"));
+  else if (D.winCap && (D.winToday || 0) >= D.winCap) hdr.append(mk("div", "casino-debt", "วันนี้ชนะเกมเดี่ยวครบเพดานแล้ว — พรุ่งนี้ค่อยมาใหม่"));
   body.append(hdr);
   if (!D.inZone) body.append(mk("div", "casino-debt", "ต้องอยู่ที่คาสิโนเถื่อนก่อนถึงจะเล่นได้"));
   const tabs = mk("div", "casino-tabs"); [["game", "🎰 เกม"], ["slave", "🃏 สลาฟ"], ["ex", "💱 แลกชิป"], ["shop", "🛍️ ร้านแลก"], ["more", "⚙️ อื่นๆ"]].forEach(([k, l]) => { const b = btn(l, () => { state.csTab = k; casinoRender(); if (k === "slave") slOpen(); }, "btn mini " + (state.csTab === k ? "primary" : "ghost")); tabs.append(b); }); body.append(tabs);
@@ -10000,7 +10041,7 @@ function casinoRender() {
     body.append(row(mk("b", "", "📋 กติกาของบ่อน"), mk("div", "muted", `เดิมพันครั้งละ ${D.min}–${D.max} ชิป • เสียสุทธิต่อวันไม่เกิน ${D.cap} ชิป • สล็อตคืน ~${D.slotRtp ?? 95}% ในระยะยาว (เสียเปรียบเสมอ) • เกมที่ค้างนาน 10 นาทีถือว่าแพ้ • ห้ามต่อสู้ในบ่อน`)));
   } else {
     const gs = mk("div", "casino-tabs"); CS_GAMES.forEach(([k, ic, n]) => gs.append(btn(`${ic} ${n}`, () => { state.csGame = k; state.csRes = null; casinoRender(); }, "btn mini " + (state.csGame === k ? "primary" : "ghost")))); body.append(gs);
-    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, g === "slots" ? (D.slotMax || 100) : D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0, panel = mk("div", "world-row");
+    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, g === "slots" ? (D.slotMax || 100) : D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0 && !(D.winCap && (D.winToday || 0) >= D.winCap), panel = mk("div", "world-row");
     const betRow = () => { const r = mk("div", "casino-bets"); CS_BETS.filter((n) => g !== "slots" || n <= (D.slotMax || 100)).forEach((n) => { const b = btn(String(n), () => { state.csBet = n; casinoRender(); }, "btn mini " + (n === bet ? "primary" : "ghost")); b.style.minHeight = "40px"; r.append(b); }); return r; };
     const act = (label, data, cls) => { const b = btn(label, () => casinoGo(data), cls || "btn primary"); b.disabled = !can; b.style.cssText = "min-height:48px;margin-top:8px"; return b; };
     const res = state.csRes && state.csRes.game === g ? state.csRes : null, resTxt = (r) => r.ret !== undefined ? `${r.net > 0 ? "🎉 ชนะ" : r.net === 0 ? "เสมอ" : "💸 แพ้"} • ได้คืน ${r.ret} • สุทธิ ${r.net > 0 ? "+" : ""}${r.net}` : "";

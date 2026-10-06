@@ -14,7 +14,7 @@ const adb = admin.database(), SV = admin.database.ServerValue.TIMESTAMP;
     const db = env.authenticatedContext("u1", { firebase: { sign_in_provider: "password" } }).database(), ok = async (p) => { try { await p; return true; } catch { return false; } };
     res[k] = {
       coopHc1: await ok(db.ref("coop/hc1/u1").set({ n: 5, name: "tester", ts: SV })),
-      coopOther: await ok(db.ref("coop/zh1234/u1").set({ n: 5, name: "tester", ts: SV })),
+      coopOther: await ok(db.ref("coop/wh1234/u1").set({ n: 5, name: "tester", ts: SV })),
       readState: await ok(db.ref("hc/state").get()), writeState: await ok(db.ref("hc/state/by").set("u1")), readHcOther: await ok(db.ref("hc/rl/u1").get()), readCoop: await ok(db.ref("coop/hc1").get())
     };
   }
