@@ -28,13 +28,14 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 const fns = getFunctions(app, "asia-southeast1");   // Cloud Functions: ระบบที่ย้ายตรรกะตรวจสอบจาก rules ไปไว้ฝั่งเซิร์ฟเวอร์ (ตอนนี้: ที่พัก 🏠)
 const baseCall = (data) => httpsCallable(fns, "baseAct")(data).then((r) => r.data);
+const marketCall = (data) => httpsCallable(fns, "marketAct")(data).then((r) => r.data);   // ตลาด/ตลาดมืด/ฝากของ (functions/market.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1200";
+const APP_VERSION = "2026-10-06.1300";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3868,7 +3869,7 @@ function renderEvo() {
    market/{faction}/{uid_1..3} = { seller, sellerName, give:{id,qty}, want:{id,qty}, ts }  ← ของที่ลงขายอยู่ใน escrow (หักจากคลังตอนลง)
    marketPayouts/{seller}/{lid_ts} = { id, qty, lid }  ← ของที่ผู้ขายได้ รอกด "รับ"
    marketTx/{uid} = { op: buy|cancel|claim, lid|pid, ts }  ← "ตั๋ว" ที่ rules ใช้ตรวจ (เขียนในอัปเดตเดียวกับการย้ายของ)
-   ทุกค่าต้องตรงกับ rules (patch_rules_market.js) • ใช้ function declaration (hoist) ไม่ต้องแก้ index.html/style.css
+   ทุกการเขียนข้อมูลตลาดทำผ่าน Cloud Function marketAct (functions/market.js) — rules ปิดการเขียนตรงแล้ว • ค่าคงที่ต้องตรงกับไฟล์นั้น • ใช้ function declaration (hoist) ไม่ต้องแก้ index.html/style.css
    ========================================================= */
 const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat"];
 const MKT_SLOTS = 3, MKT_MAX = 99;
@@ -3881,8 +3882,6 @@ const mktLabel = (id) => {
   const d = ITEMS[id]; return d ? `${d.icon || "📦"} ${d.name}` : id;
 };
 const mktGiveTxt = (g) => g?.slot ? `${mktLabel(g.id)} (${g.dur}/${g.maxDur ?? ITEMS[g.id]?.maxDur ?? "?"})` + "" : `${mktLabel(g.id)} ×${g.qty}`;
-const mktWeapSlot = (l) => `inventory/${state.uid}/m_${l.ts}`;
-const mktWeapData = (g) => ({ id: g.id, qty: 1, dur: g.dur, ...(g.maxDur ? { maxDur: g.maxDur } : {}) });
 const mktWants = (l) => [l?.want, l?.want2, l?.want3].filter((w) => w && w.id);   // ประกาศขอได้ 1–3 อย่าง (ผู้ซื้อต้องจ่ายครบทุกอย่าง)
 const mktWantTxt = (l) => mktWants(l).map((w) => `${mktLabel(w.id)} ×${w.qty}`).join(" + ");
 const mktWantKey = ["", "b", "c"];   // คีย์ใบรับของ: lid_ts / lid_b{ts} / lid_c{ts}
@@ -3916,16 +3915,20 @@ function updateMarketBadge() {
   const n = Object.keys(state.mktPay || {}).length;
   b.textContent = n ? `🏪 ตลาด (${n} รอรับ)` : "🏪 ตลาด";
 }
-function mktErr(e) { return String(e?.code || e).includes("PERMISSION_DENIED") ? "ทำรายการไม่สำเร็จ — อาจมีคนซื้อ/ยกเลิกไปก่อน หรืออยู่นอก Safe Zone" : "ทำรายการไม่สำเร็จ"; }
-async function mktRun(u, okMsg, tag = "") {
+function mktErr(e) {
+  const c = String(e?.code || "");
+  if (c.startsWith("functions/")) return /internal|unavailable|deadline|unknown/.test(c) ? "เซิร์ฟเวอร์ไม่ตอบสนอง ลองใหม่อีกครั้ง" : (e.message || "ทำรายการไม่สำเร็จ");   // ข้อความไทยมาจากฟังก์ชัน
+  return "ทำรายการไม่สำเร็จ";
+}
+async function mktRun(data, okMsg, tag = "") {
   if (state.mktBusy) return; state.mktBusy = true;
   try {
     // timeout กัน mktBusy ค้างเป็น true (ปุ่มตลาดทุกปุ่มจะเงียบ) ถ้าคำขอไม่ตอบกลับ
-    await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
+    const r = await Promise.race([marketCall(data), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000))]);
     toast(okMsg);
-    return true;
+    return r || true;
   } catch (e) {
-    console.error("market", tag, e?.code || e, JSON.stringify(u), "inv:", JSON.stringify(state.inv));   // ส่ง log นี้มาดูได้ว่าเขียนอะไรแล้วโดนปฏิเสธ
+    console.error("market", tag, e?.code || e, JSON.stringify(data));
     toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : mktErr(e) + (tag ? ` [${tag}]` : ""));
   } finally { state.mktBusy = false; }
 }
@@ -3954,12 +3957,7 @@ async function mktCreate() {
   if (!isW && mktHave(f.g) < gq) return toast("ของในกระเป๋าไม่พอ");
   const n = [1, 2, 3].find((i) => !state.market?.[`${state.uid}_${i}`]);
   if (!n) return toast(`ลงขายได้สูงสุด ${MKT_SLOTS} ประกาศ — ยกเลิกอันเก่าก่อน`);
-  const L = { seller: state.uid, sellerName: p.username, give: isW ? { id: wit.id, qty: 1, dur: wit.dur, slot: wslot, ...(wit.maxDur ? { maxDur: wit.maxDur } : {}) } : { id: f.g, qty: gq }, want: ws[0], ts: serverTimestamp() };
-  if (ws[1]) L.want2 = ws[1]; if (ws[2]) L.want3 = ws[2];
-  const u = { [`market/${p.faction}/${state.uid}_${n}`]: L };
-  if (isW) { u[`inventory/${state.uid}/${wslot}`] = null; if (p.equipped === wslot) u[`users/${state.uid}/equipped`] = null; }
-  else mktDebit(u, f.g, gq);
-  if (await mktRun(u, `ลงขาย ${ITEMS[isW ? wit.id : f.g].name} ×${gq} แล้ว`)) { f.x = []; questBump("market"); }
+  if (await mktRun({ a: "sell", g: f.g, ...(isW ? {} : { gq }), wants: ws }, `ลงขาย ${ITEMS[isW ? wit.id : f.g].name} ×${gq} แล้ว`)) { f.x = []; questBump("market"); }
 }
 // ซื้อ: จ่ายของที่ขอ → ได้ของในประกาศ • ผู้ขายได้ใบรับของ (ซื้อทั้งประกาศ ไม่แบ่งซื้อ)
 async function mktBuy(lid) {
@@ -3969,34 +3967,19 @@ async function mktBuy(lid) {
   const lack = ws.find((w) => mktHave(w.id) < w.qty);
   if (lack) return toast(`ของไม่พอ — ต้องมี ${mktWantTxt(l)}`);
   if (!l.give.slot && mktHave(l.give.id) + l.give.qty > MKT_MAX) return toast(`${ITEMS[l.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
-  const u = { [`market/${p.faction}/${lid}`]: null, [`marketTx/${state.uid}`]: { op: "buy", lid, ts: serverTimestamp() } };
-  ws.forEach((w, i) => { u[`marketPayouts/${l.seller}/${i ? `${lid}_${mktWantKey[i]}${l.ts}` : `${lid}_${l.ts}`}`] = { id: w.id, qty: w.qty, lid }; mktDebit(u, w.id, w.qty); });
-  if (l.give.slot) u[mktWeapSlot(l)] = mktWeapData(l.give); else mktCredit(u, l.give.id, l.give.qty);
-  if (await mktRun(u, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`)) questBump("market");
+  if (await mktRun({ a: "buy", lid }, `ซื้อ ${ITEMS[l.give.id].name} ×${l.give.qty} แล้ว`)) questBump("market");
 }
 // ยกเลิกประกาศของตัวเอง: ของกลับเข้าคลัง
 async function mktCancel(lid) {
   const l = state.market?.[lid]; if (!l || l.seller !== state.uid || !mktGuard(false)) return;
   if (!l.give.slot && mktHave(l.give.id) + l.give.qty > MKT_MAX) return toast(`${ITEMS[l.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
-  const u = { [`market/${state.profile.faction}/${lid}`]: null, [`marketTx/${state.uid}`]: { op: "cancel", lid, ts: serverTimestamp() } };
-  if (l.give.slot) u[mktWeapSlot(l)] = mktWeapData(l.give); else mktCredit(u, l.give.id, l.give.qty);
-  await mktRun(u, "ยกเลิกประกาศแล้ว ของกลับเข้ากระเป๋า");
+  await mktRun({ a: "cancel", lid }, "ยกเลิกประกาศแล้ว ของกลับเข้ากระเป๋า");
 }
 // รับของที่ขายได้
 async function mktClaim(pid) {
   const pay = state.mktPay?.[pid]; if (!pay || !mktGuard(false)) return;
-  // อ่านช่องของจริงจากเซิร์ฟเวอร์ก่อนรับ (ไม่เชื่อ state.inv) แล้วเขียนทั้งช่อง {id, qty} เสมอ
-  // → ไม่ติดกรณีช่องหายจาก DB / มีฟิลด์เก่าค้างเช่น dur / จำนวนในเครื่องไม่ตรง
-  let slot = null;
-  try { slot = (await get(ref(db, `inventory/${state.uid}/${pay.id}`))).val(); } catch (e) { slot = state.inv?.[pay.id] || null; }
-  const have = slot?.qty || 0;
-  if (have + pay.qty > MKT_MAX) return toast(`${ITEMS[pay.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อนแล้วค่อยรับ`);
-  const u = {
-    [`marketPayouts/${state.uid}/${pid}`]: null,
-    [`marketTx/${state.uid}`]: { op: "claim", pid, ts: serverTimestamp() },
-    [`inventory/${state.uid}/${pay.id}`]: { id: pay.id, qty: have + pay.qty }
-  };
-  await mktRun(u, `รับ ${ITEMS[pay.id].name} ×${pay.qty} แล้ว`, "claim");
+  if (mktHave(pay.id) + pay.qty > MKT_MAX) return toast(`${ITEMS[pay.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อนแล้วค่อยรับ`);
+  await mktRun({ a: "claim", pid }, `รับ ${ITEMS[pay.id].name} ×${pay.qty} แล้ว`, "claim");
 }
 
 /* ---------- UI (modal สร้างด้วย JS ใช้ class เดิมของเกม) ---------- */
@@ -4088,19 +4071,6 @@ function bmRng(seed) {   // mulberry32 — เหมือนกันทุก�
   let a = seed >>> 0;
   return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
-// สร้างชั้นวางของรอบ w ของฝั่ง fac (ไม่ซ้ำไอเทมเดียวกันในรอบเดียว ถ้าชั้นนั้นมีให้เลือกพอ)
-function bmBuildRound(fac, w) {
-  const c = BM_CFG[fac], rnd = bmRng(w * 2654435761 + (fac === "zombie" ? 977 : 31)), used = {}, round = { w };
-  Object.entries(BM_CFG.slots).forEach(([k, tier]) => {
-    const all = c.tiers[tier], pool = all.filter((id) => !used[id]), list = pool.length ? pool : all;
-    const id = list[Math.floor(rnd() * list.length)]; used[id] = 1;
-    const [base, lo, hi] = c.price[id];
-    const qty = Math.max(lo, Math.min(hi, Math.round(base * (0.88 + 0.24 * rnd()))));
-    round[k] = { give: { id, qty: 1 }, want: { id: c.currency, qty }, stock: BM_CFG.stock[tier], sold: 0 };
-  });
-  return round;
-}
-
 function listenBlackMarket() {
   if (state.bmOn || !state.profile?.faction) return; state.bmOn = true;
   state.bm = null; state.bmFac = "";
@@ -4128,7 +4098,7 @@ async function bmMaybeRotate() {
   try {
     await new Promise((r) => setTimeout(r, Math.random() * 4000));            // สุ่มหน่วง กันหลายคนชนกัน
     if (bmWindow() !== w || (state.bm?.w || 0) >= w) return;
-    await update(ref(db), { ["bm/" + fac]: bmBuildRound(fac, w) });
+    await marketCall({ a: "bmRotate" });   // เซิร์ฟเวอร์สร้างชั้นวางรอบใหม่ให้ (ถ้ายังไม่มีคนสร้าง)
   } catch (e) { /* มีคนเขียนก่อน หรือยังไม่ถึงเวลา — ไม่ต้องแจ้งผู้เล่น */ }
   finally { state.bmBusy = false; }
 }
@@ -4141,13 +4111,7 @@ async function bmBuy(k) {
   if ((o.sold || 0) >= o.stock) return toast("สินค้าหมดแล้ว");
   if (mktHave(o.want.id) < o.want.qty) return toast(`ของไม่พอ — ต้องมี ${mktLabel(o.want.id)} ×${o.want.qty}`);
   if (mktHave(o.give.id) + o.give.qty > MKT_MAX) return toast(`${ITEMS[o.give.id].name} ในกระเป๋าจะเกิน ${MKT_MAX} — ใช้ของก่อน`);
-  const u = {
-    [`bm/${p.faction}/${k}/sold`]: (o.sold || 0) + 1,
-    [`bm/${p.faction}/${k}/buyers/${state.uid}`]: true,
-    [`marketTx/${state.uid}`]: { op: "bmbuy", k, ts: serverTimestamp() }
-  };
-  mktDebit(u, o.want.id, o.want.qty); mktCredit(u, o.give.id, o.give.qty);
-  if (await mktRun(u, `ซื้อ ${ITEMS[o.give.id].name} จากตลาดมืดแล้ว`)) questBump("market");
+  if (await mktRun({ a: "bmBuy", k }, `ซื้อ ${ITEMS[o.give.id].name} จากตลาดมืดแล้ว`)) questBump("market");
 }
 
 // วาดการ์ด "ตลาดมืด" ในหน้าต่างตลาดเดิม (renderMarket เรียกให้ พร้อมส่งตัวช่วย card/row มา)
@@ -8310,7 +8274,7 @@ function chOpen() {
 /* =========================================================
    44) 🎁 เยี่ยมบ้านเพื่อน + ฝากของ (ต้องใช้ rules v35)
    - เปิด "ประวัติ" ของเพื่อน → เห็นห้อง/ขั้นบ้านจริง (base/{uid}/lv อ่านได้แล้ว) + ปุ่มฝากของ
-   - ฝากของ = เขียน marketPayouts/{เขา}/g{เรา} {id,qty:1,lid:"gift"} + หักของเราในคำสั่งเดียว (มี giftTx เป็นตัวกั้นสแปม)
+   - ฝากของ = เรียก Cloud Function marketAct (a:"gift") → เขียน marketPayouts/{เขา}/g{เรา} {id,qty:1,lid:"gift"} + หักของเรา (giftTx กั้นสแปมฝั่งเซิร์ฟเวอร์)
      ผู้รับกดรับที่ 📬 ตลาดเหมือนของที่ขายได้ (ใช้ทางรับเดิม) • ฝั่งเดียวกันเท่านั้น • ทีละ 1 ชิ้น • ค้างได้ 1 ชิ้นต่อคู่
    ========================================================= */
 const GIFT_IDS = ["water", "canned_food", "bandage", "moss", "bread", "fruit"];
@@ -8326,17 +8290,16 @@ async function gftSend(to, id, name, fac) {
   if (fac && fac !== p.faction) return toast("ฝากของได้เฉพาะเพื่อนฝั่งเดียวกัน");
   if (!confirm(`ฝาก ${mktLabel(id)} ×1 ให้ ${name}?\nของจะไปรอที่ 📬 ตลาดของเขา (ถ้าเขายังไม่ได้รับชิ้นก่อนหน้า จะฝากซ้ำไม่ได้)`)) return;
   state.gftAt = Date.now() + 4000;
-  const u = { [`giftTx/${state.uid}`]: { ts: serverTimestamp(), to }, [`marketPayouts/${to}/g${state.uid}`]: { id, qty: 1, lid: "gift", n: String(p.username || "").slice(0, 16) } };
-  mktDebit(u, id, 1);
+  const u = { a: "gift", to, id };
   try {
-    await Promise.race([update(ref(db), u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
+    await Promise.race([marketCall(u), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 20000))]);
     achBump("gft"); toast(`🎁 ฝาก ${mktLabel(id)} ให้ ${name} แล้ว`); try { logLine(`🎁 ฝาก ${mktLabel(id)} ให้ ${name} (รอเขาไปรับที่ตลาด)`, "system"); } catch { /* ข้าม */ }
     try { sfx("pick"); } catch { /* ข้าม */ }
     return true;
   } catch (e) {
     state.gftAt = 0;
     console.error("gift", e?.code || e, JSON.stringify(u));
-    toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : String(e?.code || e).includes("PERMISSION_DENIED") ? "ฝากไม่สำเร็จ — เพื่อนอาจยังไม่ได้รับของที่ฝากไว้ก่อนหน้า หรือคุณไม่ได้อยู่ Safe Zone [gift]" : errMsg(e));
+    toast(String(e?.message) === "timeout" ? "เซิร์ฟเวอร์ไม่ตอบ ลองใหม่อีกครั้ง" : String(e?.code || "").startsWith("functions/") ? mktErr(e) + " [gift]" : errMsg(e));
   }
 }
 function gftVisit(uid) {   // นับเยี่ยมบ้าน: คนละ 1 ครั้งต่อวัน
