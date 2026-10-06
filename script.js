@@ -45,13 +45,15 @@ const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data)
 const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.data);   // 🛋️ บ้านของฉัน/จัดห้อง/เยี่ยมห้อง (functions/home.js)
 const profCall = (data) => httpsCallable(fns, "profAct")(data).then((r) => r.data);   // 🪪 โปรไฟล์ตกแต่ง/รูปอัปโหลด (functions/profile.js)
 const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.data);   // 🧭 บทเรียนแนะนำการเล่น (functions/learn.js)
+const abilCall = (data) => httpsCallable(fns, "abilAct")(data).then((r) => r.data);   // ⚡ ความสามารถประจำสาย (functions/ability.js)
+const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0100";
+const APP_VERSION = "2026-10-08.0400";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -730,6 +732,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "⚡ ความสามารถประจำสาย: แถบใต้ปุ่มค้นหา — มนุษย์ใช้พลังตามอาชีพ (นักสำรวจ ส่องทาง • นักล่า เตรียมซุ่ม • หมอสนาม รักษาตัวเอง/เพื่อนในโซนเดียวกัน • พ่อค้า สายส่งวัสดุ) ซอมบี้ใช้พลังตามสายวิวัฒนาการ (ล่ากลิ่น • ผิวหนา • ซุ่มเงียบ) มีค่าใช้จ่ายเล็กน้อยและคูลดาวน์ • ⚔️ ศึกใหญ่ประจำสัปดาห์: 🎲 ผจญภัย → แท็บ ศึกใหญ่ (แต้มศึกชิงโซนรวมทั้งเซิร์ฟเวอร์ ฝ่ายชนะได้โบนัสและรางวัล)",
     "🧭 แถบโค้ชบนสุดของหน้าเกม: บทเรียนแนะนำการเล่น 12 ขั้น แยกมนุษย์/ซอมบี้ (ต่อจากภารกิจวันแรก) ปุ่ม “ไปเลย” พาเปิดหน้าต่างที่เกี่ยวข้อง ทุกขั้นมีรางวัล ครบแล้วรับของปิดท้าย",
     "🪪 ตกแต่งโปรไฟล์ (หน้าต่างโปรไฟล์ → ปุ่ม “ตกแต่งโปรไฟล์”): เลือกอวาตาร์ กรอบ แบนเนอร์ ฉายา (ปลดล็อกจากความก้าวหน้า) หรืออัปโหลดรูปเอง — ระบบแปลงเป็น webp ไม่เกิน 100 KB ให้เองและลบข้อมูลตำแหน่งในรูป เปลี่ยนได้ชั่วโมงละครั้ง รูปผิดกฎกด 🚩 รายงานได้",
     "🛋️ จัดห้อง (หน้าต่างที่พัก → แท็บ “จัดห้อง”): เลือกของจากถาด แตะในภาพเพื่อวาง/ย้าย แล้วบันทึก • ธีมห้อง 13 แบบ • ของตกแต่งใหม่ 48 ชิ้น (ซื้อด้วยวัสดุ หรือได้จากหีบ/ซีซัน/สมุดสะสม/ห้องยอดนิยม) • คนอื่นเห็นห้องของคุณในหน้าประวัติ กด ❤️ ถูกใจได้วันละ 5 ห้อง ห้องยอดนิยมประจำสัปดาห์ได้รางวัล",
@@ -2017,10 +2020,10 @@ $("btn-scavenge").addEventListener("click", async () => {
 // เจอซอมบี้ตอนค้นหา: ทอย d6 + โบนัสอาวุธ (ทอยได้ 1 คือพลาดหนักเสมอ)
 async function zombieEncounter(u, hpNow) {
   const w = equippedWeapon();
-  const bonus = w ? weaponBonus(w.def) : 0;
+  const bonus = (w ? weaponBonus(w.def) : 0) + (typeof abilDice === "function" ? abilDice() : 0);
   const r = pveD6(), total = r + bonus;
   const base = 10 + Math.floor(Math.random() * 15);
-  const rollTxt = `🎲 ทอย ${r}${bonus ? ` + ${bonus} (${w.def.name})` : ""} = ${total}`;
+  const rollTxt = `🎲 ทอย ${r}${bonus ? ` + ${bonus} (${w ? w.def.name + (abilDice() ? " + ความสามารถ" : "") : "ความสามารถ"})` : ""} = ${total}`;
   let dmg = 0, verdict, loot = null, won = false;
 
   if (r === 1) { dmg = gearCut(Math.min(40, Math.round(base * 1.5))); verdict = `พลาดท่า! ซอมบี้งับเต็มแรง −${dmg} HP`; }
@@ -7183,7 +7186,7 @@ function careerCheck() {
 }
 const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0) + (typeof fxPerkCut === "function" ? fxPerkCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0) + (typeof fxPerkCut === "function" ? fxPerkCut() : 0) + (typeof fxAbilCut === "function" ? fxAbilCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
@@ -7202,6 +7205,7 @@ function fxMods(z) {
   if (typeof fxSeasonMods === "function") fxSeasonMods(m, z);
   if (typeof fxNpcMods === "function") fxNpcMods(m, z);
   if (typeof fxPerkMods === "function") fxPerkMods(m);
+  if (typeof fxAbilMods === "function") fxAbilMods(m);
   fxMemo = { k, v: m }; return m;
 }
 function fxDrops(z, d) {
@@ -9271,6 +9275,7 @@ function mTick() {
   try { passTick(); } catch { /* ข้าม */ }
   try { colTick(); hubBtn(); } catch { /* ข้าม */ }
   try { coachTick(); } catch { /* ข้าม */ }
+  try { abilTick(); } catch { /* ข้าม */ }
   try { actTick(); } catch { /* ข้าม */ }
   try { advTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
@@ -9670,6 +9675,78 @@ async function homeVisitFill(uid, name, fac) {
 }
 
 /* =========================================================
+   49.46) ⚡ ความสามารถประจำอาชีพ/สายวิวัฒนาการ (functions/ability.js — abilAct) • ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js — warAct) • ไม่แตะ rules
+   - แถบ ⚡ ใต้ปุ่มค้นหา: กดใช้พลังประจำสาย (มีค่าใช้จ่ายเล็กน้อย + คูลดาวน์) → ตัวคูณมีผล 10–16 นาที เข้าตารางค้นหา/ลดดาเมจ/ทอยปะทะ
+   - หมอสนามรักษา HP ตัวเอง/เพื่อนมนุษย์ในโซนเดียวกันทันที • ซอมบี้ใช้พลังตามสายวิวัฒนาการ
+   - ศึกใหญ่: แท็บใหม่ใน 🎲 ผจญภัย — แต้มศึกชิงโซนรวมทั้งเซิร์ฟเวอร์ รับรางวัลสัปดาห์ก่อน + ฝ่ายชนะได้โบนัสตลอดสัปดาห์นี้
+   ========================================================= */
+const abilLive = () => { const D = state.abilD; return D && D.live && D.live.until > serverNow() ? D.live : null; };
+const abilInvalidate = () => { try { fxMemo = { k: "", v: null }; } catch { /* ข้าม */ } };
+function fxAbilMods(m) {
+  const L = abilLive(), e = L && L.eff; if (e) {
+    ["n", "z", "r", "f", "w", "rm", "sc", "a"].forEach((k) => { if (e[k] !== undefined && m[k] !== undefined) m[k] *= e[k]; });
+    if (e.it) Object.entries(e.it).forEach(([id, v]) => { m.it[id] = (m.it[id] || 1) * v; });
+  }
+  const b = state.warD && state.warD.buff;   // โบนัสฝ่ายผู้ชนะศึกสัปดาห์ก่อน
+  if (b) ["n", "z", "r", "f", "w", "rm", "sc", "a"].forEach((k) => { if (b[k] !== undefined && m[k] !== undefined) m[k] *= b[k]; });
+}
+const fxAbilCut = () => { const L = abilLive(); return L && L.eff && L.eff.cut ? L.eff.cut : 0; };
+const abilDice = () => { const L = abilLive(); return L && L.eff && L.eff.dice ? L.eff.dice : 0; };
+async function abilSync(a = "state", x) { const r = await abilCall({ a, ...(x || {}) }); state.abilD = r; state.abilAt = Date.now(); abilInvalidate(); return r; }
+async function warSync(a = "state") { const r = await warCall({ a }); state.warD = r; state.warAt = Date.now(); abilInvalidate(); return r; }
+function abilTick() {
+  if (!state.profile || !state.ach?.loaded || document.hidden) return;
+  const now = Date.now();
+  if (!state.abilBusy && (!state.abilAt || now - state.abilAt > 600000)) {
+    state.abilBusy = true; state.abilAt = now; abilSync().catch(() => { /* ข้าม */ }).finally(() => { state.abilBusy = false; try { abilBar(); } catch { /* ข้าม */ } });
+  }
+  if (!state.warBusy && (!state.warAt || now - state.warAt > 900000)) {
+    state.warBusy = true; state.warAt = now; warSync().catch(() => { /* ข้าม */ }).finally(() => { state.warBusy = false; try { hubBtn(); } catch { /* ข้าม */ } });
+  }
+  abilBar();
+}
+const abilMs = (ms) => { const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")} ชม.` : `${m}:${String(x).padStart(2, "0")}`; };
+function abilBar() {
+  const D = state.abilD, anchor = $("btn-scavenge"); if (!anchor) return; let b = $("abil-bar");
+  if (!D || !D.has) { if (b) b.classList.add("hidden"); return; }
+  if (!b) { b = mk("div", "abil-bar"); b.id = "abil-bar"; anchor.after(b); }   // ใต้ปุ่มค้นหา
+  b.classList.remove("hidden"); b.innerHTML = "";
+  const live = abilLive(), cdLeft = Math.max(0, D.cdLeft - (Date.now() - state.abilAt));
+  const t = mk("span", "abil-t", `${D.i} ${D.n} (ขั้น ${D.L})`), sub = mk("span", "muted", live ? `⚡ ทำงานอยู่ อีก ${abilMs(live.until - serverNow())}` : cdLeft > 0 ? `คูลดาวน์ ${abilMs(cdLeft)}` : D.heal ? `รักษา +${D.heal} HP • ใช้ ${mRew([D.cost])}` : `${D.d} • ${D.dur} นาที • ใช้ ${mRew([D.cost])}`);
+  const info = mk("div"); info.style.cssText = "min-width:0;display:grid;line-height:1.3"; info.append(t, sub); b.append(info);
+  const go = (to) => { if (state.abilBusy) return; state.abilBusy = true; abilSync("use", to ? { to } : null).then((r) => { toast(r.healed !== undefined ? `🩹 รักษา +${r.healed} HP${r.to ? ` ให้ ${r.to.name}${r.rew ? " • ได้ " + mRew(r.rew) : ""}` : ""}` : `⚡ ${r.n} เริ่มทำงาน ${r.dur} นาที`); logLine(`⚡ ใช้ความสามารถ ${r.i} ${r.n}${r.healed !== undefined ? ` (+${r.healed} HP${r.to ? " → " + r.to.name : ""})` : ""}`, "system"); if (r.to) { try { achBump("aid"); } catch { /* ข้าม */ } } }).catch((e) => toast(fnErr(e))).finally(() => { state.abilBusy = false; abilBar(); }); };
+  if (D.heal) {
+    const row = mk("div"); row.style.cssText = "display:flex;gap:6px;flex:none"; const dis = cdLeft > 0;
+    const me = btn("ตัวเอง", () => go(null), "btn primary mini"); me.disabled = dis; const fr = btn("เพื่อน", () => abilPick(go), "btn ghost mini"); fr.disabled = dis || D.aidLeft <= 0; row.append(me, fr); b.append(row);
+  } else { const u = btn(live ? "ทำงานอยู่" : "ใช้", () => go(null), "btn primary mini"); u.disabled = !!live || cdLeft > 0; b.append(u); }
+}
+function abilPick(go) {
+  const list = Object.entries(state.players || {}).filter(([id, v]) => id !== state.uid && v && v.faction === "human");
+  if (!list.length) return toast("ไม่มีเพื่อนมนุษย์ในโซนนี้");
+  if (!$("abil-pick")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "abil-pick"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), top = mk("div", "sheet-top"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🩹 เลือกคนที่จะรักษา"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini")); top.append(head);
+    const body = mk("div", "hub2-body"); body.id = "abil-pick-body"; body.style.marginTop = "12px"; box.append(top, body); m.append(box); document.body.append(m);
+  }
+  const body = $("abil-pick-body"); body.innerHTML = ""; list.forEach(([id, v]) => body.append(btn(`🧑 ${v.name}`, () => { $("abil-pick").classList.add("hidden"); go(id); }, "btn ghost")));
+  $("abil-pick").classList.remove("hidden");
+}
+// ---- แท็บ ⚔️ ศึกใหญ่ (ใน 🎲 ผจญภัย) ----
+function warRender(card) {
+  const D = adv.war; if (!D) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const c = card(), tot = Math.max(1, D.h + D.z), mine = D.fac === "zombie" ? "🧟 ซอมบี้" : "🧑 มนุษย์";
+  c.append(mk("div", "", "⚔️ ศึกใหญ่ประจำสัปดาห์"), mk("div", "muted", `มนุษย์ vs ซอมบี้ — แต้มจากศึกชิงโซน (ค้นหา/ชนะซอมบี้/บอส/กัดเหยื่อนอก Safe Zone) รวมทั้งเซิร์ฟเวอร์ • จบใน ${passMs(D.end - serverNow())} • ฝ่ายชนะได้โบนัสตลอดสัปดาห์ถัดไป`));
+  const bar = mk("div"); bar.style.cssText = "display:flex;height:14px;border-radius:7px;overflow:hidden;margin:8px 0;background:var(--panel-2,#1c2128)"; const bh = mk("div"), bz = mk("div"); bh.style.cssText = `width:${D.h / tot * 100}%;background:#4a90d9`; bz.style.cssText = `width:${D.z / tot * 100}%;background:#8bb83a`; bar.append(bh, bz);
+  c.append(bar, mk("div", "", `🧑 มนุษย์ ${D.h} • 🧟 ซอมบี้ ${D.z}`), mk("div", "muted", `คุณ (${mine}) สะสมแล้ว ${D.mine} แต้มสัปดาห์นี้ (ต้องมี ${D.min}+ เพื่อรับรางวัลสัปดาห์หน้า)`));
+  const p = D.prev, pc = card(p.canClaim ? " evt-live" : "");
+  pc.append(mk("div", "", "📜 ผลสัปดาห์ที่แล้ว"), mk("div", "muted", p.h + p.z <= 0 ? "ไม่มีข้อมูล" : `🧑 ${p.h} vs 🧟 ${p.z} — ${p.win === "h" ? "มนุษย์ชนะ 🏆" : p.win === "z" ? "ซอมบี้ชนะ 🏆" : "เสมอ/แต้มรวมน้อยไป"} • คุณได้ ${p.mine} แต้ม`));
+  if (D.buff && D.buffOf) pc.append(mk("div", "", `✨ ฝ่ายคุณชนะ — โบนัสทั้งฝ่ายมีผลตลอดสัปดาห์นี้ (อาหาร/น้ำ/ของที่ค้นเจอดีขึ้นเล็กน้อย)`));
+  if (p.canClaim) pc.append(mk("div", "muted", `รางวัล (${p.won ? "ผู้ชนะ" : "ปลอบใจ"}): ${mRew(p.rew)}`), btn("🎁 รับรางวัล", async () => { try { const r = await warSync("claim"); state.warD = r; adv.war = r; toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`⚔️ รางวัลศึกใหญ่ (${r.won ? "ชนะ" : "ปลอบใจ"}): ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } advBtn(); advRender(); }, "btn primary"));
+  else if (p.claimed) pc.append(mk("div", "muted", "✅ รับรางวัลแล้ว"));
+  else if (p.h + p.z > 0 && p.mine < D.min) pc.append(mk("div", "muted", `ต้องมีส่วนร่วมอย่างน้อย ${D.min} แต้มถึงรับรางวัลได้ (คุณมี ${p.mine})`));
+}
+
+/* =========================================================
    49.47) 🪪 โปรไฟล์ตกแต่งตัวตน — อวาตาร์ • กรอบ • แบนเนอร์ • ฉายา • รูปอัปโหลด (functions/profile.js — profAct • storage.rules)
    - ปลดล็อกจากความก้าวหน้าจริง (ตรวจฝั่งเซิร์ฟเวอร์) • การ์ดโปรไฟล์โชว์ในหน้าประวัติของผู้เล่นอื่น
    - รูปอัปโหลด: ส่งไฟล์ต้นฉบับไป Storage → ระบบแปลงเป็น webp < 100 KB ให้เอง (ผู้เล่นไม่ต้องแปลงมาก่อน) • ขึ้นทันที มีปุ่มรายงาน + เครื่องมือ GM
@@ -10033,11 +10110,11 @@ async function petBonusAfterClaim() {
    49.7) 🎲 ผจญภัย — 🕳️ ดิ่งลึก • 👹 ศัตรูคู่อาฆาต • 📻 ปริศนาวิทยุ • 🐪 ขบวนพ่อค้าเร่
    ทุกระบบทำงานผ่าน Cloud Functions (diveAct / nemAct / radioAct / caravanAct — functions/dive.js, nemesis.js, radio.js, caravan.js) ไม่แตะ rules
    ========================================================= */
-const adv = (state.adv = state.adv || { tab: "dive" });
-const advTabs = [["dive", "🕳️ ดิ่งลึก"], ["nem", "👹 คู่อาฆาต"], ["radio", "📻 วิทยุ"], ["caravan", "🐪 พ่อค้าเร่"]];
-const advCalls = { dive: (a, x) => diveCall({ a, ...(x || {}) }), nem: (a, x) => nemCall({ a, ...(x || {}) }), radio: (a, x) => radioCall({ a, ...(x || {}) }), caravan: (a, x) => caravanCall({ a, ...(x || {}) }) };
-async function advSync(tab, a = "state", x) { const r = await advCalls[tab](a, x); adv[tab] = r; adv[tab + "At"] = Date.now(); return r; }
-function advDot() { const c = adv.caravan, r = adv.radio; return !!(c && c.open && c.here) || !!(r && !r.heard && !r.solved && state.zone === r.zone); }
+const adv = (state.adv = state.adv || { tab: "war" });
+const advTabs = [["war", "⚔️ ศึกใหญ่"], ["dive", "🕳️ ดิ่งลึก"], ["nem", "👹 คู่อาฆาต"], ["radio", "📻 วิทยุ"], ["caravan", "🐪 พ่อค้าเร่"]];
+const advCalls = { dive: (a, x) => diveCall({ a, ...(x || {}) }), nem: (a, x) => nemCall({ a, ...(x || {}) }), radio: (a, x) => radioCall({ a, ...(x || {}) }), caravan: (a, x) => caravanCall({ a, ...(x || {}) }), war: (a, x) => warCall({ a, ...(x || {}) }) };
+async function advSync(tab, a = "state", x) { const r = await advCalls[tab](a, x); adv[tab] = r; adv[tab + "At"] = Date.now(); if (tab === "war") { state.warD = r; abilInvalidate(); } return r; }
+function advDot() { const c = adv.caravan, r = adv.radio, w = adv.war || state.warD; return !!(w && w.prev && w.prev.canClaim) || !!(c && c.open && c.here) || !!(r && !r.heard && !r.solved && state.zone === r.zone); }
 function advBtn() { hubBtn(); }
 function advTick() {
   if (!state.profile || !state.ach?.loaded) return;
@@ -10070,6 +10147,7 @@ function advRender() {
     c.append(mk("div", "", h ? `ตอนนี้มี: ${h.name} เลเวล ${h.lv} (คุณหนีรอด ${h.esc} ครั้ง) ยังตามหาคุณอยู่` : "ตอนนี้ไม่มีศัตรูที่ตามหาคุณ"));
     return;
   }
+  if (t === "war") { warRender(card); return; }
   if (!D) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
   if (t === "dive") {
     const c = card(D.on ? " evt-live" : "");

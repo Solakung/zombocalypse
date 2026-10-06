@@ -873,3 +873,8 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .coach-t { min-width: 0; flex: 1; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; cursor: pointer; }
 .coach .btn { flex: 0 0 auto; min-height: 36px; padding: 4px 12px; white-space: nowrap; }
 @media (max-width: 900px) { .coach { order: 4; } }
+
+/* ---------- ⚡ แถบความสามารถใต้ปุ่มค้นหา ---------- */
+.abil-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--hazard); border-radius: 10px; background: var(--panel-2); font-size: 13.5px; }
+.abil-bar .btn { flex: 0 0 auto; min-height: 40px; }
+.abil-t { font-weight: 600; }

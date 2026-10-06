@@ -20,6 +20,8 @@ const { makeCol } = require("./col");
 const { makeHome } = require("./home");
 const { makeProfile } = require("./profile");
 const { makeLearn } = require("./learn");
+const { makeAbility } = require("./ability");
+const { makeWar } = require("./war");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -141,4 +143,18 @@ const learnSys = makeLearn(admin.database());
 exports.learnAct = onCall(async (req) => {
   try { return await learnSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("learnAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// ⚡ ความสามารถประจำอาชีพ/สายวิวัฒนาการ (โหนด abil — ไม่มีใน rules)
+const abilSys = makeAbility(admin.database());
+exports.abilAct = onCall(async (req) => {
+  try { return await abilSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("abilAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// ⚔️ ศึกใหญ่ประจำสัปดาห์ รางวัลฝ่ายชนะ/โบนัสทั้งฝ่าย (โหนด war — ไม่มีใน rules; อ่าน coop ด้วย Admin SDK)
+const warSys = makeWar(admin.database());
+exports.warAct = onCall(async (req) => {
+  try { return await warSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("warAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
