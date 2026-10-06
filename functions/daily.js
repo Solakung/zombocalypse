@@ -46,7 +46,7 @@ function makeDaily(db) {
   async function crate(uid, data, now) {
     const a = (data && data.a) || "state", p = await loadUser(uid), fac = p.faction === "zombie" ? "zombie" : "human", di = dayIdx(now);
     const cs = (await db.ref(`crate/${uid}`).get()).val() || {};
-    const streakNow = cs.d === di ? cs.st || 1 : cs.d === di - 1 ? cs.st || 0 : 0;   // streak ที่ยังไม่รวมวันนี้ (ถ้ายังไม่เปิด)
+    const streakNow = cs.d === di ? cs.st || 1 : cs.d < di && cs.d >= di - 2 ? cs.st || 0 : 0;   // ผ่อนผัน: ขาดไปได้ 1 วัน streak ไม่หาย (ไม่ลงโทษคนที่ไม่ได้เข้า)   // streak ที่ยังไม่รวมวันนี้ (ถ้ายังไม่เปิด)
     const claimed = cs.d === di, nextDay = claimed ? ((cs.st - 1) % 7) + 1 : (streakNow % 7) + 1;
     const view = (extra) => Object.assign({ ok: true, claimed, st: claimed ? cs.st : streakNow, day: nextDay, end: dayEnd(now) }, extra || {});
     if (a === "state") return view();

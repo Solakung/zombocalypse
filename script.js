@@ -39,13 +39,14 @@ const nemCall = (data) => httpsCallable(fns, "nemAct")(data).then((r) => r.data)
 const radioCall = (data) => httpsCallable(fns, "radioAct")(data).then((r) => r.data);   // 📻 ปริศนาวิทยุ (functions/radio.js)
 const caravanCall = (data) => httpsCallable(fns, "caravanAct")(data).then((r) => r.data);   // 🐪 ขบวนพ่อค้าเร่ (functions/caravan.js)
 const gardenCall = (data) => httpsCallable(fns, "gardenAct")(data).then((r) => r.data);   // 🌱 แปลงปลูก (functions/garden.js)
+const colCall = (data) => httpsCallable(fns, "colAct")(data).then((r) => r.data);   // 📖 สมุดสะสมชุด/ความสมบูรณ์ (functions/col.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.1000";
+const APP_VERSION = "2026-10-07.1200";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -721,6 +722,7 @@ function openGuide() {
   ]);
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
+    "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
     "🌱 แปลงปลูก (ในหน้าต่างที่พัก): ลงเมล็ด → รดน้ำ/ใส่ปุ๋ย → เก็บเกี่ยว ฤดูกาลมีผลกับเวลาโต รับเมล็ดฟรีวันละครั้ง ได้เมล็ดเพิ่มจากหีบ/พ่อค้าเร่/ดิ่งลึก/เหตุการณ์สุ่ม • ซอมบี้เลี้ยงเชื้อรา/หนอนแทน",
     "🎲 🎲 ผจญภัย: 🕳️ ดิ่งลึก (ลงชั้นใต้ดินที่อุโมงค์/ห้องแล็บ เลือกทางเสี่ยงโชค ขึ้นจากหลุมเพื่อเก็บของ) • 👹 ศัตรูคู่อาฆาต (โผล่ระหว่างค้นหา ยิ่งหนียิ่งแรง) • 📻 ปริศนาวิทยุรายสัปดาห์ (แชร์เบาะแสกันในแชต) • 🐪 ขบวนพ่อค้าเร่ (โผล่ในโซนสุ่ม ของจำกัด)",
     "🎁 🎁 รายวัน: หีบรายวัน (เปิดวันละครั้ง streak 7 วันได้ของหายาก) • ล่าค่าหัวประจำวัน • อีเวนต์โลกรายสัปดาห์ที่ทุกคนช่วยกัน • ต้นไม้อัปเกรดค่ายและระดับสัตว์เลี้ยง (โบนัสถาวรเล็ก ๆ)",
@@ -9241,7 +9243,7 @@ function mwRender() {
 function mTick() {
   try { ckTick(); } catch { /* ข้าม */ }
   try { passTick(); } catch { /* ข้าม */ }
-  try { hubBtn(); } catch { /* ข้าม */ }
+  try { colTick(); hubBtn(); } catch { /* ข้าม */ }
   try { actTick(); } catch { /* ข้าม */ }
   try { advTick(); } catch { /* ข้าม */ }
   try { dTick(); } catch { /* ข้าม */ }
@@ -9320,14 +9322,59 @@ function gardenDone(r) {
 }
 
 /* =========================================================
+   49.35) 📖 สมุดสะสมแบบชุด + 🏅 ความสมบูรณ์ผู้รอดชีวิต (functions/col.js — colAct) • แท็บ "สะสม" ในศูนย์กิจกรรม
+   - ไอเทม/โซนที่เคยพบ (สมุดสะสมในเครื่อง book_i / book_z) ถูกซิงก์ขึ้นเซิร์ฟเวอร์ → ครบชุดรับรางวัลได้ครั้งเดียวต่อชุด
+   - ความสมบูรณ์ % = เฉลี่ยของชุดสะสมทั้งหมด + เหตุการณ์สำคัญ → รางวัล 25/50/75/100%
+   ========================================================= */
+const colDot = () => { const D = state.colD; return !!D && (D.sets.some((s) => s.done && !s.got) || D.rewards.some((r) => r.ok && !r.got)); };
+async function colSync(a = "sync", x) {
+  const body = a === "sync" ? { a, i: [...bookSet("i")], z: [...bookSet("z")] } : { a, ...(x || {}) };
+  try { await achFlush(); } catch { /* ข้าม */ }
+  const r = await colCall(body); state.colD = r; state.colAt = Date.now(); return r;
+}
+function colKick() {
+  if (state.colBusy) return; state.colBusy = true;
+  colSync().catch((e) => toast(fnErr(e))).finally(() => { state.colBusy = false; try { hubBtn(); colRender(); } catch { /* ข้าม */ } });
+}
+function colTick() {
+  if (!state.profile || !state.ach?.loaded || state.colBusy || document.hidden) return;
+  if (state.colAt && Date.now() - state.colAt < 600000) return;
+  state.colBusy = true; state.colAt = Date.now();   // ซิงก์เงียบ ๆ ทุก 10 นาที (ใช้ทำจุดแจ้งเตือน)
+  colSync().catch(() => { /* ข้าม */ }).finally(() => { state.colBusy = false; try { hubBtn(); colRender(); } catch { /* ข้าม */ } });
+}
+function colRender() {
+  const body = $("col-body"); if (!body || !hubOn("col")) return; body.innerHTML = "";
+  const D = state.colD, card = (cls = "") => { const c = mk("div", "world-row" + cls); body.append(c); return c; };
+  if (!D) { card().append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const claim = (k) => async () => {
+    if (state.colBusy) return; state.colBusy = true;
+    try { const r = await colSync("claim", { k }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`📖 รางวัลสมุดสะสม: ${mRew(r.rewarded)}`, "system"); try { sfx("boss"); } catch { /* ข้าม */ } }
+    catch (e) { toast(fnErr(e)); } finally { state.colBusy = false; hubBtn(); colRender(); }
+  };
+  const h = card(); h.append(mk("div", "", `🏅 ผู้รอดชีวิตเต็มตัว ${D.pct}%`), worldBar(D.pct / 100, `${D.pct}% • ชุดครบแล้ว ${D.done}/${D.sets.length}`));
+  D.rewards.forEach((r) => { const row = mk("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:6px"; row.append(mk("div", r.got ? "muted" : "", `${r.got ? "✅" : r.ok ? "🎯" : "🔒"} ${r.p}%: ${mRew(r.rew)}`)); if (r.ok && !r.got) row.append(btn("รับ", claim("m" + r.p), "btn primary mini")); h.append(row); });
+  const sh = card(); sh.append(mk("div", "", "📖 ชุดสะสม"), mk("div", "muted", "เก็บของ/ไปโซน/เก็บเกี่ยวให้ครบทั้งชุดแล้วกดรับรางวัล (ได้ครั้งเดียวต่อชุด) • ของที่เคยเจอจะบันทึกอัตโนมัติ"));
+  D.sets.forEach((s) => {
+    const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:8px;display:grid;gap:6px;margin-top:8px";
+    c.append(mk("b", "", `${s.icon} ${s.n} (${s.have}/${s.total})${s.got ? " ✅" : ""}`), worldBar(s.have / s.total, s.done ? "ครบชุด!" : `ขาดอีก ${s.total - s.have}`));
+    if (!s.done) c.append(mk("span", "muted", `ยังไม่เคยเจอ: ${s.miss.map((id) => s.k === "i" ? `${ITEMS[id]?.icon || "❔"}${ITEMS[id]?.name || id}` : s.k === "z" ? (ZONES[id]?.name || id) : id).join(" • ")}`.slice(0, 220)));
+    c.append(mk("span", "muted", `รางวัล: ${mRew(s.rew)}`));
+    if (s.done && !s.got) c.append(btn("รับรางวัลชุด", claim(s.id), "btn primary mini"));
+    sh.append(c);
+  });
+  const mc = card(); mc.append(mk("div", "", "🎯 เหตุการณ์สำคัญ (นับรวมในความสมบูรณ์)"));
+  D.miles.forEach((m) => { const r = mk("div", m.v >= m.n ? "muted" : ""); r.style.marginTop = "6px"; r.append(document.createTextNode(`${m.v >= m.n ? "✅" : "⬜"} ${m.t} — ${m.v}/${m.n}`)); mc.append(r); });
+}
+
+/* =========================================================
    49.4) 🎲 ศูนย์กิจกรรม — หน้าต่างเดียวรวม 🎟️ ซีซัน • 🎁 รายวัน • 🎲 ผจญภัย • 🔥 เช็กอิน
    มือถือก่อน: เป็นแผ่นเลื่อนขึ้นจากด้านล่าง เปิดจากแท็บ "กิจกรรม" ในแถบล่าง (คอม: ปุ่มบนแถบบน) • จุดแจ้งเตือนรวมจุดเดียว
    ตรรกะของแต่ละแท็บยังอยู่ที่ passRender / actRender / advRender / mwRender เดิม (แค่ย้ายมาแสดงในแผ่นนี้)
    ========================================================= */
 const hub2 = { tab: "pass" };
-const HUB2_TABS = [["pass", "🎟️", "ซีซัน"], ["act", "🎁", "รายวัน"], ["adv", "🎲", "ผจญภัย"], ["ck", "🔥", "เช็กอิน"]];
+const HUB2_TABS = [["pass", "🎟️", "ซีซัน"], ["act", "🎁", "รายวัน"], ["adv", "🎲", "ผจญภัย"], ["col", "📖", "สะสม"], ["ck", "🔥", "เช็กอิน"]];
 const hubOn = (t) => { const m = $("hub2-modal"); return !!m && !m.classList.contains("hidden") && hub2.tab === t; };
-function hubTabDot(t) { try { return t === "pass" ? passDot() : t === "act" ? actDot() : t === "adv" ? advDot() : ckUnclaimed().length > 0 || cbPending(); } catch { return false; } }
+function hubTabDot(t) { try { return t === "pass" ? passDot() : t === "act" ? actDot() : t === "adv" ? advDot() : t === "col" ? colDot() : ckUnclaimed().length > 0 || cbPending(); } catch { return false; } }
 const hubDot = () => HUB2_TABS.some(([t]) => hubTabDot(t));
 function hubBtn() {   // ปุ่มบนแถบบน (คอม) + แท็บล่าง (มือถือ) + จุดในแผ่น
   let b = $("btn-hub2");
@@ -9352,12 +9399,12 @@ function hubOpen(tab) {
     top.append(head, tabs);
     const pane = (t, ...kids) => { const d = mk("div", "hub2-pane hidden"); d.dataset.t = t; kids.forEach((k) => d.append(k)); return d; };
     const body = (id) => { const d = mk("div", "hub2-body"); d.id = id; return d; }, sub = (id) => { const d = mk("div", "subtabs"); d.id = id; return d; };
-    box.append(top, pane("pass", body("pass-body")), pane("act", sub("act-tabs"), body("act-body")), pane("adv", sub("adv-tabs"), body("adv-body")), pane("ck", body("mw-body")));
+    box.append(top, pane("pass", body("pass-body")), pane("act", sub("act-tabs"), body("act-body")), pane("adv", sub("adv-tabs"), body("adv-body")), pane("col", body("col-body")), pane("ck", body("mw-body")));
     m.append(box); document.body.append(m);
   }
   $("hub2-modal").classList.remove("hidden"); hubShow();
   const t = hub2.tab;
-  if (t === "pass") { passRender(); passKick(); } else if (t === "act") { actRender(); actRefresh(); } else if (t === "adv") { advRender(); advRefresh(); } else mwRender();
+  if (t === "pass") { passRender(); passKick(); } else if (t === "act") { actRender(); actRefresh(); } else if (t === "adv") { advRender(); advRefresh(); } else if (t === "col") { colRender(); colKick(); } else mwRender();
 }
 
 /* =========================================================
