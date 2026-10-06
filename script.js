@@ -56,7 +56,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0800";
+const APP_VERSION = "2026-10-08.0900";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1964,7 +1964,7 @@ async function scavengeOnce() {
     if (scrapIgnored) found = null;
     try { const sf = siteRoll(found, table, isZombie); if (sf) found = sf; } catch { /* ข้าม */ }   // คลังลับ (หัวข้อ 36)
     let hcFind = false;   // ภารกิจ HC (หัวข้อ 51): มนุษย์ต้องเจอบอสก่อน → ค้นต่อจนเจอธารา / ซอมบี้ข้ามบอสได้
-    try { if (hcSearching(state.zone)) { if (!isZombie && !hcBossDone()) { if (bossCooldownLeft() === 0 && BOSSES.lab) found = "boss"; } else if (found !== "zombie" && found !== "boss") hcFind = hcFindRoll(); } } catch { /* ข้าม */ }
+    try { if (hcSearching(state.zone)) { if (!isZombie && !hcBossDone()) { if (bossCooldownLeft() === 0 && BOSSES.lab) found = "boss"; } else if (found !== "zombie" && found !== "boss") hcFind = hcFindRoll(isZombie); } } catch { /* ข้าม */ }
     const u = {};
     hungerShift(u, "food", -(isZombie ? 5 : 3)); hungerShift(u, "water", -(isZombie ? 2 : 4));
 
@@ -5819,8 +5819,9 @@ const HC_HINTS = {
   15: "🚪 ประตูนิรภัยบานหนึ่งมีรอยขีดข่วนจากด้านใน และคราบเลือดที่แห้งกรังแล้ว… ใกล้แล้ว"
 };
 // ทอยหาเธอหนึ่งครั้งต่อการค้นที่ศูนย์วิจัย: ยิ่งไม่เจอยิ่งง่ายขึ้น (ตัวนับอยู่ในเครื่อง)
-function hcFindRoll() {
-  const k = lsKey("hct"), n = LS.get(k, 0), ch = Math.min(0.9, T("hc_find", 6) / 100 + 0.03 * n);
+// มนุษย์: เริ่ม hc_find% เพิ่ม 1.5% ต่อครั้งที่ไม่เจอ (ต้องล้มผู้เฝ้าก่อน) • ซอมบี้ข้ามผู้เฝ้าได้ แต่เริ่มครึ่งหนึ่งและเพิ่มช้ากว่า (1%) → ค้นเฉลี่ยมากกว่า ~30%
+function hcFindRoll(zom) {
+  const k = lsKey("hct"), n = LS.get(k, 0), ch = Math.min(0.9, (T("hc_find", 3) / 100) * (zom ? 0.5 : 1) + (zom ? 0.01 : 0.015) * n);
   if (Math.random() < ch) return true;
   LS.set(k, n + 1); if (HC_HINTS[n + 1]) setTimeout(() => logLine(HC_HINTS[n + 1], "system"), 500);
   return false;
@@ -10985,7 +10986,7 @@ function tuneDefs() {
   rows.push(["hc_on", "📡 ภารกิจ HC: ตามหานักวิจัยที่ศูนย์วิจัยร้าง (1 = เปิด, 0 = ปิด • เปิดเมื่อพร้อมประกาศเนื้อเรื่อง • ต้องใช้ rules v43)", 0, 0, 1, "📡 ภารกิจ HC"]);
   rows.push(["hc_drop", "น้ำหนักดรอป 🧬 ชิ้นส่วน DNA ในศูนย์วิจัย (ตารางรวม ~110 • 8 ≈ 7% ต่อการค้น)", 8, 0, 40, "📡 ภารกิจ HC"]);
   rows.push(["hc_goal", "เป้าหมายส่งชิ้นส่วน DNA รวมทั้งเซิร์ฟเวอร์ (ชิ้น)", 300, 10, 5000, "📡 ภารกิจ HC"]);
-  rows.push(["hc_find", "โอกาสเจอธาราต่อการค้น 1 ครั้ง (%) — เพิ่มขึ้น 3% ทุกครั้งที่ไม่เจอ", 6, 1, 50, "📡 ภารกิจ HC"]);
+  rows.push(["hc_find", "โอกาสเจอธาราต่อการค้น 1 ครั้ง (%) ของมนุษย์ — เพิ่มขึ้น 1.5% ทุกครั้งที่ไม่เจอ (ซอมบี้ ใช้ครึ่งหนึ่งและเพิ่มครั้งละ 1%)", 3, 1, 50, "📡 ภารกิจ HC"]);
   rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
