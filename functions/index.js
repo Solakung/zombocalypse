@@ -17,6 +17,7 @@ const { makeRadio } = require("./radio");
 const { makeCaravan } = require("./caravan");
 const { makeGarden } = require("./garden");
 const { makeCol } = require("./col");
+const { makeHome } = require("./home");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -117,4 +118,11 @@ const colSys = makeCol(admin.database());
 exports.colAct = onCall(async (req) => {
   try { return await colSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("colAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🛋️ บ้านของฉัน: จัดห้องเอง/ธีม/เยี่ยมห้อง/ถูกใจ/ห้องยอดนิยม (โหนด home, hw, hl — ไม่มีใน rules)
+const homeSys = makeHome(admin.database());
+exports.homeAct = onCall(async (req) => {
+  try { return await homeSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("homeAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });

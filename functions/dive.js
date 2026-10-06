@@ -35,7 +35,7 @@ const LOOT = {
 };
 const tierOf = (fl) => (fl <= 3 ? 1 : fl <= 7 ? 2 : 3);
 // รางวัลครั้งแรกที่ลงถึงชั้นนั้น (ครั้งเดียวต่อบัญชี)
-const FIRST = { 5: { human: [["steel_plate", 1], ["medkit", 1]], zombie: [["mutant_gland", 1], ["serum", 1]] }, 8: { human: [["circuit_board", 1], ["trauma_kit", 1]], zombie: [["mutant_gland", 2], ["serum", 1]] }, 12: { human: [["gold_watch", 1], ["data_chip", 1], ["lab_core", 1]], zombie: [["mutant_gland", 3], ["serum", 2], ["lab_core", 1]] } };
+const FIRST = { 5: { human: [["steel_plate", 1], ["medkit", 1]], zombie: [["mutant_gland", 1], ["serum", 1]] }, 8: { human: [["circuit_board", 1], ["trauma_kit", 1]], zombie: [["mutant_gland", 2], ["serum", 1]] }, 12: { human: [["gold_watch", 1], ["data_chip", 1], ["lab_core", 1], ["deco_star", 1]], zombie: [["mutant_gland", 3], ["serum", 2], ["lab_core", 1], ["deco_star", 1]] } };
 
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const isRest = (fl) => fl % REST_EVERY === 0 && fl < MAX_FLOOR;
