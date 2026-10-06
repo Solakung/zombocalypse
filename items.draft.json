@@ -666,7 +666,8 @@
    "cat": "acc",
    "rar": "U",
    "fx": {
-    "searchCost": 10
+    "nofind": 6,
+    "zspawn": 6
    },
    "zones": {
     "ruins": "U",
@@ -770,7 +771,6 @@
    "fx": {
     "wall": 6
    },
-   "star": "กัดสำเร็จฟื้น HP 3% (ต้องเพิ่มกลไก)",
    "zones": {
     "hospital": "R",
     "lab": "R"

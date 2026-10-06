@@ -35,7 +35,7 @@ const marketCall = (data) => httpsCallable(fns, "marketAct")(data).then((r) => r
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1300";
+const APP_VERSION = "2026-10-06.1500";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -168,7 +168,7 @@ const MON_FX = {
 function monFx(u, src, loss, hpAfter) {
   if (!(loss > 0) || !(hpAfter > 0)) return "";
   for (const [t, [pc, v, mins]] of Object.entries(MON_FX[src] || {})) {
-    const pg = t === "poison" && (gearHas("chem_gloves") || gearHas("mut_fang3")), v2 = pg && v > 1 ? v - 1 : v;   // ถุงมือ/ต่อมพิษ: โอกาสติดพิษครึ่งเดียว และพิษแรงอ่อนลง 1 ระดับ
+    const pg = t === "poison" && (gearHas("chem_gloves") || gearHas("mut_fang3") || gearFxFlag("poisonHalf")), v2 = pg && v > 1 ? v - 1 : v;   // ถุงมือ/ต่อมพิษ: โอกาสติดพิษครึ่งเดียว และพิษแรงอ่อนลง 1 ระดับ
     if (Math.random() * 100 >= (pg ? pc * 0.5 : pc) || effActive(t) || (t === "poison" && poisonImmLeft() > 0)) continue;
     u[`effects/${state.uid}/${t}`] = { bstart: serverTimestamp(), mins, v: v2, tick: serverTimestamp() }; stat("fx");
     return ` ⚠️ ติด${FX_TYPES[t].icon}${t === "poison" && v2 >= POISON_STRONG ? "พิษแรง" : FX_TYPES[t].name}`;
@@ -290,7 +290,52 @@ const ITEMS = {
   mut_hide1: { name: "หนังหนา", icon: "🦴", type: "gear", slot: "mh", red: 8, zombieOnly: true },
   mut_hide2: { name: "เกล็ดซาก", icon: "🐢", type: "gear", slot: "mh", red: 16, zombieOnly: true },
   mut_nose1: { name: "จมูกไว", icon: "👃", type: "gear", slot: "mn", zombieOnly: true },
-  mut_nose2: { name: "จมูกล่าซาก", icon: "🐽", type: "gear", slot: "mn", zombieOnly: true }
+  mut_nose2: { name: "จมูกล่าซาก", icon: "🐽", type: "gear", slot: "mn", zombieOnly: true },
+  // ===== ไอเทมชุดที่ 1 (44 ชิ้น: เกราะ/อุปกรณ์/อวัยวะซอมบี้/วัตถุดิบ/ของสะสม) — ดู ITEMS_DESIGN.md • fx = ผลพิเศษของชุดสวมใส่ (อ่านโดย gearFxSum/gearFxFlag) =====
+  cardboard_armor: { name: "เกราะกระดาษแข็ง", icon: "📦", type: "gear", slot: "arm", red: 3 },
+  leather_jacket: { name: "แจ็คเก็ตหนัง", icon: "🧥", type: "gear", slot: "arm", red: 7 },
+  hunter_cloak: { name: "เสื้อคลุมนักล่า", icon: "🪶", type: "gear", slot: "arm", red: 9 },
+  welder_apron: { name: "ผ้ากันเปื้อนช่างเชื่อม", icon: "🥋", type: "gear", slot: "arm", red: 11 },
+  diver_suit: { name: "ชุดกันน้ำนักดำน้ำ", icon: "🤿", type: "gear", slot: "arm", red: 13 },
+  hazmat_suit: { name: "ชุดป้องกันสารเคมี", icon: "☢️", type: "gear", slot: "arm", red: 16 },
+  kevlar_vest: { name: "เสื้อเคฟลาร์", icon: "🦺", type: "gear", slot: "arm", red: 18 },
+  bomb_suit: { name: "ชุดเก็บกู้ระเบิด", icon: "💣", type: "gear", slot: "arm", red: 26 },
+  compass: { name: "เข็มทิศ", icon: "🧭", type: "gear", slot: "acc", fx: {"nofind":10} },
+  earplugs: { name: "ที่อุดหู", icon: "🎧", type: "gear", slot: "acc", fx: {"zspawn":15} },
+  survival_bracelet: { name: "สายรัดข้อมือเอาชีวิตรอด", icon: "⌚", type: "gear", slot: "acc", fx: {"nofind":6,"zspawn":6} },
+  rabbit_foot: { name: "ตีนกระต่ายนำโชค", icon: "🐇", type: "gear", slot: "acc", fx: {"rare":5} },
+  lucky_coin: { name: "เหรียญนำโชค", icon: "🪙", type: "gear", slot: "acc", fx: {"nofind":8,"rare":3} },
+  respirator: { name: "เครื่องช่วยหายใจ", icon: "🫁", type: "gear", slot: "acc", fx: {"poisonHalf":true} },
+  night_goggles: { name: "แว่นมองกลางคืน", icon: "🥽", type: "gear", slot: "acc", fx: {"nightSafe":true,"zspawn":10} },
+  tactical_radio: { name: "วิทยุยุทธวิธี", icon: "📻", type: "gear", slot: "acc", fx: {"zspawn":20} },
+  mut_fang4: { name: "เขี้ยวฟันเลื่อย", icon: "🦷", type: "gear", slot: "mf", fx: {"wall":4}, zombieOnly: true },
+  mut_fang6: { name: "เขี้ยวเลือดเดือด", icon: "🩸", type: "gear", slot: "mf", fx: {"wall":6}, zombieOnly: true },
+  mut_fang5: { name: "เขี้ยวมังกรซาก", icon: "🐉", type: "gear", slot: "mf", fx: {"wall":9}, zombieOnly: true },
+  mut_hide3: { name: "หนังเหล็กไหล", icon: "🛡️", type: "gear", slot: "mh", red: 12, zombieOnly: true },
+  mut_hide4: { name: "กระดองซาก", icon: "🐚", type: "gear", slot: "mh", red: 20, zombieOnly: true },
+  mut_hide5: { name: "เกราะกระดูกยักษ์", icon: "🦴", type: "gear", slot: "mh", red: 26, zombieOnly: true },
+  mut_nose3: { name: "จมูกกลิ่นเลือด", icon: "👃", type: "gear", slot: "mn", fx: {"meat":2.2}, zombieOnly: true },
+  mut_nose4: { name: "จมูกผู้ล่า", icon: "🐕", type: "gear", slot: "mn", fx: {"meat":1.4,"nofind":35}, zombieOnly: true },
+  duct_tape: { name: "เทปกาว", icon: "🧷", type: "material" },
+  rusty_nails: { name: "ตะปูสนิม", icon: "📌", type: "material" },
+  cloth_roll: { name: "ม้วนผ้า", icon: "🧶", type: "material" },
+  rope_coil: { name: "เชือกมัด", icon: "🪢", type: "material" },
+  herb_bundle: { name: "กำสมุนไพร", icon: "🌾", type: "material" },
+  copper_wire: { name: "ลวดทองแดง", icon: "🔌", type: "material" },
+  leather_scrap: { name: "เศษหนัง", icon: "🟫", type: "material" },
+  fuel_can: { name: "น้ำมันเชื้อเพลิง", icon: "⛽", type: "material" },
+  gunpowder: { name: "ดินปืน", icon: "🧨", type: "material" },
+  steel_plate: { name: "แผ่นเหล็กกล้า", icon: "🔩", type: "material" },
+  battery_pack: { name: "แบตเตอรี่", icon: "🔋", type: "material" },
+  circuit_board: { name: "แผงวงจร", icon: "🖥️", type: "material" },
+  chem_catalyst: { name: "ตัวเร่งปฏิกิริยา", icon: "⚗️", type: "material" },
+  mutant_gland: { name: "ต่อมมิวแทนต์", icon: "🫀", type: "material" },
+  survivor_badge: { name: "เข็มกลัดผู้รอดชีวิต", icon: "🎖️", type: "material" },
+  old_photo: { name: "ภาพถ่ายเก่า", icon: "🖼️", type: "material" },
+  gold_watch: { name: "นาฬิกาทอง", icon: "🕰️", type: "material" },
+  lab_keycard: { name: "บัตรผ่านห้องแล็บ", icon: "🪪", type: "material" },
+  data_chip: { name: "ชิปข้อมูลวิจัย", icon: "💾", type: "material" },
+  boss_trophy: { name: "ถ้วยรางวัลบอส", icon: "🏆", type: "material" }
 };
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
@@ -382,7 +427,7 @@ const DAY_CYCLE = 100 * 60000, NIGHT_START = 60 * 60000;
 const NIGHT_MOD = { dmod: 2, zmod: 10, nmod: 0 };
 const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
-const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
+const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") && !gearFxFlag("nightSafe") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
 const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z) + fxDmod(z)));
 function effectiveDrops(z) { return fxDrops(z, wxNzDrops(z, hcAdd(z, effectiveDrops0(z)))); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
@@ -400,6 +445,7 @@ function humanDrops(z) {
   const d = effectiveDrops(z), w = BOSS_W[z], g = GEAR_DROPS[z];
   let t = w ? [...d, { id: "boss", w }] : d;
   if (g) t = [...t, ...Object.entries(g).map(([id, gw]) => ({ id, w: gw }))];   // ชุดสวมใส่ประจำโซน
+  const md = MAT_DROPS[z]; if (md) t = [...t, ...Object.entries(md).map(([id, mw]) => ({ id, w: mw }))];   // วัตถุดิบ/ของสะสม
   return t;
 }   // ตารางค้นหาของมนุษย์ = ตารางโซน + โอกาสเจอบอส
 // ซอมบี้: "เจอซอมบี้" = ตามรอยฝูงไปเจอซากที่ทิ้งไว้ (เนื้อเน่า) แทนที่จะเมินไปเฉยๆ → ฝูงบุก/กำแพงพังจึงเป็นข่าวดีของฝั่งซอมบี้
@@ -407,6 +453,7 @@ function zombieDrops(z) {
   const d = effectiveDrops(z).map((x) => x.id === "zombie" ? { id: "rotten_meat", w: x.w * 0.4 } : x), w = ZOMBIE_EXTRA[z], m = MUT_DROPS[z];
   let t = w ? [...d, { id: "rotten_meat", w }] : d;
   if (m) t = [...t, ...Object.entries(m).map(([id, mw]) => ({ id, w: mw }))];   // อวัยวะกลายพันธุ์ประจำโซน
+  const md = MAT_DROPS[z]; if (md) t = [...t, ...Object.entries(md).map(([id, mw]) => ({ id, w: mw }))];   // วัตถุดิบ/ของสะสม
   return t;
 }
 
@@ -3871,7 +3918,7 @@ function renderEvo() {
    marketTx/{uid} = { op: buy|cancel|claim, lid|pid, ts }  ← "ตั๋ว" ที่ rules ใช้ตรวจ (เขียนในอัปเดตเดียวกับการย้ายของ)
    ทุกการเขียนข้อมูลตลาดทำผ่าน Cloud Function marketAct (functions/market.js) — rules ปิดการเขียนตรงแล้ว • ค่าคงที่ต้องตรงกับไฟล์นั้น • ใช้ function declaration (hoist) ไม่ต้องแก้ index.html/style.css
    ========================================================= */
-const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat"];
+const MKT_IDS = ["canned_food", "water", "bandage", "medkit", "scrap", "bread", "fruit", "moss", "energy_drink", "antidote", "serum", "trauma_kit", "army_meal", "water_jug", "soup", "stim_shot", "choco_bar", "chem", "rotten_meat", "duct_tape", "rusty_nails", "cloth_roll", "rope_coil", "herb_bundle", "copper_wire", "leather_scrap", "fuel_can", "gunpowder", "steel_plate", "battery_pack", "circuit_board", "chem_catalyst", "mutant_gland", "survivor_badge", "old_photo", "gold_watch", "lab_keycard", "data_chip", "boss_trophy"];
 const MKT_SLOTS = 3, MKT_MAX = 99;
 const mktIdsFor = () => MKT_IDS.filter((id) => id !== "rotten_meat" || state.profile?.faction === "zombie");
 const mktHave = (id) => state.inv?.[id]?.qty || 0;
@@ -4824,23 +4871,46 @@ const MUT_DROPS = {    // ฝั่งซอมบี้
   police: { mut_fang1: 3, mut_hide1: 2, mut_fang2: 1 }, forest: { mut_nose1: 4, mut_hide1: 2 }, factory: { mut_hide1: 2, mut_fang1: 2, mut_hide2: 1 },
   port: { mut_nose1: 3, mut_hide1: 2, mut_nose2: 1 }, base: { mut_fang2: 1, mut_hide2: 1, mut_fang1: 2 }, tunnel: { mut_fang2: 2, mut_hide2: 2, mut_nose2: 2 }, lab: { mut_nose2: 2, mut_hide2: 1, mut_fang2: 1, mut_fang3: 1 }
 };
+// ไอเทมชุดที่ 1: น้ำหนักดรอปสัมบูรณ์ต่อโซน (คิดจากส่วนแบ่งใน ITEMS_DESIGN.md) — รวมเข้ากับตารางเดิมด้านล่าง
+// ต้องตรงกับรายการโซนใน rules (ช่อง inventory) และรายการสวมใส่ (users/{uid}/arm|acc|mf|mh|mn)
+const NEW_GEAR_DROPS = { ruins: { cardboard_armor: 0.93, leather_jacket: 0.46, compass: 0.46, survival_bracelet: 0.46 }, mall: { cardboard_armor: 0.5, leather_jacket: 1.01, earplugs: 1.01, rabbit_foot: 0.5, lucky_coin: 0.5 }, hospital: { earplugs: 1.61, respirator: 0.81 }, police: { kevlar_vest: 0.39, night_goggles: 0.39 }, forest: { hunter_cloak: 0.62, compass: 1.23, rabbit_foot: 0.62 }, factory: { welder_apron: 0.96, hazmat_suit: 0.38, respirator: 0.96 }, port: { diver_suit: 0.9, survival_bracelet: 0.9, lucky_coin: 0.9 }, base: { kevlar_vest: 1.11, bomb_suit: 0.11, night_goggles: 1.11, tactical_radio: 0.45 }, tunnel: { hazmat_suit: 1.47, bomb_suit: 0.15, tactical_radio: 1.47 }, lab: { hazmat_suit: 1.02 } };
+const NEW_MUT_DROPS = { hospital: { mut_fang6: 0.32, mut_nose3: 0.81 }, police: { mut_fang4: 0.96 }, forest: { mut_nose3: 0.62 }, factory: { mut_fang4: 0.96, mut_hide3: 0.96 }, port: { mut_hide3: 0.9 }, base: { mut_fang5: 0.45, mut_hide4: 0.45 }, tunnel: { mut_fang5: 0.15, mut_hide4: 1.47, mut_hide5: 0.15, mut_nose4: 1.47 }, lab: { mut_fang6: 0.41, mut_hide5: 0.41, mut_nose4: 0.41 } };
+const MAT_DROPS = { ruins: { duct_tape: 0.93, rusty_nails: 0.93, cloth_roll: 0.46, old_photo: 0.46 }, mall: { duct_tape: 1.01, cloth_roll: 1.01, leather_scrap: 0.5, battery_pack: 0.5, circuit_board: 0.5, survivor_badge: 0.2, gold_watch: 0.2 }, hospital: { herb_bundle: 0.81, old_photo: 0.81 }, police: { gunpowder: 0.96, survivor_badge: 0.39 }, forest: { rope_coil: 0.62, herb_bundle: 1.23, leather_scrap: 0.62 }, factory: { rusty_nails: 1.92, copper_wire: 1.92, fuel_can: 0.96, steel_plate: 0.96, battery_pack: 0.96, chem_catalyst: 0.38 }, port: { rope_coil: 1.8, fuel_can: 0.9, gold_watch: 0.36 }, base: { gunpowder: 1.11, steel_plate: 1.11 }, tunnel: { mutant_gland: 0.59, data_chip: 1.47 }, lab: { copper_wire: 1.02, battery_pack: 2.04, circuit_board: 1.02, chem_catalyst: 1.02, mutant_gland: 1.02, lab_keycard: 0.41, data_chip: 0.41 } };   // วัตถุดิบ/ของสะสม: ทั้งมนุษย์และซอมบี้ค้นเจอ
+for (const [z, m] of Object.entries(NEW_GEAR_DROPS)) GEAR_DROPS[z] = { ...(GEAR_DROPS[z] || {}), ...m };
+for (const [z, m] of Object.entries(NEW_MUT_DROPS)) MUT_DROPS[z] = { ...(MUT_DROPS[z] || {}), ...m };
+const NEW_BOSS_LOOT = {"ruins":[{"id":"leather_jacket","w":3},{"id":"survival_bracelet","w":2},{"id":"boss_trophy","w":1}],"mall":[{"id":"rabbit_foot","w":3},{"id":"lucky_coin","w":2},{"id":"gold_watch","w":1},{"id":"boss_trophy","w":1}],"hospital":[{"id":"boss_trophy","w":1}],"police":[{"id":"kevlar_vest","w":1},{"id":"boss_trophy","w":1}],"forest":[{"id":"hunter_cloak","w":3},{"id":"boss_trophy","w":1}],"factory":[{"id":"welder_apron","w":3},{"id":"boss_trophy","w":1}],"port":[{"id":"diver_suit","w":3},{"id":"boss_trophy","w":1}],"base":[{"id":"bomb_suit","w":1},{"id":"boss_trophy","w":1}],"tunnel":[{"id":"boss_trophy","w":1}],"lab":[{"id":"lab_keycard","w":1},{"id":"data_chip","w":2},{"id":"boss_trophy","w":1}]};
+for (const [z, l] of Object.entries(NEW_BOSS_LOOT)) if (BOSSES[z]) BOSSES[z].loot.push(...l);
+// ผลพิเศษทั่วไปของชุดสวมใส่ (fx ใน ITEMS): รวมค่าจากทุกช่องที่สวมอยู่
+const GEAR_SLOT_KEYS = ["arm", "acc", "mf", "mh", "mn"];
+const gearFxSum = (k) => GEAR_SLOT_KEYS.reduce((t, sl) => t + (gearDef(sl)?.fx?.[k] || 0), 0);
+const gearFxFlag = (k) => GEAR_SLOT_KEYS.some((sl) => !!gearDef(sl)?.fx?.[k]);
+const gearFxMax = (k) => GEAR_SLOT_KEYS.reduce((t, sl) => Math.max(t, gearDef(sl)?.fx?.[k] || 0), 0);
+const FX_LABEL = { nofind: (v) => `“ไม่เจออะไร” น้อยลง ${v}%`, zspawn: (v) => `เจอซอมบี้ตอนค้นหาน้อยลง ${v}%`, rare: (v) => `ของหายากออกง่ายขึ้น ${v}%`, poisonHalf: () => "โอกาสติดพิษลดครึ่ง", nightSafe: () => "กลางคืนไม่เพิ่มอันตรายตอนค้นหา", wall: (v) => `ทุบกำแพงแรงขึ้น +${v}`, meat: (v) => `เจอเนื้อเน่าบ่อยขึ้น ×${v}` };
+const autoGearFx = (d) => d ? [d.red ? `ลดดาเมจที่โดน ${d.red}%` : "", ...Object.entries(d.fx || {}).map(([k, v]) => FX_LABEL[k]?.(v))].filter(Boolean).join(" • ") : "";
 const GEAR_SLOT_BY_FAC = { human: ["arm", "acc"], zombie: ["mf", "mh", "mn"] };
 // ของที่สวมอยู่จริง: ต้องมี id นั้นในช่อง และยังมีของในกระเป๋า
-const gearFx = (it) => (it.id === "custom_gear" ? `ลดดาเมจที่โดน ${it.red}%` : GEAR_FX[it.id]);
+const gearFx = (it) => (it.id === "custom_gear" ? `ลดดาเมจที่โดน ${it.red}%` : GEAR_FX[it.id] || autoGearFx(ITEMS[it.id]));
 // ช่องสวมเก็บ "ชื่อสล็อตในกระเป๋า" (ของในเกม = id เดียวกับสล็อต, ของ custom = key สุ่ม)
 function gearDef(slot) { const k = state.profile?.[slot], it = k && state.inv?.[k], d = it && defOf(it); return d && d.type === "gear" && d.slot === slot && it.qty > 0 ? d : null; }
 function gearId(slot) { return gearDef(slot) ? state.profile[slot] : null; }
 function gearHas(id) { return !!ITEMS[id] && gearId(ITEMS[id].slot) === id; }
 function gearRed() { let red = 0; for (const s of ["arm", "acc", "mh"]) { const d = gearDef(s); if (d) red += d.red || 0; } return Math.min(40, red); }
 function gearCut(dmg) { const red = gearRed(); return dmg > 0 && red ? Math.max(1, Math.round(dmg * (1 - red / 100))) : dmg; }
-function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang3" ? 5 : id === "mut_fang1" ? 3 : 0; }
+function fangBonus() { const id = gearId("mf"); return id === "mut_fang2" ? 6 : id === "mut_fang3" ? 5 : id === "mut_fang1" ? 3 : (gearDef("mf")?.fx?.wall || 0); }   // ต้องตรงกับ wall/safe ใน rules
 function gearTable(t) {
   let out = t;
   if (gearHas("lucky_charm")) out = out.map((d) => d.id === null ? { ...d, w: d.w * 0.8 } : d);
   if (gearHas("gas_mask")) out = out.map((d) => d.id === "zombie" ? { ...d, w: d.w * 0.75 } : d);
   if (gearHas("bio_lens")) out = out.map((d) => d.id && d.id !== "zombie" && d.id !== "boss" && d.id !== "rotten_meat" && d.w <= 5 ? { ...d, w: d.w * 1.07 } : d);
+  { // ผลทั่วไปจาก fx (ชุดใหม่): ไม่เจออะไรน้อยลง / เจอซอมบี้น้อยลง / ของหายากออกง่ายขึ้น / เนื้อเน่า ×
+    const nf = Math.min(60, gearFxSum("nofind")), zs = Math.min(60, gearFxSum("zspawn")), rr = gearFxSum("rare"), mm = gearFxMax("meat");
+    if (nf) out = out.map((d) => d.id === null ? { ...d, w: d.w * (1 - nf / 100) } : d);
+    if (zs) out = out.map((d) => d.id === "zombie" ? { ...d, w: d.w * (1 - zs / 100) } : d);
+    if (rr) out = out.map((d) => d.id && d.id !== "zombie" && d.id !== "boss" && d.id !== "rotten_meat" && d.w <= 5 ? { ...d, w: d.w * (1 + rr / 100) } : d);
+    if (mm) out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * mm } : d);
+  }
   const n = gearId("mn");
-  if (n) out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * (n === "mut_nose2" ? 1.7 : 1.3) } : d.id === null && n === "mut_nose2" ? { ...d, w: d.w * 0.8 } : d);
+  if (n === "mut_nose1" || n === "mut_nose2") out = out.map((d) => d.id === "rotten_meat" ? { ...d, w: d.w * (n === "mut_nose2" ? 1.7 : 1.3) } : d.id === null && n === "mut_nose2" ? { ...d, w: d.w * 0.8 } : d);
   return out;
 }
 async function gearToggle(key) {
@@ -8789,11 +8859,12 @@ const ITEM_NOTE = {
   dna_frag: "เศษ DNA จากศูนย์วิจัยร้าง (ดรอปยาก ช่วงภารกิจ HC) — ส่งให้ธาราที่ค่ายผ่านการ์ด “คนในค่าย” ยอดรวมทั้งเซิร์ฟเวอร์",
   lab_core: "ดรอปจากบอสศูนย์วิจัย — ส่งให้ห้องวิจัยของค่าย (ที่พัก) เพื่อรับผลวิจัยชั่วคราว", lab_blade: "ดรอปจากบอสศูนย์วิจัย (หายาก)", lab_sample: "ส่งให้ห้องวิจัยของค่ายเพื่อรับผลวิจัยชั่วคราว หรือเอาไปคราฟต์ซีรั่มทดลอง",
   exp_serum: "ฟื้น 60 HP และรักษาเลือดไหล/พิษทุกระดับ", fish_grill: "กินแล้วได้บัฟ “อิ่มปลาย่าง” 20 นาที (ไม่เจออะไรน้อยลง 7%)", fish_stew: "กินแล้วได้บัฟ “อุ่นท้องซุปปลา” 30 นาที (ลดดาเมจที่โดน 5%)",
+  boss_trophy: "ถ้วยรางวัลจากบอสประจำโซน — ของสะสมหายาก ขายในตลาดได้", lab_keycard: "บัตรผ่านจากศูนย์วิจัยร้าง — ของสะสม/ของส่งภารกิจในเนื้อเรื่องภายหลัง", data_chip: "ชิปข้อมูลวิจัยจากศูนย์วิจัยร้าง — ของสะสม/ของส่งภารกิจในเนื้อเรื่องภายหลัง", survivor_badge: "เข็มกลัดของผู้รอดชีวิต — ของสะสม ขายในตลาดได้", old_photo: "ภาพถ่ายเก่า — ของสะสม ขายในตลาดได้", gold_watch: "นาฬิกาทอง — ของสะสมมูลค่าสูง ขายในตลาดได้",
   scrap: "วัสดุหลักของการคราฟต์ซ่อมอาวุธและกำแพง", chem: "วัสดุคราฟต์ยาและเกราะ", rotten_meat: "อาหารของซอมบี้ (ซอมบี้เท่านั้นที่กินได้)"
 };
 function itemSources(id) {
   const out = [], zs = Object.keys(ZONES).filter((z) => z !== "safe");
-  const hz = zs.filter((z) => (ZONES[z].drops || []).some((d) => d.id === id) || GEAR_DROPS[z]?.[id]), zz = zs.filter((z) => MUT_DROPS[z]?.[id] || (id === "rotten_meat" && ZOMBIE_EXTRA[z]));
+  const hz = zs.filter((z) => (ZONES[z].drops || []).some((d) => d.id === id) || GEAR_DROPS[z]?.[id] || MAT_DROPS[z]?.[id]), zz = zs.filter((z) => MUT_DROPS[z]?.[id] || (id === "rotten_meat" && ZOMBIE_EXTRA[z]));
   if (ZONES.safe.drops?.some((d) => d.id === id)) out.push("🏕️ ค้นหาใน Safe Zone");
   if (hz.length) out.push("ค้นหาที่: " + hz.map((z) => `${ZONES[z].icon}${ZONES[z].name}`).join(", "));
   if (zz.length && !hz.length) out.push("ซอมบี้ค้นหาที่: " + zz.map((z) => `${ZONES[z].icon}${ZONES[z].name}`).join(", "));
@@ -8829,6 +8900,7 @@ function itemInfoOpen(id) {
   if (def.type === "weapon") body.append(mk("div", "", `ดาเมจ ${def.dmg} • ความทน ${def.maxDur}${WPN_PROC[id] ? ` • ${WPN_PROC[id]}% ทำให้บอสเลือดไหล` : ""}`));
   if (def.type === "gear") body.append(mk("div", "", `ช่อง: ${GEAR_SLOTS[def.slot] || def.slot}${GEAR_FX[id] ? ` • ${GEAR_FX[id]}` : ""}${def.zombieOnly ? " • เฉพาะซอมบี้" : ""}`));
   if (ITEM_NOTE[id]) body.append(mk("div", "", "📝 " + ITEM_NOTE[id]));
+  else if (ITEMS[id]?.type === "material" && !ITEMS[id].gmOnly && !["lab_sample", "dna_frag", "lab_core", "fish", "golden_fish"].includes(id)) body.append(mk("div", "", "📝 วัตถุดิบ — ใช้คราฟต์ในอัปเดตถัดไป ขายในตลาดได้"));
   const src = itemSources(id), use = itemUses(id);
   if (src.length) { body.append(mk("b", "", "หาได้จาก")); src.forEach((s) => body.append(mk("div", "muted", "• " + s))); }
   if (use.length) { body.append(mk("b", "", "ใช้ทำอะไรได้")); use.forEach((s) => body.append(mk("div", "muted", "• " + s))); }
