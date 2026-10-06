@@ -48,6 +48,7 @@ const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.d
 const abilCall = (data) => httpsCallable(fns, "abilAct")(data).then((r) => r.data);   // ⚡ ความสามารถประจำสาย (functions/ability.js)
 const slaveCall = (data) => httpsCallable(fns, "slaveAct")(data).then((r) => r.data);   // 🃏 โต๊ะสลาฟหลายผู้เล่น (functions/slave.js)
 const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
+const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data);   // 🧬 มิวเตชันซอมบี้ขั้น 5–8 (functions/mutate.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -55,7 +56,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0700";
+const APP_VERSION = "2026-10-08.0800";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3913,6 +3914,18 @@ function openEvo() {
   }
   renderEvo(); $("evo-modal").classList.remove("hidden");
 }
+// ---- 🧬 มิวเตชัน (ขั้น 5–8 ของสายหลัก จ่ายด้วย DNA ผ่านฟังก์ชัน mutAct) ----
+async function mutSync(a = "state") { if (state.mutBusy) return; state.mutBusy = true; try { const r = await mutCall({ a }); state.mutD = r; state.mutAt = Date.now(); if (a === "buy" && r.bought) { toast(`🧬 กลายพันธุ์: ${r.bought}`); logLine(`🧬 มิวเตชัน ${r.n} ขั้น ${4 + r.m}/8: ${r.bought}`, "system"); } abilInvalidate(); } catch (e) { state.mutAt = Date.now(); if (a === "buy") toast(fnErr(e)); } finally { state.mutBusy = false; try { renderEvo(); abilBar(); } catch { /* ข้าม */ } } }
+function mutRender(body) {
+  if (state.profile?.faction !== "zombie") return;
+  const D = state.mutD; if (!D || Date.now() - (state.mutAt || 0) > 20000) { if (!state.mutBusy) mutSync(); }
+  if (!D || !D.zom) return;
+  const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px;margin-top:8px";
+  if (!D.line) { c.append(mk("b", "", "🧬 มิวเตชัน (ขั้น 5–8)"), mk("span", "muted", "ปลดล็อกเมื่อสายหลักถึงขั้น 4 — ต่อยอดไปอีก 4 ขั้น จ่ายด้วย DNA เพิ่มพลังความสามารถประจำสายและโบนัสถาวร")); body.append(c); return; }
+  c.append(mk("b", "", `🧬 มิวเตชัน ${D.ic} ${D.n} — ขั้น ${4 + D.m}/8`), mk("span", "muted", "ขั้น 5+ เพิ่มระดับความสามารถประจำสาย (ได้ผลครึ่งหนึ่งของขั้นปกติ) + โบนัสถาวรเล็กน้อย • DNA ที่ใช้ไม่คืนเมื่อรีเซ็ต"));
+  D.tiers.forEach((t, i) => { const row = mk("div"); row.style.cssText = "display:flex;justify-content:space-between;gap:8px;align-items:center"; row.append(mk("span", t.done ? "" : "muted", `${t.done ? "✅" : i === D.m ? "▶" : "🔒"} ขั้น ${5 + i} ${t.n}: ${t.d}`)); if (i === D.m) { const b = btn(`${t.cost} DNA`, () => { if (confirm(`กลายพันธุ์ "${t.n}" ใช้ ${t.cost} DNA?`)) mutSync("buy"); }, "btn primary mini"); b.disabled = !!state.mutBusy || (state.evo?.dna || 0) < t.cost; b.style.minHeight = "40px"; row.append(b); } c.append(row); });
+  body.append(c);
+}
 function renderEvo() {
   const body = $("evo-body"); if (!body) return;
   body.innerHTML = "";
@@ -3948,6 +3961,7 @@ function renderEvo() {
     if (locked) card.append(mk("span", "muted", "สายอื่น: อัปได้ถึงขั้น 1 เท่านั้น"));
     body.append(card);
   });
+  try { mutRender(body); } catch { /* ข้าม */ }
   const left = e.rs ? EVO_RESET_CD - (serverNow() - e.rs) : 0;
   const rb = btn(left > 0 ? `รีเซ็ต (รออีก ${Math.ceil(left / 3600000)} ชม.)` : `รีเซ็ตวิวัฒนาการ (คืน ${Math.floor((e.sp || 0) * EVO_REFUND)} DNA)`, evoReset, "btn danger wide");
   rb.disabled = !(e.sp > 0) || left > 0; body.append(rb);
@@ -7172,18 +7186,19 @@ function duoTick() {
 
 /* ---- เส้นทางอาชีพ: คำนวณจากตัวนับ achievement เดิม ---- */
 const CAREER = {
-  explorer: { icon: "🧭", name: "นักสำรวจ", titles: ["มือสำรวจ", "นักสำรวจ", "ผู้นำทาง", "จอมสำรวจแห่งเมืองร้าง"], tip: (L) => `ตาไวกว่าใคร: ค้นหาแล้ว "ไม่เจออะไร" น้อยลง ${L * 3}%`, score: (c) => (c.srch || 0) + 4 * (c.trav || 0) + 15 * (c.zvis || 0) + 2 * (c.nsrch || 0) },
-  hunter: { icon: "🗡️", name: "นักล่า", titles: ["นักสู้", "นักล่า", "จอมล่า", "ผู้ล่าแห่งเมือง"], tip: (L, z) => z ? `สัญชาตญาณล่า: เนื้อเน่าเจอมากขึ้น ${L * 5}%` : `อาวุธทนขึ้น: มีโอกาส ${L * 7}% ที่ตีแล้วไม่เสียความทน`, score: (c) => 2 * (c.zwin || 0) + 8 * (c.boss || 0) + 3 * (c.wbhit || 0) + 4 * (c.bite || 0) + 2 * (c.smash || 0) + 10 * (c.evo || 0) + (c.wbdmg || 0) / 20 },
-  medic: { icon: "🩹", name: "หมอสนาม", titles: ["ผู้ช่วยหมอ", "หมอสนาม", "หมอใหญ่", "เทพแห่งการรักษา"], tip: (L) => `ทนสถานะดีขึ้น: เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง ${L * 8}%`, score: (c) => 0.5 * (c.use || 0) + 3 * (c.heal || 0) + 15 * (c.cure || 0) },
-  trader: { icon: "💼", name: "พ่อค้า", titles: ["ผู้ค้าปลีก", "พ่อค้า", "เจ้าพ่อตลาด", "เศรษฐีเมืองร้าง"], tip: (L) => `รู้แหล่งของ: เศษวัสดุเจอมากขึ้น ${L * 6}%`, score: (c) => 4 * (c.mkt || 0) + 2 * (c.craft || 0) + (c.gacha || 0) + (c.dclaim || 0) }
+  explorer: { icon: "🧭", name: "นักสำรวจ", titles: ["มือสำรวจ", "นักสำรวจ", "ผู้นำทาง", "จอมสำรวจแห่งเมืองร้าง", "ตำนานนักสำรวจ", "ผู้ไร้ขอบฟ้า"], tip: (L) => `ตาไวกว่าใคร: ค้นหาแล้ว "ไม่เจออะไร" น้อยลง ${L * 3}%`, score: (c) => (c.srch || 0) + 4 * (c.trav || 0) + 15 * (c.zvis || 0) + 2 * (c.nsrch || 0) },
+  hunter: { icon: "🗡️", name: "นักล่า", titles: ["นักสู้", "นักล่า", "จอมล่า", "ผู้ล่าแห่งเมือง", "ผู้ล่าตำนาน", "ราชันย์แห่งการล่า"], tip: (L, z) => z ? `สัญชาตญาณล่า: เนื้อเน่าเจอมากขึ้น ${L * 5}%` : `อาวุธทนขึ้น: มีโอกาส ${L * 7}% ที่ตีแล้วไม่เสียความทน`, score: (c) => 2 * (c.zwin || 0) + 8 * (c.boss || 0) + 3 * (c.wbhit || 0) + 4 * (c.bite || 0) + 2 * (c.smash || 0) + 10 * (c.evo || 0) + (c.wbdmg || 0) / 20 },
+  medic: { icon: "🩹", name: "หมอสนาม", titles: ["ผู้ช่วยหมอ", "หมอสนาม", "หมอใหญ่", "เทพแห่งการรักษา", "หมอผู้คืนชีพ", "แพทย์แห่งปาฏิหาริย์"], tip: (L) => `ทนสถานะดีขึ้น: เลือดไหล/พิษ/เชื้อทำเลือดลดน้อยลง ${L * 8}%`, score: (c) => 0.5 * (c.use || 0) + 3 * (c.heal || 0) + 15 * (c.cure || 0) },
+  trader: { icon: "💼", name: "พ่อค้า", titles: ["ผู้ค้าปลีก", "พ่อค้า", "เจ้าพ่อตลาด", "เศรษฐีเมืองร้าง", "มหาเศรษฐี", "จักรพรรดิการค้า"], tip: (L) => `รู้แหล่งของ: เศษวัสดุเจอมากขึ้น ${L * 6}%`, score: (c) => 4 * (c.mkt || 0) + 2 * (c.craft || 0) + (c.gacha || 0) + (c.dclaim || 0) }
 };
-const CAREER_LV = [60, 250, 800, 2500];
+const CAREER_LV = [60, 250, 800, 2500, 6000, 15000];   // ขั้น 5–6 ต้องตรงกับ functions/ability.js
+const CAREER_MAX = CAREER_LV.length, careerLe = (L) => (L <= 4 ? L : 4 + (L - 4) * 0.5);   // ขั้น 5+ ให้โบนัสครึ่งหนึ่งของขั้นปกติ กันแรงเกิน
 function careerOf() {
   if (!T("career_on", 1) || !state.ach?.loaded) return null;
   const c = state.ach.c || {}, key = state.ach.loaded ? Object.keys(CAREER).map((k) => [k, CAREER[k].score(c)]).sort((a, b) => b[1] - a[1])[0] : null;
   if (!key || key[1] < CAREER_LV[0]) return null;
   const L = CAREER_LV.filter((v) => key[1] >= v).length;
-  return { k: key[0], L, score: Math.round(key[1]), def: CAREER[key[0]], title: CAREER[key[0]].titles[L - 1] };
+  return { k: key[0], L, Le: careerLe(L), score: Math.round(key[1]), def: CAREER[key[0]], title: CAREER[key[0]].titles[L - 1] };
 }
 let fxCareerMemo = { t: 0, v: null };
 function careerNow() { const n = Date.now(); if (n - fxCareerMemo.t > 4000) fxCareerMemo = { t: n, v: careerOf() }; return fxCareerMemo.v; }
@@ -7193,9 +7208,9 @@ function careerCheck() {
   const last = fxGet("career", ""), cur = c.k + c.L;
   if (last !== cur) { fxSet("career", cur); if (last) { toast(`🧭 เส้นทางอาชีพ: ${c.def.icon} ${c.title}`); logLine(`🧭 คุณก้าวสู่ ${c.def.icon} ${c.title} (${c.def.name} ขั้น ${c.L}) — ${c.def.tip(c.L, state.profile?.faction === "zombie")}`, "system"); } }
 }
-const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.L * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
+const careerWearSkip = (w) => { if (state.profile?.faction === "zombie" || !(w.it.dur > 1)) return false; const c = careerNow(); return Math.random() < (c && c.k === "hunter" ? c.Le * 0.07 : 0) + (typeof skWear === "function" ? skWear() : 0) + (typeof npcWear === "function" ? npcWear() : 0); };
 // สัดส่วนที่ลดความเสียหายจากสถานะ (เลือดไหล/พิษ/เชื้อ) — หมอสนาม (+โปรเจกต์ค่ายในอนาคต)
-const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.L * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0) + (typeof fxPerkCut === "function" ? fxPerkCut() : 0) + (typeof fxAbilCut === "function" ? fxAbilCut() : 0)); };
+const fxDmgCut = () => { const c = careerNow(); return Math.min(0.6, (gearHas("lab_coat") ? 0.05 : 0) + (c && c.k === "medic" ? c.Le * 0.08 : 0) + (typeof skCut === "function" ? skCut() : 0) + (typeof mealCut === "function" ? mealCut() : 0) + (typeof fxCampCut === "function" ? fxCampCut() : 0) + (typeof npcCut === "function" ? npcCut() : 0) + (typeof fxPerkCut === "function" ? fxPerkCut() : 0) + (typeof fxAbilCut === "function" ? fxAbilCut() : 0)); };
 const fxCutDmg = (x) => { if (!(x > 0)) return x; const y = x * (1 - fxDmgCut()); return Math.max(1, Math.floor(y) + (Math.random() < y - Math.floor(y) ? 1 : 0)); };   // ปัดเศษแบบสุ่มให้ลดได้จริงแม้ติ๊กละน้อย
 
 /* ---- รวมผลทั้งหมดเข้า "ตารางของที่เจอ" และ "อันตรายของโซน" ---- */
@@ -7206,7 +7221,7 @@ function fxMods(z) {
   const m = { z: 1, n: 1, r: 1, f: 1, w: 1, a: 1, rm: 1, sc: 1, dm: 0, it: {} }, s = Math.max(0, T("fest_str", 100)) / 100, safe = z === "safe";
   festLive().forEach((f) => { const x = f.m; ["z", "n", "r", "f", "w", "a", "rm"].forEach((q) => { if (x[q] && !(safe && q === "z")) m[q] *= Math.pow(x[q], s); }); if (x.dm && !safe) m.dm += Math.round(x.dm * s); });
   const c = careerNow();
-  if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.L; if (c.k === "trader") m.sc *= 1 + 0.06 * c.L; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.L; }
+  if (c) { if (c.k === "explorer") m.n *= 1 - 0.03 * c.Le; if (c.k === "trader") m.sc *= 1 + 0.06 * c.Le; if (c.k === "hunter" && state.profile?.faction === "zombie") m.rm *= 1 + 0.05 * c.Le; }
   if (duoBuffLeft() > 0) m.a *= 1.1;
   if (typeof skApply === "function") skApply(m);
   labBuffMods(m); mealMods(m);
@@ -7307,9 +7322,9 @@ function fxWorldRows(box) {
     if (!T("career_on", 1)) return b.append(mk("div", "muted", "ปิดอยู่ชั่วคราว"));
     if (!state.ach?.loaded) return b.append(mk("div", "muted", "กำลังโหลด…"));
     const c = state.ach.c || {}, cur = careerOf(), z = state.profile?.faction === "zombie";
-    if (cur) { const r = mk("div", "world-row evt-live"); r.append(mk("div", "", `${cur.def.icon} ${cur.title} (${cur.def.name} ขั้น ${cur.L}/4)`), mk("div", "muted", cur.def.tip(cur.L, z))); b.append(r); }
+    if (cur) { const r = mk("div", "world-row evt-live"); r.append(mk("div", "", `${cur.def.icon} ${cur.title} (${cur.def.name} ขั้น ${cur.L}/${CAREER_MAX})`), mk("div", "muted", cur.def.tip(cur.Le, z))); b.append(r); }
     else b.append(mk("div", "muted", "ยังไม่มีเส้นทางเด่นชัด — เล่นไปเรื่อย ๆ สายที่ทำบ่อยที่สุดจะกลายเป็นอาชีพของคุณ"));
-    Object.entries(CAREER).forEach(([k, d]) => { const sc = d.score(c), L = CAREER_LV.filter((v) => sc >= v).length, nx = CAREER_LV[Math.min(3, L)]; const r = mk("div", "world-row"); r.append(mk("div", "", `${d.icon} ${d.name}${L ? ` • ขั้น ${L}` : ""}`), worldBar(L >= 4 ? 1 : sc / nx, `${Math.round(sc)}/${L >= 4 ? Math.round(sc) : nx}`)); b.append(r); });
+    Object.entries(CAREER).forEach(([k, d]) => { const sc = d.score(c), L = CAREER_LV.filter((v) => sc >= v).length, nx = CAREER_LV[Math.min(CAREER_MAX - 1, L)]; const r = mk("div", "world-row"); r.append(mk("div", "", `${d.icon} ${d.name}${L ? ` • ขั้น ${L}` : ""}`), worldBar(L >= CAREER_MAX ? 1 : sc / nx, `${Math.round(sc)}/${L >= CAREER_MAX ? Math.round(sc) : nx}`)); b.append(r); });
     b.append(mk("div", "muted", "อาชีพหลัก = สายที่แต้มสูงสุด ได้โบนัสเล็ก ๆ ตามขั้น (แต้มคำนวณจากตัวนับความสำเร็จเดิม)"));
     try { if (skOn()) b.append(btn(`🌳 ต้นไม้ทักษะ${skFreeAll() ? ` (แต้มว่าง ${skFreeAll()})` : ""}`, skOpen, "btn primary mini")); } catch { /* ข้าม */ }
   }, false);
@@ -7809,7 +7824,7 @@ function dsHints() {
   try { const fac = coopFac(), P = PROJ[fac].map((p) => [p, projCost(p) - projSum(p.id)]).filter(([, r]) => r > 0).sort((a, b) => a[1] - b[1])[0]; if (P) h.push(`${P[0].icon} ${P[0].name} ขาดอีก ${P[1]} แต้มจะเสร็จ`); } catch { /* ข้าม */ }
   try { if (seaOn()) { const pr = seaProg(), left = pr.filter((g) => !g.done); h.push(left.length ? `🍂 เป้าฤดูกาลเหลือ ${left.length}/3 ข้อ (ฤดูกาลเหลืออีก ${SEA_LEN - seaDayIn()} วัน)` : "🏅 เป้าฤดูกาลนี้ครบแล้ว"); } } catch { /* ข้าม */ }
   try { if (wgOn()) { const pr = wgProg(), n = pr.filter((g) => g.done).length; h.push(`🌍 เป้าหมายโลกวันนี้ ${n}/${pr.length} ข้อ${wgBuffLeft() > 0 ? ` • 🍀 โชคเหลือ ~${Math.ceil(wgBuffLeft() / 60000)} นาที` : ""}`); } } catch { /* ข้าม */ }
-  try { const c = careerOf(); if (c && c.L < 4) h.push(`${c.def.icon} ${c.title}: อีก ${Math.max(1, CAREER_LV[c.L] - c.score)} แต้มถึงขั้นถัดไป`); } catch { /* ข้าม */ }
+  try { const c = careerOf(); if (c && c.L < CAREER_MAX) h.push(`${c.def.icon} ${c.title}: อีก ${Math.max(1, CAREER_LV[c.L] - c.score)} แต้มถึงขั้นถัดไป`); } catch { /* ข้าม */ }
   return h;
 }
 function dsTick() {
@@ -9696,10 +9711,12 @@ function fxAbilMods(m) {
     ["n", "z", "r", "f", "w", "rm", "sc", "a"].forEach((k) => { if (e[k] !== undefined && m[k] !== undefined) m[k] *= e[k]; });
     if (e.it) Object.entries(e.it).forEach(([id, v]) => { m.it[id] = (m.it[id] || 1) * v; });
   }
+  const mp = state.profile?.faction === "zombie" && state.mutD && state.mutD.pass;   // มิวเตชันซอมบี้ (โบนัสถาวร)
+  if (mp) ["n", "z", "r", "f", "w", "rm", "sc", "a"].forEach((k) => { if (mp[k] !== undefined && m[k] !== undefined) m[k] *= mp[k]; });
   const b = state.warD && state.warD.buff;   // โบนัสฝ่ายผู้ชนะศึกสัปดาห์ก่อน
   if (b) ["n", "z", "r", "f", "w", "rm", "sc", "a"].forEach((k) => { if (b[k] !== undefined && m[k] !== undefined) m[k] *= b[k]; });
 }
-const fxAbilCut = () => { const L = abilLive(); return L && L.eff && L.eff.cut ? L.eff.cut : 0; };
+const fxAbilCut = () => { const L = abilLive(), mp = state.profile?.faction === "zombie" && state.mutD && state.mutD.pass; return (L && L.eff && L.eff.cut ? L.eff.cut : 0) + (mp && mp.cut ? mp.cut : 0); };
 const abilDice = () => { const L = abilLive(); return L && L.eff && L.eff.dice ? L.eff.dice : 0; };
 async function abilSync(a = "state", x) { const r = await abilCall({ a, ...(x || {}) }); state.abilD = r; state.abilAt = Date.now(); abilInvalidate(); return r; }
 async function warSync(a = "state") { const r = await warCall({ a }); state.warD = r; state.warAt = Date.now(); abilInvalidate(); return r; }
@@ -9709,6 +9726,7 @@ function abilTick() {
   if (!state.abilBusy && (!state.abilAt || now - state.abilAt > 600000)) {
     state.abilBusy = true; state.abilAt = now; abilSync().catch(() => { /* ข้าม */ }).finally(() => { state.abilBusy = false; try { abilBar(); } catch { /* ข้าม */ } });
   }
+  if (state.profile.faction === "zombie" && !state.mutBusy && (!state.mutAt || now - state.mutAt > 900000)) mutSync().catch(() => { /* ข้าม */ });
   if (!state.warBusy && (!state.warAt || now - state.warAt > 900000)) {
     state.warBusy = true; state.warAt = now; warSync().catch(() => { /* ข้าม */ }).finally(() => { state.warBusy = false; try { hubBtn(); } catch { /* ข้าม */ } });
   }
