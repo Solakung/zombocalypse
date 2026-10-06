@@ -46,6 +46,7 @@ const homeCall = (data) => httpsCallable(fns, "homeAct")(data).then((r) => r.dat
 const profCall = (data) => httpsCallable(fns, "profAct")(data).then((r) => r.data);   // 🪪 โปรไฟล์ตกแต่ง/รูปอัปโหลด (functions/profile.js)
 const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.data);   // 🧭 บทเรียนแนะนำการเล่น (functions/learn.js)
 const abilCall = (data) => httpsCallable(fns, "abilAct")(data).then((r) => r.data);   // ⚡ ความสามารถประจำสาย (functions/ability.js)
+const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 
 /* ---------------------------------------------------------
@@ -53,7 +54,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0400";
+const APP_VERSION = "2026-10-08.0500";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -135,7 +136,7 @@ const BOSSES = {
 };
 const TRAVEL_COOLDOWN = 45000, TRAVEL_STAMINA_SAFE = 5;
 // ค่าเดินทางคิดตามปลายทาง ยิ่งไกล Safe Zone ยิ่งแพง (ใกล้ 6 / กลาง 10 / ไกล 14, กลับ Safe 5) — ต้องตรงกับ rules
-const TRAVEL_NEAR = ["forest", "ruins"], TRAVEL_FAR = ["base", "police", "tunnel", "lab"], TRAVEL_STAMINA = 10;
+const TRAVEL_NEAR = ["forest", "ruins", "casino"], TRAVEL_FAR = ["base", "police", "tunnel", "lab"], TRAVEL_STAMINA = 10;
 
 // ระบบแต้มสเตตัส: แจก 7 แต้มตอนสร้างตัวละคร (เก็บที่ stats/{uid} เขียนได้ครั้งเดียว)
 const STAT_POINTS = 7, DODGE_PER_POINT = 0.03;
@@ -427,6 +428,9 @@ const ZONES = {
   tunnel: { name: "อุโมงค์ใต้ดิน", icon: "🕳️", danger: 10, desc: "มืดสนิทและอับชื้น ซอมบี้ชุกที่สุดในเมือง แต่ของหายากซ่อนอยู่ข้างใน", drops: [{ id: "zombie", w: 35 }, { id: "chem", w: 10 }, { id: "scrap", w: 8 }, { id: "samurai_sword", w: 3 }, { id: "shotgun", w: 4 }, { id: "serum", w: 5 }, { id: "antidote", w: 5 }, { id: "trauma_kit", w: 3 }, { id: "stim_shot", w: 5 }, { id: "soup", w: 4 }, { id: null, w: 18 }] },
   lab: { name: "ศูนย์วิจัยร้าง", icon: "🧬", danger: 9, desc: "ห้องแล็บใต้ดินของโครงการที่ล้มเหลว ตัวอย่างและยาทดลองยังเหลืออยู่เต็มตู้ แต่สิ่งที่ถูกทดลองก็ยังเดินอยู่ด้วย", drops: [{ id: "zombie", w: 30 }, { id: "chem", w: 12 }, { id: "lab_sample", w: 8 }, { id: "scrap", w: 8 }, { id: "serum", w: 6 }, { id: "antidote", w: 6 }, { id: "stim_shot", w: 5 }, { id: "energy_drink", w: 4 }, { id: "trauma_kit", w: 3 }, { id: null, w: 18 }] }
 };
+// คาสิโนเถื่อน: โซนสงบแบบ Safe Zone (ห้ามต่อสู้/ไม่เจอซอมบี้/ไม่ค้นหา) — ซ่อนจาก Object.keys(ZONES) โดยตั้งใจ เพื่อไม่ให้ระบบอีเวนต์/ภารกิจ/บอสโลกสุ่มลงโซนนี้ (ปุ่มเดินทางเพิ่มเองใน buildZoneList)
+Object.defineProperty(ZONES, "casino", { enumerable: false, value: { name: "คาสิโนเถื่อน", icon: "🎰", danger: 0, desc: "บ่อนใต้ดินของพวกรอดชีวิตที่เห็นแก่ได้ ห้ามตีกัน แลกของเป็นชิป เล่นพนัน หรือจ่ายด้วยเลือด — ⚠️ การพนันไม่เคยทำให้ใครรวย", drops: [{ id: null, w: 1 }] } });
+const isPeace = (z) => z === "safe" || z === "casino";
 
 // เหตุการณ์ประจำโซน: dmod = ปรับระดับอันตราย, zmod = ปรับน้ำหนักโอกาสเจอซอมบี้, nmod = ปรับน้ำหนักช่อง "ไม่เจออะไร" (ลบ = เจอของง่ายขึ้น)
 const EVENT_TYPES = {
@@ -445,7 +449,7 @@ const DAY_CYCLE = 100 * 60000, NIGHT_START = 60 * 60000;
 const NIGHT_MOD = { dmod: 2, zmod: 10, nmod: 0 };
 const isNight = () => serverNow() % DAY_CYCLE >= NIGHT_START;
 const phaseMinsLeft = () => { const t = serverNow() % DAY_CYCLE; return Math.max(1, Math.ceil(((isNight() ? DAY_CYCLE : NIGHT_START) - t) / 60000)); };
-const nightMod = (z) => (z !== "safe" && isNight() && !gearHas("headlamp") && !gearFxFlag("nightSafe") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
+const nightMod = (z) => (!isPeace(z) && isNight() && !gearHas("headlamp") && !gearFxFlag("nightSafe") ? NIGHT_MOD : { dmod: 0, zmod: 0, nmod: 0 });
 
 const effDanger = (z) => Math.max(0, Math.min(10, ZONES[z].danger + (zoneEv(z)?.dmod || 0) + nightMod(z).dmod + wallDmod(z) + wxDmod(z) + fxDmod(z)));
 function effectiveDrops(z) { return fxDrops(z, wxNzDrops(z, hcAdd(z, effectiveDrops0(z)))); }   // + อากาศ + เสียงดัง (หัวข้อ 35)
@@ -486,8 +490,8 @@ function renderZoneDanger(z) {
   const el = $("zone-danger"), evEl = $("zone-event"), tEl = $("zone-time"); if (!el) return;
   const d = dangerInfo(z), base = ZONES[z].danger;
   el.className = "danger-line d" + d.tier;
-  const pvpTxt = z === "safe" ? (wallBroken() ? "กำแพงพัง ต่อสู้กันได้" : "ต่อสู้ไม่ได้") : "ผู้เล่นโจมตีกันได้";
-  const fogged = z !== "safe" && wxNow().type === "fog" && wxScale() > 0, cTxt = fogged ? `~${Math.max(0, Math.round(d.chance / 10) * 10 - 10)}–${Math.round(d.chance / 10) * 10 + 10}%` : `${d.chance}%`;
+  const pvpTxt = z === "casino" ? "ต่อสู้ไม่ได้ (กฎของบ่อน)" : z === "safe" ? (wallBroken() ? "กำแพงพัง ต่อสู้กันได้" : "ต่อสู้ไม่ได้") : "ผู้เล่นโจมตีกันได้";
+  const fogged = !isPeace(z) && wxNow().type === "fog" && wxScale() > 0, cTxt = fogged ? `~${Math.max(0, Math.round(d.chance / 10) * 10 - 10)}–${Math.round(d.chance / 10) * 10 + 10}%` : `${d.chance}%`;
   el.textContent = `⚠️ ${d.level}/10 (${d.label})${d.level !== base ? ` ปกติ ${base}` : ""} • เจอซอมบี้ ${cTxt}${fogged ? " 🌫️" : ""} • ${pvpTxt}`;
   el.title = `ระดับอันตราย ${d.level}/10 (${d.label})${d.level !== base ? ` • ปกติ ${base}/10` : ""} • โอกาสเจอซอมบี้ตอนค้นหา ${cTxt}${fogged ? " (หมอกบังสายตา ประเมินได้แค่ช่วง)" : ""} • ${pvpTxt}`;
   if (tEl) {
@@ -732,6 +736,7 @@ function openGuide() {
   sec("วิทยุ • เช็กอิน • คืนปิดล้อม", [
     "📻 วิทยุฉุกเฉินประกาศข่าวสถานะโลกทุก ~20 นาที (ดูย้อนหลังที่แผง “วิทยุฉุกเฉิน” ในแท็บโซน/ผู้เล่น) บางครั้งสถานีจะเชิญสัมภาษณ์ — ตอบ 1 ข้อ แล้วคำตอบจะถูกประกาศให้ทุกคน",
     "📖 แท็บ “สะสม” ในศูนย์กิจกรรม: สมุดสะสมแบบชุด (ครบชุดรับรางวัลครั้งเดียว) + ความสมบูรณ์ผู้รอดชีวิต % รางวัลที่ 25/50/75/100% • หีบรายวันผ่อนผันให้ขาดได้ 1 วันโดย streak ไม่หาย",
+    "🎰 คาสิโนเถื่อน: เดินทางไปที่โซน “คาสิโนเถื่อน” (ห้ามต่อสู้ ไม่มีซอมบี้) — แลกของ/เลือด (HP) เป็นชิป เล่นสล็อต รูเล็ต ไฮโล บาคาร่า สูง-ต่ำ แบล็กแจ็ก โป๊กเกอร์ กู้เงินนอกระบบได้ (ไม่คืน = ถูกยึดของ) และเอาชิปแลกของ/ของตกแต่งห้อง เจ้ามือได้เปรียบเสมอ — การพนันไม่เคยทำให้ใครรวย เสียสุทธิได้ไม่เกิน 2000 ชิปต่อวัน",
     "⚡ ความสามารถประจำสาย: แถบใต้ปุ่มค้นหา — มนุษย์ใช้พลังตามอาชีพ (นักสำรวจ ส่องทาง • นักล่า เตรียมซุ่ม • หมอสนาม รักษาตัวเอง/เพื่อนในโซนเดียวกัน • พ่อค้า สายส่งวัสดุ) ซอมบี้ใช้พลังตามสายวิวัฒนาการ (ล่ากลิ่น • ผิวหนา • ซุ่มเงียบ) มีค่าใช้จ่ายเล็กน้อยและคูลดาวน์ • ⚔️ ศึกใหญ่ประจำสัปดาห์: 🎲 ผจญภัย → แท็บ ศึกใหญ่ (แต้มศึกชิงโซนรวมทั้งเซิร์ฟเวอร์ ฝ่ายชนะได้โบนัสและรางวัล)",
     "🧭 แถบโค้ชบนสุดของหน้าเกม: บทเรียนแนะนำการเล่น 12 ขั้น แยกมนุษย์/ซอมบี้ (ต่อจากภารกิจวันแรก) ปุ่ม “ไปเลย” พาเปิดหน้าต่างที่เกี่ยวข้อง ทุกขั้นมีรางวัล ครบแล้วรับของปิดท้าย",
     "🪪 ตกแต่งโปรไฟล์ (หน้าต่างโปรไฟล์ → ปุ่ม “ตกแต่งโปรไฟล์”): เลือกอวาตาร์ กรอบ แบนเนอร์ ฉายา (ปลดล็อกจากความก้าวหน้า) หรืออัปโหลดรูปเอง — ระบบแปลงเป็น webp ไม่เกิน 100 KB ให้เองและลบข้อมูลตำแหน่งในรูป เปลี่ยนได้ชั่วโมงละครั้ง รูปผิดกฎกด 🚩 รายงานได้",
@@ -1216,7 +1221,7 @@ async function enterZone(z, initial = false, moved = false) {
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
     teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } try { achZone(z); } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
-    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender(); kZoneHook();
+    $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender(); kZoneHook(); try { casinoBar(z); } catch { /* ข้าม */ }
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
@@ -1932,6 +1937,7 @@ async function scavengeOnce() {
   { const q = state.profile; if (q && q.hp > 0 && state.deep && !state.boss && !effActive("stun") && curFood() > 0 && curWater() > 0 && curStamina() >= searchCost()) { try { mgT = await mgRun(q.faction === "zombie"); } catch { mgT = 0; } } }
   const p = state.profile;
   if (p.hp <= 0) return;
+  if (state.zone === "casino") return toast("บ่อนนี้ไม่มีอะไรให้ค้น — ไปแลกของเป็นชิปหรือเล่นเกมแทน");
   if (state.boss) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
   if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
@@ -2209,7 +2215,7 @@ function renderSkillBar(box, onUse, blocked, p) {
 // แถบสกิล PvP: สกิลโจมตี (กดเลือก → ใช้กับปุ่มโจมตีครั้งถัดไป) + ท่าตั้งรับ (ใช้ทันที)
 function renderPvpSkillBar() {
   const box = $("pvp-skills"), hint = $("pvp-skill-hint"); if (!box) return;
-  const p = state.profile, off = !p || p.hp <= 0 || !state.zone || state.zone === "safe";
+  const p = state.profile, off = !p || p.hp <= 0 || !state.zone || isPeace(state.zone);
   box.classList.toggle("hidden", off); hint.classList.toggle("hidden", off);
   if (off) { state.pvpSkill = null; return; }
   const stunned = effActive("stun");
@@ -2701,6 +2707,7 @@ function updateAttackButtons() {
 
 async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.profile.hp <= 0) return;
+  if (state.zone === "casino") return toast("ในบ่อนห้ามต่อสู้ — ยามจะลากคุณออกไป");
   if (state.zone === "safe" && !wallBroken()) return toast("Safe Zone ต่อสู้ไม่ได้ (กำแพงยังแข็งแรง)");
   if (effActive("stun")) return toast("😵 คุณมึนงง โจมตีไม่ได้จนกว่าจะหายหรือรักษา");
   if (state.attacking || state.pending.has(targetUid)) return toast(`การปะทะกับ ${targetName} ยังไม่จบ รอผลก่อน`);
@@ -5286,8 +5293,8 @@ if (HAS_DOM && typeof window !== "undefined") {
    ========================================================= */
 /* ---- แผนที่โซน: ตำแหน่งโหนด (เปอร์เซ็นต์) และถนนเชื่อม — แค่ภาพ ไม่มีผลกับค่าเดินทาง ---- */
 // ผังแผนที่: แถวล่างสุด = Safe Zone ยิ่งขึ้นไปยิ่งไกล/อันตราย (ใกล้: ป่าลึก เขตเมืองร้าง / กลาง: ท่าเรือ โรงงาน ห้าง โรงพยาบาล / ไกล: ค่ายทหาร สถานีตำรวจ อุโมงค์)
-const ZMAP = { base: [20, 12], police: [50, 12], tunnel: [80, 12], lab: [80, 34], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
-const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"], ["hospital", "lab"], ["tunnel", "lab"]];
+const ZMAP = { casino: [20, 34], base: [20, 12], police: [50, 12], tunnel: [80, 12], lab: [80, 34], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
+const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"], ["hospital", "lab"], ["tunnel", "lab"], ["hospital", "casino"]];
 const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
 function zmapRoads() {
   const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
@@ -5298,7 +5305,7 @@ function zmapRoads() {
 function buildZoneList() {
   const ul = $("zone-list"); ul.innerHTML = "";
   ul.append(zmapRoads());
-  Object.entries(ZONES).forEach(([id, z]) => {
+  [...Object.entries(ZONES), ["casino", ZONES.casino]].forEach(([id, z]) => {
     const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
     if (ZMAP[id]) { li.style.setProperty("--x", ZMAP[id][0] + "%"); li.style.setProperty("--y", ZMAP[id][1] + "%"); }
     const b = mk("button", "zone-btn");
@@ -5325,7 +5332,7 @@ function zmapApply() {
 // จำนวนผู้เล่นในแต่ละโซน (ฟัง zonePlayers ทุกโซน — ข้อมูลเล็ก) + เครื่องหมายบอสโลก
 function zmapListen() {
   if (state.zmapOn) return; state.zmapOn = true; state.zcount = state.zcount || {};
-  Object.keys(ZONES).forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { state.zcount[z] = s.numChildren(); zmapBadges(); }, () => {}));
+  [...Object.keys(ZONES), "casino"].forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { state.zcount[z] = s.numChildren(); zmapBadges(); }, () => {}));
 }
 function zmapBadges() {
   document.querySelectorAll(".zone-btn").forEach((b) => {
@@ -6904,10 +6911,10 @@ function wxNow(now = serverNow()) {
 }
 const wxScale = () => Math.max(0, T("wx_str", 100)) / 100;
 const wxTravelExtra = (z) => { const w = WX[wxNow().type]; return w && w.t ? Math.round(w.t * wxScale()) : 0; };
-const wxDmod = (z) => { if (z === "safe") return 0; const w = WX[wxNow().type]; return w && w.d ? Math.round(w.d * wxScale()) : 0; };
+const wxDmod = (z) => { if (isPeace(z)) return 0; const w = WX[wxNow().type]; return w && w.d ? Math.round(w.d * wxScale()) : 0; };
 // เสียงดัง: จำนวนคนในโซน (ไม่นับตัวเองที่โซนปัจจุบัน) + ข้อความต่อสู้ในโซนนี้ภายใน 90 วิ
 function noiseInfo(z) {
-  if (z === "safe") return { lvl: 0, mul: 1, others: 0, fights: 0 };
+  if (isPeace(z)) return { lvl: 0, mul: 1, others: 0, fights: 0 };
   const cnt = z === state.zone ? Object.keys(state.players || {}).length - 1 : (state.zcount?.[z] || 0), others = Math.max(0, cnt);
   const now = serverNow(), fights = (state.nzCombat || []).filter((x) => x.z === z && now - x.t < NZ_WINDOW).length;
   const raw = Math.min(0.35, 0.08 * others) + Math.min(0.25, 0.1 * fights), mul = 1 + raw * Math.max(0, T("noise_str", 100)) / 100;
@@ -6918,7 +6925,7 @@ function nzNote(m) {   // addChat เรียกตอนมีข้อคว�
   const a = (state.nzCombat = (state.nzCombat || []).filter((x) => serverNow() - x.t < NZ_WINDOW)); a.push({ z: state.zone, t: m.ts }); if (a.length > 40) a.shift();
 }
 function wxNzDrops(z, d) {
-  const wt = WX[wxNow().type], s = wxScale(), nz = noiseInfo(z).mul, safe = z === "safe";
+  const wt = WX[wxNow().type], s = wxScale(), nz = noiseInfo(z).mul, safe = isPeace(z);
   const zf = safe ? 1 : Math.pow(wt.z, s) * nz, wf = Math.pow(wt.w, s), nf = safe ? 1 : Math.pow(wt.n, s);
   if (zf === 1 && wf === 1 && nf === 1) return d;
   return d.map((x) => x.id === "zombie" && zf !== 1 ? { ...x, w: x.w * zf } : x.id === "water" && wf !== 1 ? { ...x, w: x.w * wf } : x.id === null && nf !== 1 ? { ...x, w: x.w * nf } : x);
@@ -6955,7 +6962,7 @@ const WX_RADIO = {
   storm: ["เตือนพายุเข้า! ฟ้าผ่าและฝนตกหนัก ค้นหาข้างนอกเสี่ยงกว่าปกติ หาที่หลบถ้าทำได้", "พายุรุนแรงกำลังเข้าเมือง ฝูงซอมบี้จะเคลื่อนไหวมากขึ้นในเสียงฟ้าร้อง"]
 };
 function wxFlavor(kind) {   // kind: "lead" | "empty" | "amb"
-  const w = wxNow().type, ts = timeSlot(), ni = state.zone === "safe" ? { lvl: 0 } : noiseInfo(state.zone), pool = [];
+  const w = wxNow().type, ts = timeSlot(), ni = isPeace(state.zone) ? { lvl: 0 } : noiseInfo(state.zone), pool = [];
   const add = (a, n) => { if (a) for (let i = 0; i < n; i++) pool.push(...a); };
   if (kind === "empty") { add(LEAD_EMPTY[w] || LEAD_EMPTY.clear, 3); add(LEAD_EMPTY.clear, 1); }
   else if (kind === "amb") { add(AMB_WX[w], w === "clear" ? 1 : 4); if (ni.lvl >= 2) add(AMB_NZ, 3); }
@@ -7142,7 +7149,7 @@ const duoRec = (slot = coopSlot()) => fxGet("duo_" + slot, { s: 0, d: 0 });
 const duoTarget = () => Math.max(1, Math.round(T("duo_min", 8))) * 60;
 const duoBuffLeft = () => Math.max(0, fxGet("duo_buf", 0) - serverNow());
 function duoPartners() {
-  const p = state.profile; if (!p || !state.zone || state.zone === "safe" || !(p.hp > 0)) return 0;
+  const p = state.profile; if (!p || !state.zone || isPeace(state.zone) || !(p.hp > 0)) return 0;
   return Object.entries(state.players || {}).filter(([id, v]) => id !== state.uid && v && v.faction === p.faction).length;
 }
 function duoTick() {
@@ -9883,6 +9890,117 @@ function hubShow() {
   m.querySelectorAll(".hub2-tab").forEach((x) => { x.classList.toggle("on", x.dataset.t === hub2.tab); x.classList.toggle("dot", hubTabDot(x.dataset.t)); x.setAttribute("aria-selected", x.dataset.t === hub2.tab); });
   m.querySelectorAll(".hub2-pane").forEach((x) => x.classList.toggle("hidden", x.dataset.t !== hub2.tab));
 }
+// ---------- 49.48 คาสิโนเถื่อน (functions/casino.js) — โซนสงบ: แลกของ/เลือดเป็นชิป เล่นเกมบ้าน กู้ยืม ร้านแลก ----------
+const CS_GAMES = [["slots", "🎰", "สล็อต"], ["roulette", "🎡", "รูเล็ต"], ["sicbo", "🎲", "ไฮโล"], ["baccarat", "🃏", "บาคาร่า"], ["hilo", "⬆️", "สูง-ต่ำ"], ["blackjack", "♠️", "แบล็กแจ็ก"], ["poker", "🂡", "โป๊กเกอร์"]];
+const CS_BETS = [5, 10, 25, 50, 100, 250, 500];
+const CS_RT = [["red", "🔴 แดง ×2"], ["black", "⚫ ดำ ×2"], ["odd", "คี่ ×2"], ["even", "คู่ ×2"], ["low", "1–18 ×2"], ["high", "19–36 ×2"], ["d1", "1–12 ×3"], ["d2", "13–24 ×3"], ["d3", "25–36 ×3"], ["c1", "แถว 1 ×3"], ["c2", "แถว 2 ×3"], ["c3", "แถว 3 ×3"]];
+const CS_HOME = { deco_slotm: "🎰 ตู้สล็อตจิ๋ว (ของตกแต่งห้อง)", deco_dice: "🎲 ลูกเต๋ายักษ์ (ของตกแต่งห้อง)", deco_cards: "🃏 ไพ่โจ๊กเกอร์ (ของตกแต่งห้อง)", deco_chipstack: "🪙 กองชิป (ของตกแต่งห้อง)", theme_casino: "🎰 ธีมห้อง “คาสิโนเถื่อน”" };
+const csErr = (e) => { try { return fnErr(e); } catch { return errMsg(e); } };
+function casinoBar(z) {
+  let b = $("casino-bar"); const on = z === "casino";
+  if (!on) { b?.remove(); return; }
+  if (!b) { b = mk("div", "casino-bar"); b.id = "casino-bar"; $("zone-desc").after(b); }
+  b.innerHTML = ""; b.append(btn("🎰 เข้าสู่บ่อน", () => casinoOpen(), "btn primary"), mk("span", "casino-warn", "⚠️ การพนันไม่เคยทำให้ใครรวย"));
+}
+function casinoOpen() {
+  if (!$("casino-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "casino-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "คาสิโนเถื่อน");
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), top = mk("div", "sheet-top"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🎰 คาสิโนเถื่อน"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini")); top.append(head);
+    const warn = mk("div", "casino-warn-strip", "⚠️ การพนันไม่เคยทำให้ใครรวย — เกมทุกเกมเสียเปรียบผู้เล่น เล่นแล้วเสียเป็นเรื่องปกติ ถ้าเริ่มรู้สึกควบคุมไม่ได้ กด “พักตัว”"); top.append(warn);
+    const body = mk("div", "hub2-body"); body.id = "casino-body"; body.style.marginTop = "12px"; box.append(top, body); m.append(box); document.body.append(m);
+  }
+  $("casino-modal").classList.remove("hidden"); state.csTab = state.csTab || "game"; state.csGame = state.csGame || "slots"; state.csBet = state.csBet || 10;
+  casinoRender(); casinoGo({ a: "state" });
+}
+async function casinoGo(data, ok) {
+  if (state.csBusy) return; state.csBusy = true; casinoRender();
+  try {
+    const r = await casinoCall(data); state.csD = Object.assign({}, state.csD || {}, r); state.csRes = r.game ? r : (r.got !== undefined || r.bought || r.loaned || r.repaid || r.rested || r.bled ? r : state.csRes);
+    if (r.games) state.csD.games = r.games; if (r.note && r.note.length) r.note.forEach((n) => { if (n.debt) toast(`💸 หนี้ครบกำหนด — ยึดของ ${n.seized.map(([id, q]) => `${ITEMS[id]?.icon || ""}×${q}`).join(" ") || "ไม่มี"}${n.left > 0 ? ` (ยังขาด ${n.left} ชิป)` : ""} และหัก HP`); });
+    if (ok) ok(r);
+  } catch (e) { toast(csErr(e)); } finally { state.csBusy = false; casinoRender(); }
+}
+function casinoRender() {
+  const body = $("casino-body"), m = $("casino-modal"); if (!body || !m || m.classList.contains("hidden")) return; body.innerHTML = "";
+  const D = state.csD; if (!D || D.chips === undefined) { body.append(mk("div", "muted", "กำลังโหลด…")); return; }
+  const busy = !!state.csBusy, row = (...c) => { const d = mk("div", "world-row"); c.forEach((x) => x && d.append(x)); return d; };
+  const hdr = mk("div", "casino-stat"); hdr.append(mk("b", "", `🪙 ${D.chips} ชิป`), mk("span", "muted", ` • เสียสุทธิวันนี้ ${D.lossToday}/${D.cap}`));
+  if (D.debt) { const left = Math.max(0, D.debt.due - serverNow()); hdr.append(mk("div", "casino-debt", `💸 หนี้ ${D.debt.a} ชิป • ครบกำหนดใน ${Math.ceil(left / 3600000)} ชม. (ไม่จ่าย = ยึดของในกระเป๋า + หัก HP)`)); }
+  if (D.lockLeft > 0) hdr.append(mk("div", "muted", `😴 พักตัวอยู่ อีก ${Math.ceil(D.lockLeft / 3600000)} ชม.`));
+  if (D.capLeft <= 0) hdr.append(mk("div", "casino-debt", "วันนี้เสียถึงเพดานแล้ว — พักก่อนนะ"));
+  body.append(hdr);
+  if (!D.inZone) body.append(mk("div", "casino-debt", "ต้องอยู่ที่คาสิโนเถื่อนก่อนถึงจะเล่นได้"));
+  const tabs = mk("div", "casino-tabs"); [["game", "🎰 เกม"], ["ex", "💱 แลกชิป"], ["shop", "🛍️ ร้านแลก"], ["more", "⚙️ อื่นๆ"]].forEach(([k, l]) => { const b = btn(l, () => { state.csTab = k; casinoRender(); }, "btn mini " + (state.csTab === k ? "primary" : "ghost")); tabs.append(b); }); body.append(tabs);
+  const T = state.csTab;
+  if (T === "ex") {
+    const inv = Object.values(state.inv || {}).filter((x) => x && D.rates?.[x.id] && x.qty > 0).sort((a, b) => D.rates[b.id] - D.rates[a.id]), c = mk("div", "world-row");
+    c.append(mk("b", "", "💱 แลกของเป็นชิป"), mk("div", "muted", `หักค่าธรรมเนียมบ่อน ${Math.round(D.fee * 100)}% • ราคาเป็นชิปต่อชิ้นแสดงข้างของ`));
+    const g = mk("div"); g.style.cssText = "display:grid;gap:6px;margin-top:8px";
+    if (!inv.length) g.append(mk("div", "muted", "ไม่มีของในกระเป๋าที่บ่อนรับ"));
+    inv.forEach((x) => { const r = mk("div"); r.style.cssText = "display:flex;gap:6px;align-items:center"; const l = mk("span", "", `${ITEMS[x.id]?.icon || "📦"} ${ITEMS[x.id]?.name || x.id} ×${x.qty} = ${Math.floor(D.rates[x.id] * (1 - D.fee))}🪙/ชิ้น`); l.style.flex = "1"; r.append(l);
+      const b1 = btn("ขาย 1", () => casinoGo({ a: "sell", id: x.id, q: 1 }), "btn ghost mini"), b2 = btn("ทั้งหมด", () => { if (confirm(`แลก ${ITEMS[x.id]?.name || x.id} ×${x.qty} เป็นชิป?`)) casinoGo({ a: "sell", id: x.id, q: Math.min(99, x.qty) }); }, "btn mini"); b1.disabled = b2.disabled = busy; b1.style.minHeight = b2.style.minHeight = "40px"; r.append(b1, b2); g.append(r); });
+    c.append(g); body.append(c);
+    const bl = mk("div", "world-row"); bl.append(mk("b", "", "🩸 จ่ายด้วยเลือด"), mk("div", "muted", `1 HP = ${D.hpRate} ชิป • วันนี้บริจาคแล้ว ${D.hpToday}/${D.hpMax} HP • ต้องเหลือ HP อย่างน้อย 1`));
+    const br = mk("div"); br.style.cssText = "display:flex;gap:6px;margin-top:8px"; [5, 10, 20].forEach((n) => { const b = btn(`−${n} HP`, () => { if (confirm(`ให้เลือด ${n} HP แลก ${n * D.hpRate} ชิป?`)) casinoGo({ a: "blood", n }); }, "btn danger mini"); b.disabled = busy; b.style.minHeight = "44px"; br.append(b); }); bl.append(br); body.append(bl);
+    const ln = mk("div", "world-row"); ln.append(mk("b", "", "💸 กู้เงินนอกระบบ"), mk("div", "muted", `กู้ได้ 50–${D.loanMax} ชิป ดอก 25% ต้องคืนใน 48 ชม. ไม่คืน = ยึดของมีค่าน้อยสุดก่อน + หัก HP + ห้ามกู้ 7 วัน`));
+    if (D.debt) { const b = btn(`ชำระหนี้ (${D.debt.a} ชิป)`, () => casinoGo({ a: "repay", n: D.debt.a }), "btn primary"); b.disabled = busy || D.chips < 1; b.style.cssText = "margin-top:8px;min-height:44px"; ln.append(b); }
+    else if (D.noLoan > 0) ln.append(mk("div", "muted", `ถูกห้ามกู้อีก ${Math.ceil(D.noLoan / 86400000)} วัน`));
+    else { const r = mk("div"); r.style.cssText = "display:flex;gap:6px;margin-top:8px"; [100, 250, 500].forEach((n) => { const b = btn(`กู้ ${n}`, () => { if (confirm(`กู้ ${n} ชิป — ต้องคืน ${Math.ceil(n * 1.25)} ชิปใน 48 ชม.\nการพนันไม่เคยทำให้ใครรวย ยืนยัน?`)) casinoGo({ a: "loan", n }); }, "btn ghost mini"); b.disabled = busy; b.style.minHeight = "44px"; r.append(b); }); ln.append(r); }
+    body.append(ln);
+  } else if (T === "shop") {
+    const c = mk("div", "world-row"); c.append(mk("b", "", "🛍️ ร้านแลกชิปเป็นของ"), mk("div", "muted", "โควตาจำกัดต่อวัน • ของตกแต่ง/ธีมห้องหาไม่ได้ที่อื่น"));
+    const g = mk("div"); g.style.cssText = "display:grid;gap:6px;margin-top:8px";
+    (D.shop || []).forEach((it) => { const r = mk("div"); r.style.cssText = "display:flex;gap:6px;align-items:center"; const home = it.id.startsWith("deco_") || it.id.startsWith("theme_"); const nm = home ? (CS_HOME[it.id] || it.id) : `${ITEMS[it.id]?.icon || "📦"} ${ITEMS[it.id]?.name || it.id}`;
+      const l = mk("span", "", `${nm} • ${it.price}🪙 • เหลือ ${it.left}/${it.day}`); l.style.flex = "1"; r.append(l); const b = btn("แลก", () => casinoGo({ a: "buy", id: it.id }), "btn mini"); b.disabled = busy || it.left <= 0 || D.chips < it.price; b.style.minHeight = "40px"; r.append(b); g.append(r); });
+    c.append(g); body.append(c);
+  } else if (T === "more") {
+    const c = mk("div", "world-row"); c.append(mk("b", "", "😴 พักตัว (ห้ามตัวเองเล่น)"), mk("div", "muted", "ถ้ารู้สึกว่าเล่นมากไป ล็อกตัวเองไม่ให้เล่น/แลก/กู้ได้ชั่วคราว ยกเลิกไม่ได้"));
+    const r = mk("div"); r.style.cssText = "display:flex;gap:6px;margin-top:8px"; [[24, "พัก 24 ชม."], [168, "พัก 7 วัน"]].forEach(([h, l]) => { const b = btn(l, () => { if (confirm(`ล็อกตัวเอง ${l.slice(4)}? ยกเลิกไม่ได้`)) casinoGo({ a: "rest", h }); }, "btn ghost mini"); b.disabled = busy; b.style.minHeight = "44px"; r.append(b); }); c.append(r); body.append(c);
+    body.append(row(mk("b", "", "📋 กติกาของบ่อน"), mk("div", "muted", `เดิมพันครั้งละ ${D.min}–${D.max} ชิป • เสียสุทธิต่อวันไม่เกิน ${D.cap} ชิป • สล็อตคืน ~${D.slotRtp ?? 95}% ในระยะยาว (เสียเปรียบเสมอ) • เกมที่ค้างนาน 10 นาทีถือว่าแพ้ • ห้ามต่อสู้ในบ่อน`)));
+  } else {
+    const gs = mk("div", "casino-tabs"); CS_GAMES.forEach(([k, ic, n]) => gs.append(btn(`${ic} ${n}`, () => { state.csGame = k; state.csRes = null; casinoRender(); }, "btn mini " + (state.csGame === k ? "primary" : "ghost")))); body.append(gs);
+    const g = state.csGame, G = D.games || {}, bet = state.csBet = Math.min(state.csBet || 10, D.max), can = D.inZone && !busy && D.lockLeft <= 0 && D.capLeft > 0, panel = mk("div", "world-row");
+    const betRow = () => { const r = mk("div", "casino-bets"); CS_BETS.forEach((n) => { const b = btn(String(n), () => { state.csBet = n; casinoRender(); }, "btn mini " + (n === bet ? "primary" : "ghost")); b.style.minHeight = "40px"; r.append(b); }); return r; };
+    const act = (label, data, cls) => { const b = btn(label, () => casinoGo(data), cls || "btn primary"); b.disabled = !can; b.style.cssText = "min-height:48px;margin-top:8px"; return b; };
+    const res = state.csRes && state.csRes.game === g ? state.csRes : null, resTxt = (r) => r.ret !== undefined ? `${r.net > 0 ? "🎉 ชนะ" : r.net === 0 ? "เสมอ" : "💸 แพ้"} • ได้คืน ${r.ret} • สุทธิ ${r.net > 0 ? "+" : ""}${r.net}` : "";
+    const show = (r) => { if (!r) return null; const d = mk("div", "casino-res"); d.append(mk("div", "casino-res-main", resTxt(r))); return d; };
+    if (g === "slots") {
+      panel.append(mk("b", "", "🎰 สล็อต 3 ช่อง"), mk("div", "muted", "ออก 3 ตัวเหมือนกัน ×4 ถึง ×400 • 🍒 ออกก็ได้คืนบางส่วน"), betRow());
+      const reel = mk("div", "casino-reels"); (res ? res.reels : ["❔", "❔", "❔"]).forEach((x) => reel.append(mk("span", "", x))); panel.append(reel, act(`หมุน (${bet} ชิป)`, { a: "slots", bet }), show(res));
+    } else if (g === "roulette") {
+      const L = state.csRL = state.csRL || []; panel.append(mk("b", "", "🎡 รูเล็ต (0 เจ้ามือกิน)"), mk("div", "muted", "แตะเพื่อวางชิปครั้งละ 1 ก้อน (สูงสุด 8 ช่อง รวมไม่เกิน 500) • เลขตรง ×36"), betRow());
+      const g1 = mk("div", "casino-grid"); CS_RT.forEach(([t, l]) => { const n = L.filter((x) => x.t === t).reduce((s, x) => s + x.a, 0); const b = btn(n ? `${l} • ${n}` : l, () => { const e = L.find((x) => x.t === t); if (e) e.a += bet; else if (L.length < 8) L.push({ t, a: bet }); casinoRender(); }, "btn mini " + (n ? "primary" : "ghost")); b.style.minHeight = "40px"; g1.append(b); }); panel.append(g1);
+      const sel = document.createElement("select"); sel.style.cssText = "min-height:40px;margin-top:6px"; for (let i = 0; i <= 36; i++) { const o = document.createElement("option"); o.value = i; o.textContent = "เลข " + i; sel.append(o); } const addN = btn("＋เลขตรง", () => { if (L.length < 8) { L.push({ t: "num", n: Number(sel.value), a: bet }); casinoRender(); } }, "btn ghost mini"); addN.style.minHeight = "40px"; const nr = mk("div"); nr.style.cssText = "display:flex;gap:6px;margin-top:6px"; nr.append(sel, addN); panel.append(nr);
+      const tot = L.reduce((s, x) => s + x.a, 0); panel.append(mk("div", "muted", L.length ? `วางไว้: ${L.map((x) => (x.t === "num" ? "เลข" + x.n : x.t) + " " + x.a).join(" • ")} (รวม ${tot})` : "ยังไม่ได้วาง"));
+      const sp = act(`หมุน (${tot} ชิป)`, { a: "roulette", bets: L.map((x) => ({ t: x.t, n: x.n, a: x.a })) }); sp.disabled = !can || !L.length || tot > D.max; sp.addEventListener("click", () => { state.csRL = []; }); const cl = btn("ล้าง", () => { state.csRL = []; casinoRender(); }, "btn ghost mini"); cl.style.cssText = "min-height:44px;margin:8px 0 0 6px"; panel.append(sp, cl);
+      if (res) { const d = show(res); d.prepend(mk("div", "casino-res-n", `${res.red ? "🔴" : res.n === 0 ? "🟢" : "⚫"} ${res.n}`)); panel.append(d); }
+    } else if (g === "sicbo") {
+      const L = state.csSL = state.csSL || []; panel.append(mk("b", "", "🎲 ไฮโล (สามลูกเต๋า)"), mk("div", "muted", "สูง(11–17)/ต่ำ(4–10) ×2 (ตอง = เจ้ามือกิน) • ทายเลข: ออก 1 ลูก ×2 / 2 ลูก ×3 / 3 ลูก ×4"), betRow());
+      const g1 = mk("div", "casino-grid"); [["big", "สูง"], ["small", "ต่ำ"], ...[1, 2, 3, 4, 5, 6].map((n) => ["num" + n, "⚀⚁⚂⚃⚄⚅"[n - 1] + " " + n])].forEach(([t, l]) => { const key = t.startsWith("num") ? "num" : t, nn = t.startsWith("num") ? Number(t.slice(3)) : undefined; const n = L.filter((x) => x.t === key && x.n === nn).reduce((s, x) => s + x.a, 0); const b = btn(n ? `${l} • ${n}` : l, () => { const e = L.find((x) => x.t === key && x.n === nn); if (e) e.a += bet; else if (L.length < 8) L.push({ t: key, n: nn, a: bet }); casinoRender(); }, "btn mini " + (n ? "primary" : "ghost")); b.style.minHeight = "40px"; g1.append(b); }); panel.append(g1);
+      const tot = L.reduce((s, x) => s + x.a, 0); panel.append(mk("div", "muted", L.length ? `รวม ${tot} ชิป` : "ยังไม่ได้วาง")); const sp = act(`ทอย (${tot} ชิป)`, { a: "sicbo", bets: L.map((x) => ({ t: x.t, n: x.n, a: x.a })) }); sp.disabled = !can || !L.length || tot > D.max; sp.addEventListener("click", () => { state.csSL = []; }); const cl = btn("ล้าง", () => { state.csSL = []; casinoRender(); }, "btn ghost mini"); cl.style.cssText = "min-height:44px;margin:8px 0 0 6px"; panel.append(sp, cl);
+      if (res) { const d = show(res); d.prepend(mk("div", "casino-res-n", `${res.dice.map((x) => "⚀⚁⚂⚃⚄⚅"[x - 1]).join(" ")} = ${res.sum}`)); panel.append(d); }
+    } else if (g === "baccarat") {
+      const sd = state.csSide = state.csSide || "player"; panel.append(mk("b", "", "🃏 บาคาร่า"), mk("div", "muted", "ผู้เล่น ×2 • เจ้ามือ ×1.95 • เสมอ ×9 (ผู้เล่น/เจ้ามือคืนทุนเมื่อเสมอ)"), betRow());
+      const sr = mk("div", "casino-tabs"); [["player", "👤 ผู้เล่น"], ["banker", "🏦 เจ้ามือ"], ["tie", "🤝 เสมอ"]].forEach(([k, l]) => sr.append(btn(l, () => { state.csSide = k; casinoRender(); }, "btn mini " + (sd === k ? "primary" : "ghost")))); panel.append(sr, act(`แจกไพ่ (${bet} ชิป)`, { a: "baccarat", bet, side: sd }));
+      if (res) { const d = show(res); d.prepend(mk("div", "casino-res-n", `👤 ${res.P.join(" ")} = ${res.p}  |  🏦 ${res.B.join(" ")} = ${res.b}  → ${res.win === "tie" ? "เสมอ" : res.win === "player" ? "ผู้เล่นชนะ" : "เจ้ามือชนะ"}`)); panel.append(d); }
+    } else if (g === "hilo") {
+      panel.append(mk("b", "", "⬆️ สูง–ต่ำ"), mk("div", "muted", "ทายว่าไพ่ใบถัดไปสูงกว่าหรือต่ำกว่า (A ต่ำสุด K สูงสุด) • ค่าจ่ายขึ้นกับโอกาส • เท่ากัน = คืนทุน"));
+      if (G.hl) { panel.append(mk("div", "casino-res-n", `ไพ่ตอนนี้: ${G.hl.card} (เดิมพัน ${G.hl.bet})`)); const r = mk("div", "casino-tabs"); const hi = btn(`⬆️ สูงกว่า`, () => casinoGo({ a: "hilo", act: "guess", guess: "hi" }), "btn primary"), lo = btn(`⬇️ ต่ำกว่า`, () => casinoGo({ a: "hilo", act: "guess", guess: "lo" }), "btn primary"); hi.disabled = lo.disabled = busy; hi.style.minHeight = lo.style.minHeight = "48px"; r.append(hi, lo); panel.append(r); }
+      else { panel.append(betRow(), act(`เริ่ม (${bet} ชิป)`, { a: "hilo", act: "start", bet })); if (res) { const d = show(res); d.prepend(mk("div", "casino-res-n", `${res.card1} → ${res.card2} (${res.tie ? "เท่ากัน" : res.win ? "ทายถูก" : "ทายผิด"} ×${res.mult})`)); panel.append(d); } }
+    } else if (g === "blackjack") {
+      panel.append(mk("b", "", "♠️ แบล็กแจ็ก"), mk("div", "muted", "เจ้ามือหยุดที่ 17 • ชนะ ×2 • แบล็กแจ็กธรรมชาติ ×2.2 • ดับเบิลได้เฉพาะตาแรก"));
+      if (G.bj) { panel.append(mk("div", "casino-res-n", `คุณ: ${G.bj.you.join(" ")} = ${G.bj.yv}   เจ้ามือ: ${G.bj.dealer.join(" ")}`)); const r = mk("div", "casino-tabs"); [["hit", "➕ ขอไพ่"], ["stand", "✋ พอแล้ว"], ["double", "✖️2 ดับเบิล"]].forEach(([k, l]) => { const b = btn(l, () => casinoGo({ a: "blackjack", act: k }), "btn primary"); b.disabled = busy || (k === "double" && (!G.bj.can.dbl || D.chips < G.bj.bet)); b.style.minHeight = "48px"; r.append(b); }); panel.append(r); }
+      else { panel.append(betRow(), act(`เริ่ม (${bet} ชิป)`, { a: "blackjack", act: "start", bet })); if (res && res.you) { const d = show(res); d.prepend(mk("div", "casino-res-n", `คุณ: ${res.you.join(" ")} = ${res.yv}   เจ้ามือ: ${(res.dealer || []).join(" ")}${res.dv !== undefined ? " = " + res.dv : ""}`)); panel.append(d); } }
+    } else if (g === "poker") {
+      panel.append(mk("b", "", "🂡 วิดีโอโป๊กเกอร์ (Jacks or Better)"), mk("div", "muted", "แจก 5 ใบ เลือกใบที่เก็บไว้ แล้วจั่วใหม่ • คู่ J+ ×1 • สองคู่ ×2 • สามใบ ×3 • สเตรท ×4 • ฟลัช ×5 • ฟูลเฮาส์ ×7 • โฟร์ ×25 • สเตรทฟลัช ×50 • รอยัล ×250"));
+      if (G.vp) { const hold = state.csHold = state.csHold || [false, false, false, false, false]; const r = mk("div", "casino-cards"); G.vp.hand.forEach((c, i) => { const b = btn(c, () => { hold[i] = !hold[i]; casinoRender(); }, "btn mini casino-card " + (hold[i] ? "primary" : "ghost")); b.style.cssText = "min-height:64px;font-size:20px"; r.append(b); }); panel.append(r, mk("div", "muted", "แตะไพ่ที่ต้องการเก็บ"), act("จั่ว", { a: "poker", act: "draw", hold: hold.map((h, i) => (h ? i : -1)).filter((i) => i >= 0) }));
+        panel.lastChild.addEventListener("click", () => { state.csHold = null; }); }
+      else { state.csHold = null; panel.append(betRow(), act(`แจกไพ่ (${bet} ชิป)`, { a: "poker", act: "deal", bet })); if (res && res.hand) { const d = show(res); d.prepend(mk("div", "casino-res-n", `${res.hand.join(" ")} — ${res.kindTh}`)); panel.append(d); } }
+    }
+    body.append(panel);
+  }
+}
 function hubOpen(tab) {
   if (tab) hub2.tab = tab;
   if (!$("hub2-modal")) {
@@ -9976,7 +10094,7 @@ async function passClaim(a) {
 
 // ---- เหตุการณ์สุ่ม ----
 function encAfterSearch() {
-  if (state.encBusy || state.enc || !state.profile || state.profile.hp <= 0 || state.zone === "safe" || state.boss) return;
+  if (state.encBusy || state.enc || !state.profile || state.profile.hp <= 0 || isPeace(state.zone) || state.boss) return;
   state.encBusy = true;
   eventCall({ a: "roll" }).then((r) => { if (r.enc) encShow(r.enc); }).catch(() => { /* ข้าม: ไม่ให้กระทบการค้นหา */ }).finally(() => { state.encBusy = false; });
 }
@@ -10194,7 +10312,7 @@ function advRender() {
 }
 // ---- ศัตรูคู่อาฆาต: หน้าต่างปะทะ ----
 function nemAfterSearch() {
-  if (state.nemBusy || state.nemOn || state.enc || !state.profile || state.profile.hp <= 0 || state.zone === "safe" || state.boss) return;
+  if (state.nemBusy || state.nemOn || state.enc || !state.profile || state.profile.hp <= 0 || isPeace(state.zone) || state.boss) return;
   state.nemBusy = true;
   nemCall({ a: "roll" }).then((r) => { if (r.nem) nemShow(r.nem, r.again); }).catch(() => { /* ข้าม */ }).finally(() => { state.nemBusy = false; });
 }

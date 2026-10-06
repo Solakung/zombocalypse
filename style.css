@@ -878,3 +878,22 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .abil-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin: 8px 0; padding: 8px 10px; border: 1px solid var(--line); border-left: 3px solid var(--hazard); border-radius: 10px; background: var(--panel-2); font-size: 13.5px; }
 .abil-bar .btn { flex: 0 0 auto; min-height: 40px; }
 .abil-t { font-weight: 600; }
+
+/* ---- คาสิโนเถื่อน ---- */
+.casino-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 0; }
+.casino-bar .btn { min-height: 44px; }
+.casino-warn { color: #ffb4b4; font-size: 13px; font-weight: 600; }
+.casino-warn-strip { background: #3a1216; border: 1px solid #7a2b3f; color: #ffcdd2; border-radius: 10px; padding: 8px 10px; font-size: 13px; line-height: 1.4; margin-top: 8px; }
+.casino-stat { padding: 8px 2px; }
+.casino-debt { margin-top: 6px; padding: 6px 8px; border-radius: 8px; background: #3a1216; color: #ffcdd2; font-size: 13px; }
+.casino-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.casino-tabs .btn { min-height: 44px; flex: 1 1 auto; }
+.casino-bets { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.casino-bets .btn { flex: 1 1 44px; }
+.casino-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; margin-top: 8px; }
+.casino-reels { display: flex; gap: 8px; justify-content: center; font-size: 44px; margin: 12px 0 4px; }
+.casino-reels span { background: #1d1020; border: 2px solid #b0204a; border-radius: 12px; width: 72px; height: 72px; display: grid; place-items: center; }
+.casino-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+.casino-res { margin-top: 10px; padding: 10px; border-radius: 10px; background: rgba(176, 32, 74, .12); border: 1px solid #7a2b3f; }
+.casino-res-n { font-size: 18px; font-weight: 700; margin: 8px 0; word-break: break-word; }
+.casino-res-main { font-weight: 700; }

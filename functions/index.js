@@ -22,6 +22,7 @@ const { makeProfile } = require("./profile");
 const { makeLearn } = require("./learn");
 const { makeAbility } = require("./ability");
 const { makeWar } = require("./war");
+const { makeCasino } = require("./casino");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
 admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
@@ -157,4 +158,11 @@ const warSys = makeWar(admin.database());
 exports.warAct = onCall(async (req) => {
   try { return await warSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("warAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🎰 คาสิโนเถื่อน — แปลงของเป็นชิป เกมบ้าน หนี้/เลือด (โหนด casino — ไม่มีใน rules)
+const casinoSys = makeCasino(admin.database());
+exports.casinoAct = onCall(async (req) => {
+  try { return await casinoSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("casinoAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
