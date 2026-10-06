@@ -25,7 +25,7 @@ const { makeWar } = require("./war");
 const { makeCasino } = require("./casino");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
-admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app" });
+admin.initializeApp({ databaseURL: "https://zompocalypse-137a6-default-rtdb.asia-southeast1.firebasedatabase.app", storageBucket: "zompocalypse-137a6.firebasestorage.app" });
 setGlobalOptions({ region: "asia-southeast1", maxInstances: 10 });   // region เดียวกับฐานข้อมูล
 
 // ฟังก์ชันทดสอบ: ยืนยันว่า deploy ได้ + ล็อกอินผ่านเข้ามาถึงฟังก์ชัน (ยังไม่แตะข้อมูลเกม)
