@@ -54,7 +54,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0500";
+const APP_VERSION = "2026-10-08.0600";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -9832,9 +9832,12 @@ function profRender() {
     if (f.type && !f.type.startsWith("image/")) return toast("ต้องเป็นไฟล์รูปภาพ");
     if (state.profBusy) return; state.profBusy = true; upBtn.disabled = true; upBtn.textContent = "กำลังอัปโหลดและแปลงรูป…";
     try {
-      await uploadBytes(sref(storage, "raw/" + state.uid), f, { contentType: f.type || "image/jpeg" });
-      const r = await profCall({ a: "commit" }); state.profD = r; toast(`🖼️ แปลงเป็น webp ${r.up.kb} KB แล้ว`); logLine(`🖼️ เปลี่ยนรูปโปรไฟล์แล้ว (${r.up.kb} KB)`, "system"); profImgCache.clear();
-    } catch (e) { toast(String(e?.code || "").includes("storage/") ? "อัปโหลดไม่สำเร็จ (Storage ยังไม่พร้อม/ไฟล์ไม่ผ่านกติกา)" : fnErr(e)); }
+      const tmo = (pr, ms, msg) => Promise.race([pr, new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error(msg), { csTimeout: true })), ms))]);
+      upBtn.textContent = "ขั้น 1/2 กำลังอัปโหลดต้นฉบับ…";
+      await tmo(uploadBytes(sref(storage, "raw/" + state.uid), f, { contentType: f.type || "image/jpeg" }), 45000, "อัปโหลดต้นฉบับไปที่ Storage ไม่ตอบสนอง (เกิน 45 วินาที) — Storage อาจยังไม่ได้เปิด/ยังไม่ได้ deploy storage.rules หรือเน็ตช้า");
+      upBtn.textContent = "ขั้น 2/2 ระบบกำลังแปลงเป็น webp…";
+      const r = await tmo(profCall({ a: "commit" }), 90000, "ฟังก์ชันแปลงรูป (profAct) ไม่ตอบสนอง (เกิน 90 วินาที) — ตรวจว่า deploy functions แล้วและ sharp ติดตั้งสำเร็จ"); state.profD = r; toast(`🖼️ แปลงเป็น webp ${r.up.kb} KB แล้ว`); logLine(`🖼️ เปลี่ยนรูปโปรไฟล์แล้ว (${r.up.kb} KB)`, "system"); profImgCache.clear();
+    } catch (e) { console.warn("profile upload", e?.code, e?.message || e); toast(e?.csTimeout ? e.message : String(e?.code || "").includes("storage/") ? `อัปโหลดไม่สำเร็จ (${e.code}) — Storage ยังไม่พร้อม/ไฟล์ไม่ผ่านกติกา` : fnErr(e)); }
     finally { state.profBusy = false; try { profRender(); } catch { /* ข้าม */ } }
   });
   up.append(fi, upBtn);
