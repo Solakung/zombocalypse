@@ -60,7 +60,7 @@ const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.0751";
+const APP_VERSION = "2026-10-06.0834";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -408,20 +408,20 @@ const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.i
 const effectText = (d) => [d.heal && `HP ${sgn(d.heal)}`, d.food && `อาหาร ${sgn(d.food)}`, d.water && `น้ำ ${sgn(d.water)}`, d.stamina && `พลังงาน ${sgn(d.stamina)}`,
   statFx(d, "s_") && `ถาวร ${statFx(d, "s_")}`, statFx(d, "b_") && `ชั่วคราว ${statFx(d, "b_")} นาน ${d.bmin || 0} นาที`, hasFx(d) && fxText(d)].filter(Boolean).join(" ");
 
-// สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ถ้าเพิ่มสูตรใหม่ ต้องเพิ่มเงื่อนไขใน database_rules.json ด้วย
+// สูตรคราฟต์ (เฉพาะมนุษย์ ใน Safe Zone) — ทุกสูตรทำผ่านฟังก์ชัน forgeAct (srv) สูตรต้องตรง functions/forge.js RECIPES (มีเทสต์เทียบ) — เพิ่มสูตรใหม่ไม่ต้องแตะ rules
 const RECIPES = {
-  bandage: { need: { scrap: 2 }, out: "bandage", qty: 1 },
-  antidote: { need: { chem: 2, scrap: 1 }, out: "antidote", qty: 1 },
-  trauma_kit: { need: { medkit: 1, bandage: 2, chem: 1 }, out: "trauma_kit", qty: 1 },
-  soup: { need: { canned_food: 1, water: 1 }, out: "soup", qty: 1 },
-  stim_shot: { need: { chem: 3, energy_drink: 1 }, out: "stim_shot", qty: 1 },
-  rag_vest: { need: { scrap: 5 }, out: "rag_vest", qty: 1 },
-  scrap_plate: { need: { scrap: 10, chem: 2 }, out: "scrap_plate", qty: 1 },
-  headlamp: { need: { scrap: 4, energy_drink: 1 }, out: "headlamp", qty: 1 },
-  toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1 },
-  exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1 },
-  fish_grill: { need: { fish: 1, scrap: 1 }, out: "fish_grill", qty: 1 },
-  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1 },
+  bandage: { need: { scrap: 2 }, out: "bandage", qty: 1, srv: 1 },
+  antidote: { need: { chem: 2, scrap: 1 }, out: "antidote", qty: 1, srv: 1 },
+  trauma_kit: { need: { medkit: 1, bandage: 2, chem: 1 }, out: "trauma_kit", qty: 1, srv: 1 },
+  soup: { need: { canned_food: 1, water: 1 }, out: "soup", qty: 1, srv: 1 },
+  stim_shot: { need: { chem: 3, energy_drink: 1 }, out: "stim_shot", qty: 1, srv: 1 },
+  rag_vest: { need: { scrap: 5 }, out: "rag_vest", qty: 1, srv: 1 },
+  scrap_plate: { need: { scrap: 10, chem: 2 }, out: "scrap_plate", qty: 1, srv: 1 },
+  headlamp: { need: { scrap: 4, energy_drink: 1 }, out: "headlamp", qty: 1, srv: 1 },
+  toolkit: { need: { scrap: 6, chem: 1 }, out: "toolkit", qty: 1, srv: 1 },
+  exp_serum: { need: { lab_sample: 2, chem: 2 }, out: "exp_serum", qty: 1, srv: 1 },
+  fish_grill: { need: { fish: 1, scrap: 1 }, out: "fish_grill", qty: 1, srv: 1 },
+  fish_stew: { need: { fish: 2, water: 1, canned_food: 1 }, out: "fish_stew", qty: 1, srv: 1 },
   // อาวุธระดับต้น–กลาง: คราฟต์ผ่านฟังก์ชัน forgeAct (srv) — สูตรต้องตรง functions/forge.js (ไม่เกี่ยวกับ rules)
   wooden_bat: { need: { scrap: 8 }, out: "wooden_bat", qty: 1, srv: 1 },
   pocket_knife: { need: { scrap: 6, leather_scrap: 1 }, out: "pocket_knife", qty: 1, srv: 1 },
@@ -1631,30 +1631,18 @@ function renderCraft() {
 }
 
 async function craft(id) {
+  // คราฟต์ทุกสูตรทำผ่านฟังก์ชัน forgeAct (หักวัตถุดิบ + ใส่ของให้เอง) — ตรวจเบื้องต้นฝั่งนี้เพื่อข้อความเร็ว ฟังก์ชันตรวจซ้ำเอง
   const r = RECIPES[id]; if (!r || state.busy) return false;
   if (state.profile.faction !== "human") { toast("เฉพาะมนุษย์เท่านั้นที่คราฟต์ได้"); return false; }
   if (state.zone !== "safe") { toast("ต้องคราฟต์ที่ Safe Zone"); return false; }
   for (const [m, n] of Object.entries(r.need)) if ((state.inv[m]?.qty || 0) < n) { toast("วัตถุดิบไม่พอ"); return false; }
   let okc = false;
-  if (r.srv) {   // อาวุธ: ฟังก์ชัน forgeAct หักวัตถุดิบ + สร้างช่องอาวุธให้เอง (ติดล็อกให้ลองใหม่ 1 ครั้ง)
-    state.busy = true;
-    try {
-      try { await forgeCall({ a: "craft", id }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); await forgeCall({ a: "craft", id }); }
-      questBump("craft"); okc = true;
-      if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
-    } catch (e) { toast(errMsg(e)); }
-    finally { state.busy = false; }
-    return okc;
-  }
   state.busy = true;
-  const u = {};
-  for (const [m, n] of Object.entries(r.need)) {
-    const left = state.inv[m].qty - n;
-    u[`inventory/${state.uid}/${m}` + (left > 0 ? "/qty" : "")] = left > 0 ? left : null;
-  }
-  invAddUpdate(u, r.out, r.qty);
-  try { await update(ref(db), u); questBump("craft"); if (id === "fish_grill" || id === "fish_stew") achBump("cook"); okc = true; if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); } }
-  catch (e) { toast(errMsg(e)); }
+  try {
+    try { await forgeCall({ a: "craft", id }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((res) => setTimeout(res, 800)); await forgeCall({ a: "craft", id }); }   // ติดล็อกลองใหม่ 1 ครั้ง
+    questBump("craft"); if (id === "fish_grill" || id === "fish_stew") achBump("cook"); okc = true;
+    if (!state.craftQuiet) { toast(`ประกอบ ${ITEMS[r.out].name} สำเร็จ`); logLine(`🛠️ คุณประกอบ ${ITEMS[r.out].name}`, "info"); }
+  } catch (e) { toast(fnErr(e)); }
   finally { state.busy = false; }
   return okc;
 }

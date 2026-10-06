@@ -15,6 +15,10 @@ const RECIPES = {
   spiked_bat: { need: { scrap: 8, rusty_nails: 3 } },
   fire_axe: { need: { scrap: 14, steel_plate: 1 } },
   crossbow: { need: { scrap: 12, rope_coil: 2, steel_plate: 1 } },
+  // สูตรเดิมของไอเทมสิ้นเปลือง (เคยเป็นกิ่ง rules ฝั่งไคลเอนต์ — ย้ายมาทำที่ฟังก์ชันแล้ว ตัดกิ่งออกจาก rules)
+  bandage: { need: { scrap: 2 } }, antidote: { need: { chem: 2, scrap: 1 } }, trauma_kit: { need: { medkit: 1, bandage: 2, chem: 1 } }, soup: { need: { canned_food: 1, water: 1 } },
+  stim_shot: { need: { chem: 3, energy_drink: 1 } }, rag_vest: { need: { scrap: 5 } }, scrap_plate: { need: { scrap: 10, chem: 2 } }, headlamp: { need: { scrap: 4, energy_drink: 1 } },
+  toolkit: { need: { scrap: 6, chem: 1 } }, exp_serum: { need: { lab_sample: 2, chem: 2 } }, fish_grill: { need: { fish: 1, scrap: 1 } }, fish_stew: { need: { fish: 2, water: 1, canned_food: 1 } },
   // ไอเทมชุดที่ 2 ตามสูตรใน items.draft.json: ยา/เครื่องดื่ม/เกราะ/อุปกรณ์ (ไม่ใช่อาวุธ → ซ้อนช่องตามรหัส ได้ตามจำนวน qty)
   gauze_roll: { need: { cloth_roll: 1, scrap: 1 }, qty: 2 },
   antiseptic: { need: { chem: 1, herb_bundle: 1 } },
