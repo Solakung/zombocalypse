@@ -62,7 +62,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0319";
+const APP_VERSION = "2026-10-07.0324";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2429,7 +2429,7 @@ $("boss-claim").addEventListener("click", claimBossReward);
 // ---- 🏹 บอสเผ่ามนุษย์ (ฝั่งซอมบี้) — functions/hboss.js • ปิดอยู่จนกว่าเจ้าของตั้ง tune hb_on = 1
 // ผู้รอดชีวิตที่ไม่ยอมเข้า Safe Zone ประจำโซน: ซอมบี้ค้นหาแล้วมีโอกาสเจอ (โอกาสเท่าบอสฝั่งมนุษย์ ทอยที่เซิร์ฟเวอร์) สู้เป็นรอบ โจมตี/หนี รับรางวัลเป็นของซอมบี้
 const HB_ZONES = ["forest", "police", "port", "factory", "hospital", "tunnel"];   // ต้องตรงกับ W ใน functions/hboss.js
-const hbOn = () => T("hb_on", 0) === 1;
+const hbOn = () => T("hb_on", 1) === 1;   // เปิดเป็นค่าเริ่มต้น — ปิดด้วย tune hb_on = 0
 const hbMsg = (e) => { const m = String(e?.message || ""); return !m || /^(internal|unknown)$/i.test(m) ? errMsg(e) : m; };
 function hbLog(t) { const ul = $("hb-log"); ul.append(mk("li", "", t)); while (ul.children.length > 30) ul.firstChild.remove(); ul.scrollTop = ul.scrollHeight; }
 function hbRender() {
@@ -3135,7 +3135,7 @@ function buildAdmin() {
   fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
   fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
+  itemOpts.push(...Object.entries(FXW).map(([k, d]) => [k, `⚔️ ${d.icon} ${d.name} • ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)} (มนุษย์ใช้ได้เท่านั้น)`])); itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
   buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor(); buildGiveUi(); buildWfxAdmin("adm-"); buildWfxAdmin("adm-q-");
@@ -3173,14 +3173,18 @@ $("adm-ann-send").addEventListener("click", async () => {
 
 // P = คำนำหน้า id ของฟอร์ม: "adm-" = เสกไอเทม, "adm-q-" = รางวัลภารกิจ
 function readAdminItem(P = "adm-") {
-  const itemId = $(P + "item").value;
+  let itemId = $(P + "item").value;
+  const fxp = FXW[itemId] ? itemId : null; if (fxp) itemId = "custom";   // ⚔️ พรีเซ็ตอาวุธติดสถานะในรายการไอเทมโดยตรง = อาวุธ custom ที่มี fx
   // สกิล: คืน skill (null ถ้ากรอกไม่ผ่าน — readSkillForm toast บอกเหตุผลแล้ว) ผู้เรียกต้องเช็กก่อนใช้
   if (itemId === "skill") return { itemId, skill: readSkillForm(P + "spk-") };
   const qty = Math.max(1, Math.min(99, parseInt($(P + "qty").value, 10) || 1));
   const isFood = itemId === "custom_food", isGear = itemId === "custom_gear";
   let customData = null, def = ITEMS[itemId];
 
-  if (itemId === "custom") {
+  if (itemId === "custom" && fxp) {
+    const d = FXW[fxp]; customData = { name: d.name, dmg: d.dmg, dur: d.dur, icon: d.icon, fx: { ...d.fx } };
+    def = { name: d.name, type: "weapon", maxDur: d.dur };
+  } else if (itemId === "custom") {
     const cName = $(P + "custom-name").value.trim() || "อาวุธปริศนา";
     const cDmg = parseInt($(P + "custom-dmg").value, 10) || 10;
     const cDur = parseInt($(P + "custom-dur").value, 10) || 10;
@@ -11258,7 +11262,7 @@ function tuneDefs() {
   rows.push(["hc_pm", "โอกาสเจอธาราต่อการค้น 1 ครั้งที่ศูนย์วิจัย (‰ — 4 = 0.4%, ซอมบี้ได้ครึ่งหนึ่ง) • ใครเจอก่อนคือผู้ค้นพบของทั้งเซิร์ฟเวอร์ เฉลี่ยทั้งโลกค้นรวม ~250 ครั้ง • ต้องใช้ฟังก์ชัน hcAct + rules ใหม่", 4, 0, 1000, "📡 ภารกิจ HC"]);
   rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);
-  rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด, 0 = ปิด • เปิดเมื่อมีภาพบอสและเพิ่ม changelog • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 0, 0, 1, "🏹 บอสเผ่ามนุษย์"]);
+  rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด ค่าเริ่มต้น, 0 = ปิด • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 1, 0, 1, "🏹 บอสเผ่ามนุษย์"]);
   rows.push(["hb_pct", "โอกาสเจอบอสเผ่ามนุษย์เทียบบอสฝั่งมนุษย์ (% — 100 = เท่ากัน, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "🏹 บอสเผ่ามนุษย์"]);
   rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);

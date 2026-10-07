@@ -2,20 +2,21 @@
 const { chromium } = require("/opt/node-tools/node_modules/playwright"); const fs = require("fs"), assert = require("assert");
 const R = "/home/user/zombocalypse/", sc = fs.readFileSync(R + "script.js", "utf8");
 const blk = sc.slice(sc.indexOf("// ---- ⚔️ อาวุธติดสถานะ (มนุษย์"), sc.indexOf("// ---- /อาวุธติดสถานะ")), adm = sc.slice(sc.indexOf("// ---- ⚔️ แอดมิน:"), sc.indexOf("function buildAdmin() {"));
-assert(blk.length > 1000 && adm.length > 500);
+const rai = sc.slice(sc.indexOf("function readAdminItem("), sc.indexOf("// เสกสกิล:")); assert(blk.length > 1000 && adm.length > 500 && rai.length > 500);
+
 (async () => {
   const br = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }); const errs = [];
   const pg = await (await br.newContext({ viewport: { width: 360, height: 780 }, isMobile: true })).newPage(); pg.on("pageerror", (e) => errs.push(String(e)));
   await pg.route("**/*", (r) => { const u = r.request().url(); if (u.includes("script.js")) return r.fulfill({ body: "" }); if (u.startsWith("file://")) return r.continue(); return r.abort(); });
   await pg.goto("file://" + R + "index.html");
-  const out = await pg.evaluate(async ({ blk, adm }) => {
+  const out = await pg.evaluate(async ({ blk, adm, rai }) => {
     const mk = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; }, $ = (id) => document.getElementById(id);
     const FX_TYPES = { bleed: { icon: "🩸", name: "เลือดไหล" }, poison: { icon: "☠️", name: "พิษ" }, hot: { icon: "💚", name: "ฟื้นฟู" }, stun: { icon: "😵", name: "มึนงง" }, dice: { icon: "🎯", name: "ทอยลูกเต๋า" } };
     const store = {}, LS = { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = v; } }, lsKey = (n) => n, NOW = 1e12, serverNow = () => NOW, serverTimestamp = () => "__TS__", stats = [];
     const state = { uid: "T", profile: { faction: "zombie" }, players: { A: { faction: "human" }, Z: { faction: "zombie" } }, zone: "ruins" }; let eff = {}, imm = 0, rand = 0, gearOn = false;
     const effActive = (t) => !!eff[t], poisonImmLeft = () => imm, gearHas = () => gearOn, gearFxFlag = () => false, stat = (k) => stats.push(k), toast = () => {}, logLine = () => {}, errMsg = () => "", T = () => 1, forgeCall = async () => {}, fxwCall = async () => ({}), renderCraft = () => {};
     const realRandom = Math.random; Math.random = () => rand;
-    const api = new Function("mk", "$", "FX_TYPES", "POISON_STRONG", "LS", "lsKey", "serverNow", "serverTimestamp", "state", "effActive", "poisonImmLeft", "gearHas", "gearFxFlag", "stat", "toast", "logLine", "errMsg", "T", "forgeCall", "fxwCall", "renderCraft", blk + "\n" + adm + "\nreturn { FXW, WFX_TYPES, wfxOf, wfxLabel, fxwSlot, wfxHit, buildWfxAdmin, wfxAdminRead };")(mk, $, FX_TYPES, 2, LS, lsKey, serverNow, serverTimestamp, state, effActive, poisonImmLeft, gearHas, gearFxFlag, stat, toast, logLine, errMsg, T, forgeCall, fxwCall, renderCraft);
+    const api = new Function("mk", "$", "FX_TYPES", "ITEMS", "readSkillForm", "POISON_STRONG", "LS", "lsKey", "serverNow", "serverTimestamp", "state", "effActive", "poisonImmLeft", "gearHas", "gearFxFlag", "stat", "toast", "logLine", "errMsg", "T", "forgeCall", "fxwCall", "renderCraft", blk + "\n" + adm + "\n" + rai + "\nreturn { FXW, WFX_TYPES, wfxOf, wfxLabel, fxwSlot, wfxHit, buildWfxAdmin, wfxAdminRead, readAdminItem };")(mk, $, FX_TYPES, {}, () => null, 2, LS, lsKey, serverNow, serverTimestamp, state, effActive, poisonImmLeft, gearHas, gearFxFlag, stat, toast, logLine, errMsg, T, forgeCall, fxwCall, renderCraft);
     const res = {}, hit = (a, setup) => { const u = {}; eff = {}; imm = 0; rand = 0; delete store.simm; if (setup) setup(); return { t: api.wfxHit(u, a), u }; };
     // wfxOf: ใช้ได้เฉพาะ custom + ค่าถูกต้อง
     res.of = [api.wfxOf(api.fxwSlot("fxw_cleaver")), api.wfxOf({ id: "knife", fx: { t: "bleed", v: 1, m: 3, p: 30 } }), api.wfxOf({ id: "custom", fx: { t: "bleed", v: 4, m: 3, p: 30 } }), api.wfxOf({ id: "custom", fx: { t: "dice", v: 1, m: 3, p: 30 } }), api.wfxOf({ id: "custom", fx: { t: "stun", v: 1, m: 2, p: 30 } }), api.wfxOf({ id: "custom" })].map((x) => (x ? x.t : null));
@@ -47,15 +48,19 @@ assert(blk.length > 1000 && adm.length > 500);
     $("adm-wfx-t").value = "stun"; $("adm-wfx-m").value = "3"; $("adm-wfx-v").value = "3"; $("adm-wfx-p").value = "500"; res.read3 = JSON.stringify(api.wfxAdminRead("adm-"));   // มึนงง: นาที 1, v 1, โอกาส ≤100
     $("adm-wfx-t").value = ""; $("adm-custom-icon").value = ""; res.read4 = JSON.stringify(api.wfxAdminRead("adm-"));   // ไม่พ่วงสถานะ
     $("adm-wfx-t").value = "dice"; $("adm-wfx-v").value = "9"; $("adm-wfx-p").value = "0"; res.read5 = JSON.stringify(api.wfxAdminRead("adm-"));
+    // รายการไอเทมของแอดมิน: เลือกพรีเซ็ตอาวุธติดสถานะโดยตรง = อาวุธ custom ที่มี fx
+    const isel = document.createElement("select"); isel.id = "adm-item"; Object.keys(api.FXW).forEach((k) => isel.append(new Option(k, k))); const iq = document.createElement("input"); iq.id = "adm-qty"; iq.value = "2"; box.append(isel, iq);
+    isel.value = "fxw_taser"; const R1 = api.readAdminItem("adm-"); res.direct = [R1.itemId, R1.qty, R1.def.type, R1.def.maxDur, R1.single, JSON.stringify(R1.customData)];
     res.noHscroll = document.documentElement.scrollWidth <= innerWidth;
     Math.random = realRandom; return res;
-  }, { blk, adm });
+  }, { blk, adm, rai });
   console.log(JSON.stringify(out, null, 1));
   assert.deepStrictEqual(out.of, ["bleed", null, null, null, null, null]); assert.deepStrictEqual(out.label, ["🩸 เลือดไหล 30%", "☠️ พิษแรง 30%", "☠️ พิษ 35%"]);
   assert(out.proc[0]); assert(out.proc[1].includes('"mins":3') && out.proc[1].includes('"v":2')); assert.deepStrictEqual(out.noProc, ["", 0]); assert.strictEqual(out.active, 0); assert.strictEqual(out.pimm, 0);
   assert(out.stun[0].includes('"mins":1') && out.stun[0].includes('"v":1') && out.stun[1]); assert.strictEqual(out.stunImm, 0); assert(out.dice.includes('"v":-1')); assert.strictEqual(out.fromZombie, 0); assert.strictEqual(out.badM, 0); assert.strictEqual(out.none, 0); assert.strictEqual(out.defHuman, 1, "มนุษย์ที่ถูกตีก็ติดสถานะ"); assert.strictEqual(out.poisonNoGear, 1); assert.strictEqual(out.poisonGear, 0, "ถุงมือกันพิษ: โอกาสครึ่งเดียว");
   assert.strictEqual(out.once, 1); assert.strictEqual(out.presetN, 10); assert.deepStrictEqual(out.filled, ["ขวานผ่าซาก", "16", "16", "🪓", "bleed", "3", "3", "30"]);
   assert.strictEqual(out.read1, '{"icon":"🪓","fx":{"t":"bleed","v":3,"m":3,"p":30}}'); assert.strictEqual(out.read2, '{"icon":"🔨","fx":{"t":"dice","v":-1,"m":3,"p":15}}'); assert.strictEqual(out.read3, '{"icon":"🔨","fx":{"t":"stun","v":1,"m":1,"p":100}}'); assert.strictEqual(out.read4, "{}"); assert.strictEqual(out.read5, '{"fx":{"t":"dice","v":-2,"m":3,"p":30}}');
+  assert.deepStrictEqual(out.direct, ["custom", 2, "weapon", 12, true, '{"name":"ปืนช็อตไฟฟ้า","dmg":22,"dur":12,"icon":"⚡","fx":{"t":"stun","v":1,"m":1,"p":35}}']);
   assert(out.noHscroll);
   await pg.screenshot({ path: "/tmp/fbt/fxw360.png" }); console.log("UI FXW OK; errors:", errs); assert.deepStrictEqual(errs, []); await br.close();
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

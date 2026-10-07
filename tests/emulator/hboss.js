@@ -31,7 +31,8 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   const mk = async (extra = {}) => { await db.ref().set({ users: { z: u("z", "zombie", "forest"), h: u("h", "human", "forest"), l: u("l", "zombie", "lab"), b: u("b", "zombie", "forest", { banned: true }), d: u("d", "zombie", "forest", { hp: 0 }) }, stats: { z: { str: 3, hp: 5, agi: 0, tough: 0 } }, tune: { hb_on: 1 }, ...extra }); };
   await mk({ tune: null });
   const hb = H.makeHboss(db, rnd); let r;
-  // ---- ปิดอยู่: ไม่เจอ, state ใช้ได้
+  // ---- ค่าเริ่มต้น = เปิด (ไม่มี tune) • ตั้ง hb_on = 0 = ปิด: ไม่เจอ, state ใช้ได้
+  assert.strictEqual((await hb.run("z", { a: "state" }, T0)).on, true, "default on"); await db.ref("tune/hb_on").set(0);
   q(0); r = await hb.run("z", { a: "roll" }, T0); assert.deepStrictEqual({ on: r.on, hit: r.hit }, { on: false, hit: false }); assert.strictEqual(queue.length, 1); assert.strictEqual((await db.ref("hboss/z").get()).val(), null);
   assert.deepStrictEqual(await hb.run("z", { a: "state" }, T0), { ok: true, on: false, fight: null });
   await db.ref("tune/hb_on").set(1);
