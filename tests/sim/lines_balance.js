@@ -6,7 +6,7 @@ const d6 = () => 1 + Math.floor(Math.random() * 6);
 const CFG0 = { agiPen: [0, 1, 2, 3, 3], shadeHp: (s) => (s >= 3 ? 2 : s >= 2 ? 1 : 0), shadeAgi: [0, 2, 2, 2, 3], gHp: [0, 2, 2, 2, 4], evoCut: 0.9, bleed: true, bleedSteps: 18 };
 let CFG = { ...CFG0 };
 const GREEN = { agiPen: [0, 2, 4, 6, 6], gHp: [0, 3, 3, 3, 5], toughG: 2 };
-const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = CFG.gHp[g] - CFG.shadeHp(s); else if (k === "agi") v = CFG.shadeAgi[s] - CFG.agiPen[g]; else if (k === "tough") v = g >= 1 ? (CFG.toughG || 1) : 0; return cap[k] !== undefined && !CFG.nocap ? Math.min(v, cap[k]) : v; };
+const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4) + (g >= 1 ? (CFG.giantStr || 0) : 0); else if (k === "hp") v = CFG.gHp[g] - CFG.shadeHp(s); else if (k === "agi") v = CFG.shadeAgi[s] - CFG.agiPen[g]; else if (k === "tough") v = g >= 1 ? (CFG.toughG || 1) : 0; return cap[k] !== undefined && !CFG.nocap ? Math.min(v, cap[k]) : v; };
 // ตารางฮีลตอนกัดโดน (ตาม evo h และขั้นมิวเตชัน m 0–4)
 const HEAL = {
   "ปัจจุบัน 2/3/5": (h) => (h >= 4 ? 5 : h >= 2 ? 3 : 2),
@@ -144,3 +144,27 @@ function final(o, tag) {
 }
 final({}, "ชุดสุดท้าย — สมมติฐานเดิม");
 final({ extraCut: 0.12, dur: 16 }, "ชุดสุดท้าย — สมมาตร (อวัยวะซอมบี้ลด 12% + อาวุธมนุษย์พัง)");
+
+// ---- ปรับซากหนา (แทงค์) เพิ่มเติม: ชนะ% / อยู่รอด% (ไม่ตายใน 10 นาที) • เทียบตะกละขั้น 8 (ฮีล 8) เป็นเกณฑ์
+function giantVariants() {
+  const o = { extraCut: 0.12, dur: 16 }, cases = [["กลาง/มกลาง", ZB["กลาง 26 แต้ม"], HU["มนุษย์กลาง (ขวาน 18, เกราะ 15%)"]], ["ปลาย/มปลาย", ZB["ปลาย 50 แต้ม"], HU["มนุษย์ปลาย (ซามูไร 28, เกราะ 20%)"]]];
+  const cell = (cfg, e, m, ec, zs, hu, hf) => { CFG = { ...CFG0, nocap: true, ...cfg }; let w = 0, alive = 0; for (let i = 0; i < N; i++) { const r = duel({ s: zs, e, m }, hu, hf || HEAL["ปัจจุบัน 2/3/5"], { ...o, extraCut: o.extraCut + (ec || 0) }); w += r.win; alive += r.win === 0 ? 0 : 1; } CFG = { ...CFG0 }; return `${pct(w / N)}/${pct(alive / N)}`; };
+  const V = [
+    ["ปัจจุบัน (ไม่ปรับ)", {}, 0, 0, null],
+    ["ชุดที่ 3: HP+50 ทน+2 หลบ−12% ลด 15%@8", { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 1, 2, 3, 4], evoCut: 0.9 }, 4, 0.05],
+    ["แทงค์ B: HP+50 ทน+2 หลบ−6% ลด 15%@ขั้น2 25%@8", { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 0, 1, 2, 2], evoCut: 0.85 }, 4, 0.12],
+    ["แทงค์ B′: B แต่ขั้น 8 ลดเพิ่มแค่ +5%", { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 0, 1, 2, 2], evoCut: 0.85 }, 4, 0.05],
+    ["แทงค์ B″: B แต่ขั้น 8 ลดเพิ่ม +8%", { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 0, 1, 2, 2], evoCut: 0.85 }, 4, 0.08],
+    ["แทงค์ C: HP+60 ทน+2 หลบ−6% ลด 20%@ขั้น2 30%@8", { gHp: [0, 3, 4, 4, 6], toughG: 2, agiPen: [0, 0, 1, 2, 2], evoCut: 0.8 }, 4, 0.12],
+    ["แทงค์ D: B + ตีโต้ (พละกำลัง +2 เหมือนตะกละ)", { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 0, 1, 2, 2], evoCut: 0.85, giantStr: 2 }, 4, 0.12]
+  ];
+  console.log("\n=== ซากหนา ขั้น 4 และ ขั้น 8 — ชนะ%/อยู่รอด% (สมมาตร) ===");
+  console.log("ตัวเลือก".padEnd(52) + "| กลาง/กลาง ขั้น4 | กลาง/กลาง ขั้น8 | ปลาย/ปลายสุด ขั้น4 | ปลาย/ปลายสุด ขั้น8");
+  for (const [name, cfg, m8, ec8] of V) {
+    const g4 = (zs, hu) => cell(cfg, { g: 4 }, 0, 0, zs, hu), g8 = (zs, hu) => cell(cfg, { g: 4 }, m8, ec8, zs, hu);
+    console.log(name.padEnd(52) + `| ${g4(cases[0][1], cases[0][2])}      | ${g8(cases[0][1], cases[0][2])}      | ${g4(cases[1][1], cases[1][2])}         | ${g8(cases[1][1], cases[1][2])}`);
+  }
+  const hz = (m, zs, hu) => cell({}, { h: 4 }, m, 0, zs, hu, HEAL_P2);
+  console.log("เทียบ ตะกละ ขั้น 4 / ขั้น 8 (ฮีล 8)".padEnd(52) + `| ${hz(0, cases[0][1], cases[0][2])}      | ${hz(4, cases[0][1], cases[0][2])}      | ${hz(0, cases[1][1], cases[1][2])}         | ${hz(4, cases[1][1], cases[1][2])}`);
+}
+giantVariants();
