@@ -5,7 +5,8 @@ const N = 8000;
 const d6 = () => 1 + Math.floor(Math.random() * 6);
 const CFG0 = { agiPen: [0, 1, 2, 3, 3], shadeHp: (s) => (s >= 3 ? 2 : s >= 2 ? 1 : 0), shadeAgi: [0, 2, 2, 2, 3], gHp: [0, 2, 2, 2, 4], evoCut: 0.9, bleed: true, bleedSteps: 18 };
 let CFG = { ...CFG0 };
-const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = CFG.gHp[g] - CFG.shadeHp(s); else if (k === "agi") v = CFG.shadeAgi[s] - CFG.agiPen[g]; else if (k === "tough") v = g >= 1 ? 1 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
+const GREEN = { agiPen: [0, 2, 4, 6, 6], gHp: [0, 3, 3, 3, 5], toughG: 2 };
+const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = CFG.gHp[g] - CFG.shadeHp(s); else if (k === "agi") v = CFG.shadeAgi[s] - CFG.agiPen[g]; else if (k === "tough") v = g >= 1 ? (CFG.toughG || 1) : 0; return cap[k] !== undefined && !CFG.nocap ? Math.min(v, cap[k]) : v; };
 // ตารางฮีลตอนกัดโดน (ตาม evo h และขั้นมิวเตชัน m 0–4)
 const HEAL = {
   "ปัจจุบัน 2/3/5": (h) => (h >= 4 ? 5 : h >= 2 ? 3 : 2),
@@ -85,3 +86,19 @@ for (const [tag, o] of [["เดิม", {}], ["สมมาตรขึ้น",
     console.log(line);
   }
 }
+
+// ---- ข้อเสนอของเจ้าของเกม (ทดลอง): ตะกละ ฮีล 4/8 • ซากหนา HP +50 ทน +2 ลดดาเมจ 15% หลบ −18% มิวเตชันสูงสุดลด +20% • เลื้อยคลาน มิวเตชันสูงสุด HP −40 หลบ +18%
+const HEAL_NEW = (h, m) => (h >= 4 ? 8 : h >= 2 ? 4 : 2);
+function propose(tag, o) {
+  console.log("\n" + tag);
+  for (const [zn, zs] of Object.entries(ZB)) for (const [hun, hu] of Object.entries(HU)) {
+    const hs = hun.includes("ปลาย") ? "มปลาย" : "มกลาง";
+    const cell = (cfg, e, m, ec, hf) => { CFG = { ...CFG0, nocap: true, ...cfg }; const r = run({ s: zs, e, m }, hu, hf || HEAL["ปัจจุบัน 2/3/5"], { ...o, extraCut: (o.extraCut || 0) + (ec || 0) }); CFG = { ...CFG0 }; return pct(r.win); };
+    const base = ["h", "g", "s"].map((k) => cell({}, { [k]: 4 }, 0, 0));
+    const prop = [cell({}, { h: 4 }, 0, 0, HEAL_NEW), cell({ ...GREEN, evoCut: 0.85 }, { g: 4 }, 0, 0), cell({ shadeAgi: [0, 2, 2, 2, 3] }, { s: 4 }, 0, 0)];
+    const prop8 = [cell({}, { h: 4 }, 4, 0, HEAL_NEW), cell({ ...GREEN, evoCut: 0.85 }, { g: 4 }, 4, 0.20), cell({ shadeAgi: [0, 2, 2, 2, 6], shadeHp: (x) => (x >= 3 ? 4 : 0) }, { s: 4 }, 4, 0)];
+    console.log(`${zn.slice(0, 5)} vs ${hs} | ปัจจุบัน ขั้น4: 🩸${base[0]} 🗿${base[1]} 🕷${base[2]}  → ข้อเสนอ ขั้น4: 🩸${prop[0]} 🗿${prop[1]} 🕷${prop[2]}  → ข้อเสนอ ขั้น8: 🩸${prop8[0]} 🗿${prop8[1]} 🕷${prop8[2]}`);
+  }
+}
+propose("=== ข้อเสนอของเจ้าของเกม (สมมติฐานเดิม) ===", {});
+propose("=== ข้อเสนอของเจ้าของเกม (สมมาตรขึ้น: ซอมบี้ลดดาเมจ 12% + อาวุธมนุษย์พังหลัง 16 ครั้ง) ===", { extraCut: 0.12, dur: 16 });
