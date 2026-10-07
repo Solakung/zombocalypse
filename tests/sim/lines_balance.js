@@ -25,7 +25,7 @@ function duel(z, hu, healFn, o = {}) {
       zh = Math.min(zMax, zh + healFn(z.e.h || 0, z.m || 0));
       if (CFG.bleed && (z.e.h || 0) >= 3 && bleed <= 0) bleed = CFG.bleedSteps;   // เลือดไหล 3 นาที = 18 สเต็ป (10 วิ) — 2 HP ต่อ 15 วิ ≈ 1.33 ต่อสเต็ป
     }
-    if (bleed > 0) { hh -= 1.33; bleed--; }
+    if (bleed > 0) { hh -= CFG.bleedDmg || 1.33; bleed--; }
     if (hh <= 0) return { win: 1, hp: zh / zMax };
     // มนุษย์: ฮีลเมื่อ HP < 40% (ใช้เวลาแทนการโจมตี) ไม่งั้นโจมตี
     if (hh < 0.4 * hMax && (band > 0 || med > 0)) { if (med > 0 && hh < 0.3 * hMax) { med--; hh = Math.min(hMax, hh + 50); } else if (band > 0) { band--; hh = Math.min(hMax, hh + 20); } else { med--; hh = Math.min(hMax, hh + 50); } bleed = 0; }
@@ -130,3 +130,17 @@ food("ข้อเสนอ: หิว +50% อาหารที่ได้ ×
 food("ทางกลาง: หิว +50% อาหารที่ได้ ×0.75 เนื้อเน่า +20%", 50, 0.75, 20);
 food("ทางกลาง: หิว +30% อาหารที่ได้ ×0.75 เนื้อเน่า +20%", 30, 0.75, 20);
 food("ทางกลาง: หิว +30% อาหารที่ได้ ×0.67 เนื้อเน่า +20%", 30, 0.67, 20);
+
+// ---- ชุดสุดท้ายที่เสนอ (รอบ 3): ตะกละ ฮีล 2/3/5 และ 8 ที่มิวเตชันขั้น 8 • ซากหนา HP +50 ทน +2 หลบ −12% (agi −4) ลดดาเมจรวม 15% ที่ขั้น 8 • เลื้อยคลานตามเดิม
+function final(o, tag) {
+  console.log("\n=== " + tag + " ===  (ชนะ% ของซอมบี้)");
+  console.log("ซอมบี้/มนุษย์".padEnd(16) + "| ไม่มี | 🩸4 | 🩸8 | 🩸4 เลือด½ | 🩸8 เลือด½ | 🗿ปจ.4 | 🗿เสนอ4 | 🗿เสนอ8 | 🕷4 | 🕷8");
+  for (const [zn, zs] of Object.entries(ZB)) for (const [hun, hu] of Object.entries(HU)) {
+    const c = (cfg, e, m, ec, hf) => { CFG = { ...CFG0, nocap: true, ...cfg }; const r = run({ s: zs, e, m }, hu, hf || HEAL["ปัจจุบัน 2/3/5"], { ...o, extraCut: (o.extraCut || 0) + (ec || 0) }); CFG = { ...CFG0 }; return pct(r.win); };
+    const G = { gHp: [0, 3, 3, 3, 5], toughG: 2, agiPen: [0, 1, 2, 3, 4], evoCut: 0.9 }, half = { bleedDmg: 0.67 };
+    const row = [c({}, {}, 0, 0), c({}, { h: 4 }, 0, 0, HEAL_P2), c({}, { h: 4 }, 4, 0, HEAL_P2), c(half, { h: 4 }, 0, 0, HEAL_P2), c(half, { h: 4 }, 4, 0, HEAL_P2), c({}, { g: 4 }, 0, 0), c(G, { g: 4 }, 0, 0), c(G, { g: 4 }, 4, 0.05), c({}, { s: 4 }, 0, 0), c({}, { s: 4 }, 4, 0)];
+    console.log(`${zn.slice(0, 5)}/${hun.includes("ปลาย") ? "มปลาย" : "มกลาง"}`.padEnd(16) + "| " + row.join("  | "));
+  }
+}
+final({}, "ชุดสุดท้าย — สมมติฐานเดิม");
+final({ extraCut: 0.12, dur: 16 }, "ชุดสุดท้าย — สมมาตร (อวัยวะซอมบี้ลด 12% + อาวุธมนุษย์พัง)");
