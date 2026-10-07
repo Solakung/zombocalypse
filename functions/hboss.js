@@ -47,11 +47,13 @@ function makeHboss(db, rnd) {
 
   // สถานะซอมบี้ (ตรงกับ use.js / script.js: evoBonusAt)
   function evoBonus(evo, k) {
-    const h = num(evo.h), g = num(evo.g), s = num(evo.s), cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0;
+    const h = num(evo.h), g = num(evo.g), s = num(evo.s), cap = { str: 2, hp: 5, agi: 4, tough: 2 }; let v = 0;
     if (k === "str") v = (h >= 1 ? 1 : 0) + (h >= 4 ? 1 : 0);
-    else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
-    else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][Math.min(4, Math.max(0, g))];
-    else if (k === "tough") v = g >= 1 ? 1 : 0;
+    else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
+    else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][Math.min(4, Math.max(0, g))];
+    else if (k === "tough") v = g >= 1 ? 2 : 0;
+    else if (k === "st") v = g >= 3 ? -2 : 0;
+    else if (k === "regen") v = g >= 3 ? -1 : 0;
     return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
   }
   async function load(uid, now) {

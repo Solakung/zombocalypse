@@ -14,9 +14,9 @@ const T0 = Date.UTC(2026, 9, 7, 3);
   await rej(mu.run("lo", { a: "buy" }, T0), "ขั้น 4"); r = await mu.run("lo", { a: "state" }, T0); assert(r.zom && !r.line && !r.next);
   await rej(mu.run("dead", { a: "buy" }, T0), "ชีวิต"); await rej(mu.run("g", { a: "zzz" }, T0), "ไม่รู้จัก");
   r = await mu.run("g", { a: "state" }, T0); assert(r.line === "giant" && r.m === 0 && r.next.cost === 25 && r.abilL === 4 && r.dna === 300);
-  r = await mu.run("g", { a: "buy" }, T0); assert(r.m === 1 && r.dna === 275 && r.abilL === 5 && Math.abs(r.pass.cut - 0.01) < 1e-9 && r.bought === "เกราะซ้อนเกราะ");
+  r = await mu.run("g", { a: "buy" }, T0); assert(r.m === 1 && r.dna === 275 && r.abilL === 5 && Math.abs(r.pass.cut - 0.02) < 1e-9 && r.bought === "เกราะซ้อนเกราะ");
   assert.strictEqual((await db.ref("evo/g/dna").get()).val(), 275); assert.strictEqual((await db.ref("mut/g/g").get()).val(), 1);
-  for (let i = 0; i < 3; i++) r = await mu.run("g", { a: "buy" }, T0); assert(r.m === 4 && !r.next && r.abilL === 8 && Math.abs(r.pass.cut - 0.04) < 1e-9); assert.strictEqual((await db.ref("evo/g/dna").get()).val(), 300 - 215);
+  for (let i = 0; i < 3; i++) r = await mu.run("g", { a: "buy" }, T0); assert(r.m === 4 && !r.next && r.abilL === 8 && Math.abs(r.pass.cut - 0.08) < 1e-9); assert.strictEqual((await db.ref("evo/g/dna").get()).val(), 300 - 215);
   await rej(mu.run("g", { a: "buy" }, T0), "สูงสุด");
   // DNA ไม่พอ / กดซ้อน
   r = await mu.run("h", { a: "buy" }, T0); assert.strictEqual(r.dna, 5); await rej(mu.run("h", { a: "buy" }, T0), "DNA ไม่พอ"); assert.strictEqual((await db.ref("evo/h/dna").get()).val(), 5);

@@ -5,7 +5,7 @@ const hb = sc.slice(sc.indexOf("const BOSSES = {"), sc.indexOf("\n};", sc.indexO
 const HBOSS = new Function(hb.replace("const BOSSES", "const B") + "; return B;")();
 const d6 = () => 1 + Math.floor(Math.random() * 6), ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const mult = (r) => (r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5);
-const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0); else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][g]; else if (k === "tough") v = g >= 1 ? 1 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
+const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 5, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0); else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][g]; else if (k === "tough") v = g >= 1 ? 2 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
 // ---- ซอมบี้ผู้เล่นสู้บอสเผ่า (ตรงกับ functions/hboss.js)
 function zFight(z, b) {
   const st = (k) => (z.s[k] || 0) + evoB(z.e || {}, k), maxHp = 100 + 10 * st("hp"); let hp = maxHp, bh = b.hp, sh = b.shield || 0, round = 0, pdN = 0, pdP = 0, wk = 0, rounds = 0;

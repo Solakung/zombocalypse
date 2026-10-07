@@ -61,7 +61,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0157";
+const APP_VERSION = "2026-10-07.0259";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1237,7 +1237,8 @@ function startGame() {
   state.started = true;
   state.sessionStart = serverNow() - 30000;
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
-  setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
+  setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);
+  setTimeout(() => { try { if (state.profile?.faction === "zombie") mutSync(); } catch { /* ข้าม */ } }, 6000);   // โหลดขั้นมิวเตชัน (ฮีลตอนกัดขั้น 8)   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
     state.stats = s.val(); state.statsLoaded = true;
@@ -1509,12 +1510,11 @@ function listenBites() {
     if (!s.exists() || state.claimingBite) return;
     state.claimingBite = true;
     try {
+      await state.evoReady;
       const fd = curFood();
       const u = { [`bites/${state.uid}`]: null };
-      const gain = Math.min(BITE_FOOD, 100 - fd);
+      const gain = Math.min(Math.floor(BITE_FOOD * evoFoodMult()), 100 - fd);
       if (gain > 0) hungerShift(u, "food", gain);
-      
-      await state.evoReady;
       
       // ดึงค่าเลือดที่แท้จริงจากฐานข้อมูลก่อนคำนวณฮีล
       const hpSnap = await get(ref(db, `users/${state.uid}/hp`));
@@ -2870,9 +2870,10 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 
   const w = equippedWeapon();
   const dm = effV("dice");
-  const rb = sty === "sharp" ? skd.power : 0;   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
+  const am = ambushMult();   // ซุ่มตะปบ (เลื้อยคลานขั้น 3+): ดาเมจ ×2.5/×4 และทอย +2 ครั้งเดียวต่อการเดินทาง
+  const rb = (sty === "sharp" ? skd.power : 0) + (am > 1 ? AMB_ROLL : 0);   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
   const roll = Math.max(1, Math.min(6 + Math.max(0, dm) + rb, d6() + dm + rb));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
-  const am = ambushMult(), wd0 = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w), wd = am > 1 ? Math.floor(wd0 * am) : wd0;   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
+  const wd0 = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w), wd = am > 1 ? Math.floor(wd0 * am) : wd0;   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
@@ -3893,43 +3894,48 @@ const EVO_STEP = [3, 6, 10, 15];                     // ราคาแต้ม
 const EVO_DAY = 86400000, EVO_DAILY_CAP = 25, EVO_CLAIM_MAX = 10, EVO_RESET_CD = 86400000, EVO_REFUND = 0.7;
 const EVO_LINES = {
   hunter: { key: "h", icon: "🩸", name: "สายตะกละ", title: "อสูรตะกละ", tag: "วิ่งไว กัดแรง หิวโหย",
-    tiers: [["เขี้ยวคม", "พละกำลัง +1"], ["กระหายเลือด", "กัดโดนฟื้น HP 3"], ["แผลเน่า", "เหยื่อที่โดนกัดเลือดไหล (2 HP/รอบ นาน 3 นาที)"], ["อสูรตะกละ", "พละกำลัง +1 อีก และดูดเลือดเป็น 5 HP"]],
-    cost: "ราคา: หิวเร็วขึ้น 10/20/30/40% ตามขั้น" },
+    tiers: [["เขี้ยวคม", "พละกำลัง +1"], ["กระหายเลือด", "กัดโดนฟื้น HP 3"], ["แผลเน่า", "เหยื่อที่โดนกัดเลือดไหล (2 HP/รอบ นาน 3 นาที)"], ["อสูรตะกละ", "พละกำลัง +1 อีก และดูดเลือดเป็น 5 HP (มิวเตชันขั้น 8 = 8 HP)"]],
+    cost: "ราคา: หิวเร็วขึ้น 15/30/40/50% ตามขั้น และตั้งแต่ขั้น 2 อาหารที่ได้จากการกัด/เนื้อเน่าเหลือ 75%" },
   giant: { key: "g", icon: "🗿", name: "สายซากหนา", title: "ยักษ์ซากอมตะ", tag: "อึดถึก ตายยาก ช้า",
-    tiers: [["หนังด้าน", "HP +20 และความคงทน +1"], ["ไขมันเกราะ", "ดาเมจที่ได้รับ −10%"], ["ไม่ยอมตาย", "ตายครั้งแรกของวัน DNA ไม่หาย"], ["ยักษ์ซากอมตะ", "HP +20 อีก"]],
-    cost: "ราคา: ว่องไวลด 1/2/3/3 (หลบยาก) และฟื้นฟูพลังงาน −1 ตั้งแต่ขั้น 3" },
+    tiers: [["หนังด้าน", "HP +30 และความคงทน +2"], ["ไขมันเกราะ", "ดาเมจที่ได้รับ −15%"], ["ไม่ยอมตาย", "ตายครั้งแรกของวัน DNA ไม่หาย"], ["ยักษ์ซากอมตะ", "HP +20 อีก (รวม +50)"]],
+    cost: "ราคา: ว่องไวลด 0/1/2/2 (หลบ −0/3/6/6%) และตั้งแต่ขั้น 3 พลังงานสูงสุด −20 ฟื้นฟูพลังงาน −1" },
   shade: { key: "s", icon: "🕷️", name: "สายเลื้อยคลาน", title: "นักล่าความมืด", tag: "เงียบ ว่อง ซุ่มโจมตี",
-    tiers: [["ก้าวเงียบ", "ว่องไว +2 (หลบ +6%)"], ["จมูกไว", "ค้นหาเสียพลังงานน้อยลง 20% (10→8)"], ["ซุ่มตะปบ", "ฟาดแรกหลังเข้าโซนภายใน 1 นาที ดาเมจ +50%"], ["นักล่าความมืด", "ว่องไว +1 อีก และซุ่มเป็น +100%"]],
+    tiers: [["ก้าวเงียบ", "ว่องไว +2 (หลบ +6%)"], ["จมูกไว", "ค้นหาเสียพลังงานน้อยลง 20% (10→8)"], ["ซุ่มตะปบ", "ฟาดแรกหลังเข้าโซนภายใน 1 นาที ดาเมจ ×2.5 และทอยแรก +2"], ["นักล่าความมืด", "ว่องไว +1 อีก และซุ่มเป็น ×4"]],
     cost: "ราคา: HP สูงสุด −10 (ขั้น 2) และ −20 (ขั้น 3 ขึ้นไป)" }
 };
 
 const evoToday = () => { const n = serverNow(); return n - (n % EVO_DAY); };
 function evoT(k) { return state.profile?.faction === "zombie" && state.evo ? state.evo[k] || 0 : 0; }
+// ขั้นมิวเตชันของสายตะกละ (0–4) — ได้จากฟังก์ชัน mutAct (state.mutD) • ฮีลตอนกัด 8 ที่ขั้น 4 (rules อ่าน mut/{uid}/h ตรงกัน)
+const mutTierH = () => (state.profile?.faction === "zombie" && state.mutD && state.mutD.line === "hunter" ? Number(state.mutD.m) || 0 : 0);
+const evoFoodMult = () => (evoT("h") >= 2 ? 0.75 : 1);   // สายตะกละขั้น 2+: อาหารที่ได้จากการกัด/เนื้อเน่าเหลือ 75% (use.js ตรงกัน)
 
-// โบนัส/ข้อเสียสุทธิต่อสเตตัส จากขั้นที่กำหนด (เพดานโบนัสฝั่งบวก: str +2, hp +4, agi +4, tough +2)
+// โบนัส/ข้อเสียสุทธิต่อสเตตัส จากขั้นที่กำหนด (เพดานโบนัสฝั่งบวก: str +2, hp +5, agi +4, tough +2) — hp ต้องตรงกับ rules (users/hp) และ functions/use.js, hboss.js
 function evoBonusAt(k, e) {
   const h = e?.h || 0, g = e?.g || 0, s = e?.s || 0;
-  const cap = { str: 2, hp: 4, agi: 4, tough: 2 };
+  const cap = { str: 2, hp: 5, agi: 4, tough: 2 };
   let v = 0;
   if (k === "str") v = (h >= 1 ? 1 : 0) + (h >= 4 ? 1 : 0);
-  else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
-  else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][g];
-  else if (k === "tough") v = g >= 1 ? 1 : 0;
+  else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
+  else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][g];
+  else if (k === "tough") v = g >= 1 ? 2 : 0;
+  else if (k === "st") v = g >= 3 ? -2 : 0;
   else if (k === "regen") v = g >= 3 ? -1 : 0;
   return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
 }
 function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
 
 function searchCost() { return Math.ceil((evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? (gearHas("toolkit") ? 1.6 : 2) : 1)); }                 // ค้นหาไว: เสียพลังงาน −20%
-function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.9)) : dmg; }   // ไขมันเกราะ: −10%
+function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.85)) : dmg; }   // ไขมันเกราะ: −15%
 function evoTitleKey() { const e = state.evo; return !e || state.profile?.faction !== "zombie" ? null : e.h === 4 ? "hunter" : e.g === 4 ? "giant" : e.s === 4 ? "shade" : null; }
 function evoTitleText(key) { const L = EVO_LINES[key]; return L ? `${L.icon}${L.title}` : ""; }
 
 // ซุ่มตะปบ: คืนตัวคูณดาเมจ (1 = ไม่ได้ซุ่ม) — ใช้ได้ครั้งเดียวต่อการเดินทาง 1 ครั้ง (ภายใน 55 วิ ให้เข้มกว่า rules 60 วิ)
+const AMB_ROLL = 2;   // ซุ่ม: ทอยแรก +2 (rules อนุญาตเมื่อมีแฟล็ก amb — ต้องตรงกัน)
 function ambushMult() {
   const s = evoT("s"), lt = state.profile?.lastTravel;
   if (s < 3 || typeof lt !== "number" || state.evoAmbFor === lt) return 1;
-  return serverNow() - lt <= 55000 ? (s >= 4 ? 2 : 1.5) : 1;
+  return serverNow() - lt <= 55000 ? (s >= 4 ? 4 : 2.5) : 1;
 }
 
 // ระเบียน bites: dna = 1 (กัดโดน) หรือ 6 (กัดโดน + ติดเชื้อครั้งแรก) — rules ตรวจว่า 6 ใช้ได้เฉพาะตอนเหยื่อเพิ่งติดเชื้อจริง
@@ -3960,7 +3966,7 @@ function syncEvoTitle() {
 
 // สายตะกละ: หิวเร็วขึ้นตามขั้น (หักอาหารเพิ่มเอง ทีละ 30 วิ ขณะออนไลน์ — rules อนุญาตให้ food ลดได้เสมอ)
 async function evoHungerTick() {
-  const pct = [0, 0.1, 0.2, 0.3, 0.4][evoT("h")], p = state.profile;
+  const pct = [0, 0.15, 0.3, 0.4, 0.5][evoT("h")], p = state.profile;
   if (!pct || !p || p.hp <= 0 || state.busy || state.evoHBusy) return;
   state.evoHAcc = (state.evoHAcc || 0) + (pct * 30000) / FOOD_DECAY_MS.zombie;
   const n = Math.floor(state.evoHAcc); if (n < 1) return;
@@ -3986,7 +3992,7 @@ function evoClaimWrites(u, bites, realHp = 0) {
   } else if (n > 0) msg += " (🧬 DNA วันนี้เต็มแล้ว)";
   const h = evoT("h");
   if (realHp > 0 && realHp < maxHp()) {
-    const heal = Math.min(h >= 4 ? 5 : h >= 2 ? 3 : 2, maxHp() - realHp);   // พื้นฐาน 2 / สายตะกละขั้น 2-3 = 3 / ขั้น 4 = 5 — ต้องตรงกับ rules (users/hp)
+    const heal = Math.min(h >= 4 && mutTierH() >= 4 ? 8 : h >= 4 ? 5 : h >= 2 ? 3 : 2, maxHp() - realHp);   // พื้นฐาน 2 / สายตะกละขั้น 2-3 = 3 / ขั้น 4 = 5 / มิวเตชันขั้น 8 = 8 — ต้องตรงกับ rules (users/hp)
     u[`users/${uid}/hp`] = realHp + heal; 
     msg += ` 🩸 ฟื้น HP +${heal}`;
   }

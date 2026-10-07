@@ -19,7 +19,9 @@ parts.push(cut("const hungerMs = ", "function mk(")[0]);
 parts.push(cut("const REGEN_FAST_MS", "\nfunction curStamina", 0)[0]); { const i = sc.indexOf("function curStamina"); parts.push(sc.slice(i, sc.indexOf("\n}\n", i) + 3)); }
 parts.push(cut("function evoBonusAt(", "\nfunction searchCost")[0]);
 parts.push("function evoT(k) { return state.profile?.faction === \"zombie\" && state.evo ? state.evo[k] || 0 : 0; }");
-parts.push(fs.readFileSync("/home/user/zombocalypse/tests/emulator/legacy_useItem.txt", "utf8"));
+// ฟังก์ชันเดิมที่แช่แข็งไว้ + ส่วนที่เปลี่ยนโดยตั้งใจเพียงจุดเดียว: สายตะกละขั้น 2+ กินเนื้อเน่าได้อาหาร 75% (use.js เปลี่ยนตรงกัน)
+{ const legacy = fs.readFileSync("/home/user/zombocalypse/tests/emulator/legacy_useItem.txt", "utf8"), from = "const foodGain = zombieNoFood ? 0 : (def.food || 0);"; assert(legacy.includes(from), "legacy foodGain line");
+  parts.push(legacy.replace(from, 'const foodGain = zombieNoFood ? 0 : (p.faction === "zombie" && def.zombieOnly && it.id !== "custom_food" && evoT("h") >= 2 ? Math.floor((def.food || 0) * 0.75) : (def.food || 0));')); }
 const prelude = `
 let NOW = 0, CAP = null, CONFIRM = false; const TSM = "__TS__";
 const state = { uid: "U", profile: null, stats: null, buff: null, effects: {}, evo: null, inv: {}, offset: 0 };

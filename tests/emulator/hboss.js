@@ -21,7 +21,7 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   const clientEvo = new Function(evoSrc + "; return evoBonusAt;")();
   const srvSrc = fs.readFileSync(F + "functions/hboss.js", "utf8"), eb = srvSrc.slice(srvSrc.indexOf("function evoBonus(evo, k)"), srvSrc.indexOf("async function load"));
   const srvEvo = new Function("const num = (x) => (typeof x === \"number\" && Number.isFinite(x) ? x : 0);" + eb + "; return evoBonus;")();
-  for (let h = 0; h <= 4; h++) for (let g = 0; g <= 4; g++) for (let s = 0; s <= 4; s++) for (const k of ["str", "hp", "agi", "tough"]) assert.strictEqual(srvEvo({ h, g, s }, k), clientEvo(k, { h, g, s }), `evo ${k} ${h}${g}${s}`);
+  for (let h = 0; h <= 4; h++) for (let g = 0; g <= 4; g++) for (let s = 0; s <= 4; s++) for (const k of ["str", "hp", "agi", "tough", "st", "regen"]) assert.strictEqual(srvEvo({ h, g, s }, k), clientEvo(k, { h, g, s }), `evo ${k} ${h}${g}${s}`);
   // รางวัลทุกชิ้นต้องอยู่ใน ITEMS ของเกม และผ่าน regex ของ rules ช่องกระเป๋า
   const rules = JSON.parse(fs.readFileSync(F + "database_rules.json", "utf8")).rules, rx = new RegExp(rules.inventory.$uid.$slot[".validate"].match(/matches\(\/(\^\([^/]+\)\$)\//)[1]);
   const ids = new Set(); for (const [z, b] of Object.entries(H.BOSSES)) { assert(H.W[z], "W " + z); for (const [id] of [...b.loot, ...b.bonus]) if (id) ids.add(id); }
