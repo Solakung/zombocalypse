@@ -11,7 +11,7 @@ const logJson = fs.readFileSync(R + "changelog.json", "utf8");
   const out = await pg.evaluate(async ({ part, logJson }) => {
     const mk = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; };
     const $ = (id) => document.getElementById(id); const store = {}; const LS = { get: (k, d) => (k in store ? store[k] : d), set: (k, v) => { store[k] = v; } }, lsKey = (n) => "zc_u_" + n;
-    let feed = JSON.parse(logJson); feed.entries.unshift({ id: "2026-10-07", date: "7 ต.ค.", title: "<b>ทดสอบ</b>", items: [{ k: "ปรับ", t: "<img src=x onerror=window.__pwn=1> ข้อความทดสอบ" }, "ข้อความล้วน"] });
+    let feed = JSON.parse(logJson); feed.entries.unshift({ id: "9999-01-01", date: "7 ต.ค.", title: "<b>ทดสอบ</b>", items: [{ k: "ปรับ", t: "<img src=x onerror=window.__pwn=1> ข้อความทดสอบ" }, "ข้อความล้วน"] });
     window.fetch = async () => ({ ok: true, json: async () => feed });
     const state = { profile: { createdAt: Date.now() - 86400000 * 5 } }, serverNow = () => Date.now();
     const api = new Function("$", "mk", "LS", "lsKey", "state", "serverNow", part + ";return { clogOpen, clogAuto, clogLoad };")($, mk, LS, lsKey, state, serverNow);
@@ -33,8 +33,8 @@ const logJson = fs.readFileSync(R + "changelog.json", "utf8");
     return res;
   }, { part, logJson });
   console.log(JSON.stringify(out, null, 1));
-  assert.strictEqual(out.first, true); assert(out.visible1); assert(out.text1.includes("ทดสอบ") && out.text1.includes("อัปเดตล่าสุด")); assert.strictEqual(out.xss, false, "html must not execute"); assert.strictEqual(out.saved, "2026-10-07");
-  assert.strictEqual(out.hscroll1, false); assert(out.hidden); assert.strictEqual(out.second, false); assert(out.entriesAll >= 2); assert.strictEqual(out.newPlayerShown, false); assert.strictEqual(out.newPlayerSaved, "2026-10-07"); assert(out.blockedByOther);
+  assert.strictEqual(out.first, true); assert(out.visible1); assert(out.text1.includes("ทดสอบ") && out.text1.includes(JSON.parse(logJson).entries[0].title)); assert.strictEqual(out.xss, false, "html must not execute"); assert.strictEqual(out.saved, "9999-01-01");
+  assert.strictEqual(out.hscroll1, false); assert(out.hidden); assert.strictEqual(out.second, false); assert(out.entriesAll >= 2); assert.strictEqual(out.newPlayerShown, false); assert.strictEqual(out.newPlayerSaved, "9999-01-01"); assert(out.blockedByOther);
   assert.strictEqual(out.offline, false); assert.strictEqual(out.badFile, false);
   // ภาพ 360px (รายการจริงจาก changelog.json)
   await pg.evaluate(({ part, logJson }) => {

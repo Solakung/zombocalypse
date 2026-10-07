@@ -54,13 +54,15 @@ const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data); 
 const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.data);   // 🔨 คราฟต์อาวุธระดับต้น–กลาง (functions/forge.js)
 const useCall = (data) => httpsCallable(fns, "useAct")(data).then((r) => r.data);   // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ (functions/use.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
+const fxwCall = (data) => httpsCallable(fns, "fxwAct")(data).then((r) => r.data);   // ⚔️ อาวุธติดสถานะ ค้นเจอ (functions/fxw.js; คราฟต์ผ่าน forgeCall)
+const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data);   // 🏹 บอสเผ่ามนุษย์สำหรับซอมบี้ (functions/hboss.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1052";
+const APP_VERSION = "2026-10-07.0333";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -402,7 +404,7 @@ const ITEMS = {
 
 // อาหาร custom ที่ admin เสก (id = custom_food) เก็บค่าสเตตัสไว้ในตัวไอเทมเอง
 const gearFields = (x) => ({ name: x.name, gslot: x.gslot, red: x.red, type: "gear", ...(x.icon ? { icon: x.icon } : {}) });   // เกราะ/อุปกรณ์ custom ที่แอดมินเสก
-const defOf = (x) => (x.id === "custom" ? x : x.id === "custom_gear" ? { icon: "🛡️", ...x, slot: x.gslot, type: "gear" } : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) || hasFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
+const defOf = (x) => (x.id === "custom" ? (x.icon ? x : { icon: "🗡️", ...x }) : x.id === "custom_gear" ? { icon: "🛡️", ...x, slot: x.gslot, type: "gear" } : x.id === "custom_food" ? { icon: x.type === "material" ? "✨" : hasStatFx(x) || hasFx(x) ? "🧪" : "🍽️", ...x } : ITEMS[x.id]);
 const ITEM_NUM_KEYS = ["food", "water", "heal", "stamina", ...STAT_KEYS.map((k) => "s_" + k), ...STAT_KEYS.map((k) => "b_" + k), "bmin", ...FX_KEYS.map((t) => "e_" + t), "emin", ...FX_CURE_KEYS.map((t) => "c_" + t)];
 const foodFields = (x) => ({ name: x.name, type: x.type || "consumable", ...(x.icon ? { icon: x.icon } : {}), ...ITEM_NUM_KEYS.reduce((o, k) => (x[k] ? { ...o, [k]: x[k] } : o), {}) });
 const effectText = (d) => [d.heal && `HP ${sgn(d.heal)}`, d.food && `อาหาร ${sgn(d.food)}`, d.water && `น้ำ ${sgn(d.water)}`, d.stamina && `พลังงาน ${sgn(d.stamina)}`,
@@ -1236,6 +1238,8 @@ function startGame() {
   state.started = true;
   state.sessionStart = serverNow() - 30000;
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
+  setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);
+  setTimeout(() => { try { if (state.profile?.faction === "zombie") mutSync(); } catch { /* ข้าม */ } }, 6000);   // โหลดขั้นมิวเตชัน (ฮีลตอนกัดขั้น 8)   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
     state.stats = s.val(); state.statsLoaded = true;
@@ -1274,7 +1278,7 @@ function startGame() {
     $("btn-admin").classList.toggle("hidden", !isStaff());
     document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
     if (state.statsLoaded && !state.stats) openStatModal();
-    renderBars(); renderInv();
+    renderBars(); renderInv(); if (state.hb) { try { hbRender(); } catch { /* ข้าม */ } }
     if (p.hp === 0) processDeath();
   });
   setInterval(renderBars, 1000);
@@ -1325,7 +1329,7 @@ async function enterZone(z, initial = false, moved = false) {
     if (!initial) {
       if (!moved) {
         if (state.profile.hp <= 0) return;
-        if (state.boss) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
+        if (state.boss || state.hb) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
         const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
         if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
         if (cur < cost) return toast(`พลังงานไม่พอเดินทาง (ต้องใช้ ${cost})`);
@@ -1507,12 +1511,11 @@ function listenBites() {
     if (!s.exists() || state.claimingBite) return;
     state.claimingBite = true;
     try {
+      await state.evoReady;
       const fd = curFood();
       const u = { [`bites/${state.uid}`]: null };
-      const gain = Math.min(BITE_FOOD, 100 - fd);
+      const gain = Math.min(Math.floor(BITE_FOOD * evoFoodMult()), 100 - fd);
       if (gain > 0) hungerShift(u, "food", gain);
-      
-      await state.evoReady;
       
       // ดึงค่าเลือดที่แท้จริงจากฐานข้อมูลก่อนคำนวณฮีล
       const hpSnap = await get(ref(db, `users/${state.uid}/hp`));
@@ -1615,7 +1618,7 @@ function renderInv() {
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
       if (eq) li.classList.add("equipped");
-      { const sp = mk("span", "", `🗡️ ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})`); sp.style.color = durColor(durFrac(it, def)); li.append(sp); }
+      { const wf = wfxOf(it), sp = mk("span", "", `${it.id === "custom" && it.icon ? String(it.icon).slice(0, 4) : "🗡️"} ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})${wf ? " • " + wfxLabel(wf) : ""}`); sp.style.color = durColor(durFrac(it, def)); if (wf) sp.title = `ติดสถานะ ${FX_TYPES[wf.t].name} ${wf.p}% ต่อการโจมตีที่โดน (มนุษย์ใช้ได้เท่านั้น)`; li.append(sp); }
       
       const btnGrp = mk("div", "row-btns");
       btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
@@ -1674,6 +1677,14 @@ function renderCraft() {
     if (mx >= 2) { const g = mk("span", "row-btns"); if (mx >= 5) g.append(btn("×5", () => craftMany(id, 5), "btn ghost mini")); g.append(btn(`สูงสุด ×${Math.min(mx, 20)}`, () => craftMany(id, 20), "btn ghost mini")); li.append(g); }
     ul.append(li);
   });
+  if (T("fxw_on", 0) === 1) {   // ⚔️ อาวุธติดสถานะ (ชั้น 1–2 คราฟต์ได้ • ชั้น 3 ค้นเจอเท่านั้น)
+    ul.append(mk("li", "hub-day", "⚔️ อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น)"));
+    Object.entries(FXW).filter(([, d]) => d.need).forEach(([k, d]) => {
+      const can = state.zone === "safe" && Object.entries(d.need).every(([m, n]) => (state.inv[m]?.qty || 0) >= n), li = mk("li");
+      const nm = mk("span", "", `${d.icon} ${d.name} (ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)}) ← ` + Object.entries(d.need).map(([m, n]) => `${ITEMS[m].icon} ${state.inv[m]?.qty || 0}/${n}`).join(" "));
+      const b = btn("ประกอบ", () => fxwCraft(k), "btn primary mini"); b.disabled = !can; li.append(nm, b); ul.append(li);
+    });
+  }
   $("craft-hint").textContent = state.zone === "safe" ? "" : "คราฟต์ได้เฉพาะใน Safe Zone";
 }
 
@@ -1831,7 +1842,7 @@ async function dropItem(slot) {
     id: it.id, qty: 1, src: slot,
     ...(it.dur ? { dur: it.dur } : {}),
     ...(it.maxDur && it.id !== "custom" && it.id !== "custom_food" ? { maxDur: it.maxDur } : {}),   // ความทนสูงสุดที่ลดจากการซ่อมต้องติดไปด้วย (กันทิ้งแล้วเก็บคืนเพื่อรีเซ็ต)
-    ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon" } : {}),
+    ...(it.id === "custom" ? { name: it.name, dmg: it.dmg, maxDur: it.maxDur, type: "weapon", ...(it.icon ? { icon: String(it.icon).slice(0, 4) } : {}), ...(wfxOf(it) ? { fx: wfxOf(it) } : {}) } : {}),
     ...(it.id === "custom_food" ? foodFields(it) : {}),
     ...(it.id === "custom_gear" ? gearFields(it) : {})
   };
@@ -1868,7 +1879,7 @@ function renderGround() {
 function invAddUpdate(u, itemId, qty, src, dur, customData, maxDur) {
   if (itemId === "custom" && customData) {
     const k = src ? `g_${src}` : push(ref(db, "inventory/" + state.uid)).key;
-    u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(src ? { src } : {}) };
+    u[`inventory/${state.uid}/${k}`] = { id: "custom", qty: 1, dur: customData.dur, name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(customData.icon ? { icon: customData.icon } : {}), ...(customData.fx ? { fx: customData.fx } : {}), ...(src ? { src } : {}) };
     return;
   }
   if (itemId === "custom_food" && customData) {
@@ -1909,7 +1920,7 @@ async function pickup(key, btnEl) {
   const g = state.ground[key]; if (!g) return;
   if (g.id === "skill") return learnScroll(key, btnEl);
   const u = { [`zoneItems/${state.zone}/${key}`]: null };
-  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur } : (g.id === "custom_food" || g.id === "custom_gear") ? g : null;
+  const customData = g.id === "custom" ? { name: g.name, dmg: g.dmg, dur: g.maxDur, icon: g.icon, fx: wfxOf(g) } : (g.id === "custom_food" || g.id === "custom_gear") ? g : null;
   
   invAddUpdate(u, g.id, g.qty || 1, key, g.dur, customData, g.maxDur);
   try { await update(ref(db), u); toast(`เก็บ ${defOf(g).name} แล้ว`); } 
@@ -1917,6 +1928,7 @@ async function pickup(key, btnEl) {
 }
 
 async function equip(slot, isEquipped) {
+  if (!isEquipped && state.inv[slot]?.fx && state.profile?.faction !== "human") return toast("อาวุธติดสถานะ ใช้ได้เฉพาะมนุษย์");
   try { await update(ref(db), { ["users/" + state.uid + "/equipped"]: isEquipped ? null : slot }); }
   catch (e) { toast(errMsg(e)); }
 }
@@ -2004,7 +2016,7 @@ async function scavengeOnce() {
   const p = state.profile;
   if (p.hp <= 0) return;
   if (state.zone === "casino") return toast("บ่อนนี้ไม่มีอะไรให้ค้น — ไปแลกของเป็นชิปหรือเล่นเกมแทน");
-  if (state.boss) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
+  if (state.boss || state.hb) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
   if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
   const fd = curFood();
@@ -2065,6 +2077,8 @@ async function scavengeOnce() {
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
+    try { hbAfterSearch(found); } catch { /* ข้าม */ }
+    try { fxwAfterSearch(); } catch { /* ข้าม */ }
     try { evtSearchHook(); fxSearchHook(); } catch { /* ข้าม */ }
     try { if (!hcFind && found !== "zombie" && found !== "boss") { encAfterSearch(); nemAfterSearch(); } } catch { /* ข้าม */ }
   }
@@ -2411,6 +2425,72 @@ $("boss-bandage").addEventListener("click", () => bossRound("bandage"));
 $("boss-medkit").addEventListener("click", () => bossRound("medkit"));
 $("boss-flee").addEventListener("click", () => bossRound("flee"));
 $("boss-claim").addEventListener("click", claimBossReward);
+
+// ---- 🏹 บอสเผ่ามนุษย์ (ฝั่งซอมบี้) — functions/hboss.js • ปิดอยู่จนกว่าเจ้าของตั้ง tune hb_on = 1
+// ผู้รอดชีวิตที่ไม่ยอมเข้า Safe Zone ประจำโซน: ซอมบี้ค้นหาแล้วมีโอกาสเจอ (โอกาสเท่าบอสฝั่งมนุษย์ ทอยที่เซิร์ฟเวอร์) สู้เป็นรอบ โจมตี/หนี รับรางวัลเป็นของซอมบี้
+const HB_ZONES = ["forest", "police", "port", "factory", "hospital", "tunnel"];   // ต้องตรงกับ W ใน functions/hboss.js
+const hbOn = () => T("hb_on", 1) === 1;   // เปิดเป็นค่าเริ่มต้น — ปิดด้วย tune hb_on = 0
+const hbMsg = (e) => { const m = String(e?.message || ""); return !m || /^(internal|unknown)$/i.test(m) ? errMsg(e) : m; };
+function hbLog(t) { const ul = $("hb-log"); ul.append(mk("li", "", t)); while (ul.children.length > 30) ul.firstChild.remove(); ul.scrollTop = ul.scrollHeight; }
+function hbRender() {
+  if (state.hb && state.profile?.faction === "zombie" && !(state.profile.hp > 0) && state.hb.hp > 0) state.hb = null;   // ล้มลงแล้ว: เซิร์ฟเวอร์ปิดการสู้ให้แล้ว
+  const m = $("hb-modal"), f = state.hb, p = state.profile, open = !!(f && p && p.faction === "zombie" && (p.hp > 0 || f.hp <= 0));
+  m.classList.toggle("hidden", !open);
+  if (!open) return;
+  const won = f.hp <= 0, busy = !!state.hbBusy, stun = effActive("stun");
+  $("hb-title").textContent = `${f.icon} ${f.name}`;
+  { const art = $("hb-art"); if (art) { const src = `img/boss/${f.art}.webp`; art.classList.add("hidden"); imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } }
+  $("hb-tag").textContent = f.tag + (f.shieldMax ? ` • 🛡️ โล่ ${f.shield}/${f.shieldMax}` : "") + (f.pdot ? ` • 🩸 แผลติดตัว −${f.pdot.per}/รอบ (อีก ${f.pdot.n} รอบ)` : "") + (f.weak ? ` • 💉 อ่อนแรง (โจมตีอีก ${f.weak.n} ครั้งเหลือ ${100 - f.weak.pct}%)` : "");
+  $("bar-hb").style.width = Math.max(0, (f.hp / f.max) * 100) + "%"; $("txt-hb").textContent = `เขา ${Math.max(0, f.hp)}/${f.max}`;
+  $("bar-hb-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-hb-me").textContent = `HP ${p.hp}/${maxHp()}`;
+  $("hb-attack").classList.toggle("hidden", won); $("hb-attack").disabled = busy || stun; $("hb-attack").textContent = stun ? "😵 มึนงง" : "🦷 ขย้ำ";
+  $("hb-flee").classList.toggle("hidden", won); $("hb-flee").disabled = busy;
+  for (const [id, ic, nm] of [["bandage", "🩹", "ผ้าพันแผล"], ["medkit", "🧰", "ชุดปฐมพยาบาล"], ["moss", "🌿", "มอส"]]) {   // ใช้ไอเทมรักษาระหว่างสู้ (เสียเทิร์น) — ตรง HEAL_ITEMS ใน hboss.js
+    const q = state.inv[id]?.qty || 0, b = $("hb-" + id); b.classList.toggle("hidden", won || !q); b.disabled = busy || p.hp >= maxHp(); b.textContent = `${ic} ${nm} ×${q}`;
+  }
+  $("hb-claim").classList.toggle("hidden", !won); $("hb-claim").disabled = busy;
+}
+async function hbDo(a, id) { const d = id ? { a, id } : { a }; try { return await hbCall(d); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((r) => setTimeout(r, 800)); return await hbCall(d); } }   // ติดล็อกลองใหม่ 1 ครั้ง
+async function hbRound(action, id) {
+  if (state.hbBusy || !state.hb || state.hb.hp <= 0) return;
+  state.hbBusy = true; hbRender();
+  try {
+    const f0 = state.hb, r = await hbDo(action, id);
+    (r.log || []).forEach(hbLog); state.hb = r.fight || null;
+    if (r.won) { hbLog(`🏆 ${f0.name}ล้มลงแล้ว!`); logLine(`${f0.icon} คุณล้ม${f0.name}ได้สำเร็จ!`, "combat"); try { stat("boss"); } catch { /* ข้าม */ } }
+    else if (r.dead) logLine(`${f0.icon} ${f0.name}สู้คุณจนล้มลง…`, "system");
+    else if (r.fled) logLine(`คุณหนี${f0.name}มาได้`, "info");
+  } catch (e) { if (/ไม่มีการต่อสู้/.test(String(e?.message))) state.hb = null; toast(hbMsg(e)); }
+  finally { state.hbBusy = false; hbRender(); }
+  if (state.hb && state.hb.hp <= 0) await hbClaim();
+}
+async function hbClaim() {
+  if (state.hbBusy || !state.hb || state.hb.hp > 0) return;
+  state.hbBusy = true; hbRender();
+  try {
+    const f0 = state.hb, r = await hbDo("claim"), got = (r.claimed || []).map((x) => `${ITEMS[x.id]?.icon || ""} ${ITEMS[x.id]?.name || x.id}${x.qty > 1 ? " ×" + x.qty : ""}`).join(" + ");
+    state.hb = null; logLine(`🏆 รางวัลจาก${f0.name}: ${got}`, "combat"); toast(`ได้รับ ${got}`);
+  } catch (e) { if (/ไม่มีการต่อสู้/.test(String(e?.message))) state.hb = null; toast(hbMsg(e)); }
+  finally { state.hbBusy = false; hbRender(); }
+}
+async function hbRestore() {   // เข้าเกม/รีเฟรชกลางการสู้ → เปิดต่อ
+  if (!hbOn() || state.profile?.faction !== "zombie" || state.hb) return;
+  try { const r = await hbCall({ a: "state" }); if (r?.fight) { state.hb = r.fight; $("hb-log").textContent = ""; hbLog(`${r.fight.icon} ${r.fight.name}ยังขวางทางคุณอยู่!`); hbRender(); } } catch { /* ข้าม */ }
+}
+async function hbAfterSearch(found) {   // ค้นหาเสร็จ → ให้เซิร์ฟเวอร์ทอยโอกาสเจอเผ่ามนุษย์ (ไม่ทอยถ้าเจอบอส/ไม่อยู่โซนที่มีเผ่า)
+  const p = state.profile;
+  if (!hbOn() || p?.faction !== "zombie" || !(p.hp > 0) || state.hb || found === "boss" || !HB_ZONES.includes(state.zone)) return;
+  try {
+    const r = await hbCall({ a: "roll" }); if (!r?.hit) return;
+    if (!r.fight) { logLine(`${(r.log || [])[0] || "ผู้รอดชีวิตโผล่มา"} — คุณถูกซุ่มโจมตีจนล้มลง…`, "system"); return; }
+    state.hb = r.fight; $("hb-log").textContent = ""; (r.log || []).forEach(hbLog); logLine(`${r.fight.icon} ${r.log[0]}`, "combat"); hbRender();
+  } catch { /* ข้าม — ค้นหาปกติไม่ควรล้มเพราะบอส */ }
+}
+$("hb-attack").addEventListener("click", () => hbRound("attack"));
+$("hb-flee").addEventListener("click", () => hbRound("flee"));
+for (const id of ["bandage", "medkit", "moss"]) $("hb-" + id).addEventListener("click", () => hbRound("heal", id));
+$("hb-claim").addEventListener("click", hbClaim);
+// ---- /บอสเผ่ามนุษย์
 
 /* =========================================================
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
@@ -2771,6 +2851,52 @@ function updateAttackButtons() {
   });
 }
 
+// ---- ⚔️ อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น) — functions/fxw.js (ตัวเลขต้องตรงกัน: tests/emulator/fxw.js) • ปิดอยู่จนกว่า tune fxw_on = 1 (คราฟต์/ค้นเจอ; แอดมินเสกได้เสมอ)
+// ช่องอาวุธ = id "custom" + icon + fx {t ชนิด, v ความแรง, m นาที, p โอกาสติด % ต่อการโจมตีที่โดน} • ผู้ใช้ต้องเป็นมนุษย์ ได้ผลกับเป้าทั้งสองฝ่าย: เกมแนบ wfx ในบันทึกโจมตี (rules ตรวจว่าตรงกับช่อง fx ของอาวุธที่ถือ) ผู้ถูกโจมตีทอยโอกาสแล้วเขียนสถานะลงตัวเอง (กิ่ง effects เดิมของมอนสเตอร์)
+const FXW = {
+  fxw_cleaver: { name: "มีดสับกระดูก", icon: "🔪", dmg: 11, dur: 24, tier: 1, fx: { t: "bleed", v: 2, m: 3, p: 30 }, need: { scrap: 8, leather_scrap: 1, rusty_nails: 2 } },
+  fxw_venom: { name: "มีดอาบพิษ", icon: "🗡️", dmg: 9, dur: 22, tier: 1, fx: { t: "poison", v: 1, m: 5, p: 35 }, need: { scrap: 6, chem: 3, leather_scrap: 1 } },
+  fxw_stunbat: { name: "กระบองช็อต", icon: "🏏", dmg: 8, dur: 16, tier: 1, fx: { t: "stun", v: 1, m: 1, p: 15 }, need: { scrap: 8, battery_pack: 1, copper_wire: 2 } },
+  fxw_ripaxe: { name: "ขวานผ่าซาก", icon: "🪓", dmg: 16, dur: 16, tier: 2, fx: { t: "bleed", v: 3, m: 3, p: 30 }, need: { scrap: 14, steel_plate: 1, rusty_nails: 3 } },
+  fxw_hammer: { name: "ค้อนทุบกระดูก", icon: "🔨", dmg: 14, dur: 18, tier: 2, fx: { t: "dice", v: -1, m: 3, p: 15 }, need: { scrap: 12, steel_plate: 1, duct_tape: 1 } },
+  fxw_dartbow: { name: "หน้าไม้ลูกดอกพิษ", icon: "🏹", dmg: 20, dur: 14, tier: 2, fx: { t: "poison", v: 3, m: 3, p: 30 }, need: { scrap: 12, rope_coil: 2, steel_plate: 1, chem: 4 } },
+  fxw_chainsaw: { name: "ดาบเลื่อยโซ่", icon: "⛓️", dmg: 26, dur: 14, tier: 3, fx: { t: "bleed", v: 3, m: 5, p: 30 } },
+  fxw_taser: { name: "ปืนช็อตไฟฟ้า", icon: "⚡", dmg: 22, dur: 12, tier: 3, fx: { t: "stun", v: 1, m: 1, p: 35 } },
+  fxw_plague: { name: "ดาบกาฬโรค", icon: "☣️", dmg: 24, dur: 14, tier: 3, fx: { t: "poison", v: 3, m: 5, p: 35 } }
+};
+const WFX_TYPES = ["bleed", "poison", "stun", "dice"];
+// ช่อง fx ที่ใช้ได้จริง (null ถ้าไม่ใช่อาวุธติดสถานะ/ค่าผิดปกติ) — v: เลือดไหล/พิษ 1–3 • ทอย −2..−1 • นาที 1–5 • มึนงง 1 นาที
+const wfxOf = (it) => {
+  const f = it && it.id === "custom" && it.fx; if (!f || !WFX_TYPES.includes(f.t)) return null;
+  const v = Number(f.v), m = Number(f.m), pr = Number(f.p);
+  if (!(m >= 1 && m <= 5) || !(pr >= 1 && pr <= 100) || !(v >= -2 && v <= 3) || !v) return null;
+  if (f.t === "dice" ? !(v < 0) : v < 0) return null; if (f.t === "stun" && m !== 1) return null;
+  return { t: f.t, v, m, p: pr };
+};
+const wfxLabel = (f) => `${FX_TYPES[f.t].icon} ${f.t === "poison" && f.v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[f.t].name} ${f.p}%`;
+const fxwSlot = (k) => { const d = FXW[k]; return { id: "custom", qty: 1, dur: d.dur, maxDur: d.dur, name: d.name, dmg: d.dmg, type: "weapon", icon: d.icon, fx: { ...d.fx } }; };   // ต้องตรงกับ slotOf ใน functions/fxw.js
+const stunImmLeft = () => Math.max(0, (LS.get(lsKey("simm"), 0) || 0) - serverNow());   // กันมึนซ้ำ: 3 นาทีหลังโดนมึน
+// ผู้ถูกโจมตี (ซอมบี้หรือมนุษย์) รับสถานะจากอาวุธของมนุษย์ที่โจมตีโดน (เรียกใน resolveAttack เมื่อ landed) — ทอยโอกาสที่นี่ แล้วเขียนลง u (rules: เขียนได้เมื่อ HP ลดในคำสั่งเดียวกัน)
+function wfxHit(u, a) {
+  const f = a.wfx; if (!f || !WFX_TYPES.includes(f.t) || state.players[a.from]?.faction !== "human") return "";
+  const v = Number(f.v), m = Number(f.m), pr = Number(f.p); if (!(m >= 1 && m <= 5) || !(pr >= 1 && pr <= 100) || !v) return "";
+  const pg = f.t === "poison" && (gearHas("chem_gloves") || gearHas("mut_fang3") || gearFxFlag("poisonHalf"));   // ถุงมือ/ต่อมพิษ: โอกาสติดพิษครึ่งเดียว (เหมือน monFx)
+  if (Math.random() * 100 >= (pg ? pr * 0.5 : pr) || effActive(f.t) || (f.t === "poison" && poisonImmLeft() > 0) || (f.t === "stun" && stunImmLeft() > 0)) return "";
+  u[`effects/${state.uid}/${f.t}`] = { bstart: serverTimestamp(), mins: f.t === "stun" ? 1 : m, v: f.t === "stun" ? 1 : v, tick: serverTimestamp() }; stat("fx");
+  if (f.t === "stun") LS.set(lsKey("simm"), serverNow() + 60000 + 180000);
+  return ` ⚠️ ติด${FX_TYPES[f.t].icon}${f.t === "poison" && v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[f.t].name}`;
+}
+async function fxwAfterSearch() {   // มนุษย์ค้นหาเสร็จ → ให้เซิร์ฟเวอร์ทอยโอกาสเจออาวุธติดสถานะ (ไม่เรียกถ้า tune ปิด/ไม่ใช่มนุษย์)
+  const p = state.profile; if (T("fxw_on", 0) !== 1 || p?.faction !== "human" || !(p.hp > 0) || state.zone === "safe" || state.zone === "casino") return;
+  try { const r = await fxwCall({ a: "find" }); if (r?.got) { logLine(`${r.got.icon} ค้นเจออาวุธติดสถานะ: ${r.got.name}!`, "combat"); toast(`เจอ ${r.got.icon} ${r.got.name}`); } } catch { /* ข้าม — ค้นหาปกติไม่ควรล้มเพราะนี่ */ }
+}
+async function fxwCraft(k) {
+  if (state.busy) return; state.busy = true;
+  try { try { await forgeCall({ a: "craft", id: k }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((r) => setTimeout(r, 800)); await forgeCall({ a: "craft", id: k }); } toast(`ประกอบ ${FXW[k].icon} ${FXW[k].name} แล้ว`); logLine(`🔧 ประกอบ ${FXW[k].icon} ${FXW[k].name} (${wfxLabel(FXW[k].fx)})`, "info"); }
+  catch (e) { toast(String(e?.message || "").replace(/^.*?:\s*/, "") || errMsg(e)); }
+  finally { state.busy = false; renderCraft(); }
+}
+// ---- /อาวุธติดสถานะ
 async function attack(targetUid, targetName = "เป้าหมาย") {
   if (state.profile.hp <= 0) return;
   if (state.zone === "casino") return toast("ในบ่อนห้ามต่อสู้ — ยามจะลากคุณออกไป");
@@ -2805,9 +2931,10 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 
   const w = equippedWeapon();
   const dm = effV("dice");
-  const rb = sty === "sharp" ? skd.power : 0;   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
+  const am = ambushMult();   // ซุ่มตะปบ (เลื้อยคลานขั้น 3+): ดาเมจ ×2.5/×4 และทอย +2 ครั้งเดียวต่อการเดินทาง
+  const rb = (sty === "sharp" ? skd.power : 0) + (am > 1 ? AMB_ROLL : 0);   // โจมตีเฉียบ: ค่าทอย +2 (rules บวกเพดานให้เท่ากัน)
   const roll = Math.max(1, Math.min(6 + Math.max(0, dm) + rb, d6() + dm + rb));   // rules จำกัดเพดานตามค่า dice ที่ติดอยู่
-  const am = ambushMult(), wd0 = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w), wd = am > 1 ? Math.floor(wd0 * am) : wd0;   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
+  const wd0 = sty === "smash" ? Math.floor(myDmg(w) * skd.power) : myDmg(w), wd = am > 1 ? Math.floor(wd0 * am) : wd0;   // ฟาดหนัก: ×1.3 (floor ไม่ให้เกินเพดานใน rules)
   // คีย์ = uid ผู้โจมตี → 1 คนค้างการโจมตีใส่เป้าหมายเดียวกันได้ทีละครั้งเท่านั้น
   const attackData = {
     from: state.uid, fromName: p.username, roll, zone: state.zone, ts: serverTimestamp(),
@@ -2815,6 +2942,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
     wdmg: wd,
     ...(am > 1 ? { amb: true } : {}),
     ...(evoT("h") >= 3 ? { bl: true } : {}),
+    ...(w && p.faction === "human" && wfxOf(w.it) ? { wfx: wfxOf(w.it) } : {}),   // อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น — ได้ผลกับทั้งซอมบี้และมนุษย์)
     ...(skId ? { sk: skId, ...(skd.basic ? {} : { skt: skd.type, skn: skd.name, ski: skd.icon }) } : {})
   };
   if (skId) skillUseWrites(selfUpdate, skId);
@@ -2927,6 +3055,7 @@ async function resolveAttack(key, a) {
   const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
+  try { const af = state.players[key]?.faction; if (af === "zombie" || af === "human") { const sf = af === "zombie" ? "z" : "h"; achBump("patk" + sf); if (landed) { achBump("phit" + sf); achBump("pdmg" + sf, dmg); } } if (landed && newHp === 0) achBump("pdie"); if (p.faction === "zombie") { const L = pvpLineKey(); achBump("qa" + L); if (landed) { achBump("qh" + L); achBump("qd" + L, dmg); if (newHp === 0) achBump("qx" + L); } } } catch { /* สถิติพลาดไม่กระทบเกม */ }   // 📉 สถิติ PvP (แดชบอร์ดเจ้าของ): ผู้ถูกโจมตีเป็นคนบันทึก แยกตามฝ่ายผู้โจมตี
   let text = `⚔ ${a.fromName}${skTxt} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
   if (landed) {
@@ -2936,6 +3065,7 @@ async function resolveAttack(key, a) {
       if (a.bl && !(effActive("bleed") && effV("bleed") > 2)) { u[`effects/${state.uid}/bleed`] = bleedRec(); text += " 🩸"; }
       if (p.faction === "human") { u[`users/${state.uid}/infected`] = serverTimestamp(); text += " 🦠"; }
     }
+    try { text += wfxHit(u, a); } catch { /* ข้าม */ }   // อาวุธติดสถานะของมนุษย์ที่โจมตีซอมบี้
     u[`users/${state.uid}/hp`] = newHp;
     if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; try { bountyKillWrite(u, state.uid, a.fromName); } catch { /* ข้าม */ } }
   } else if (dodged) {
@@ -2980,6 +3110,27 @@ function buildStatInputs(P) {
   FX_CURE_KEYS.forEach((t) => box.append(cb(`${P}fx-c-${t}`, `รักษา ${FX_TYPES[t].icon} ${FX_TYPES[t].name}`)));
 }
 
+// ---- ⚔️ แอดมิน: พรีเซ็ต + ช่องสถานะพ่วงของอาวุธ Custom (P = "adm-" เสกไอเทม / "adm-q-" รางวัลภารกิจ)
+function buildWfxAdmin(P) {
+  const box = $(P + "custom-fields"); if (!box || $(P + "wfx-t")) return;
+  const num = (id, ph, min, max) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.id = id; i.placeholder = ph; return i; };
+  const preset = document.createElement("select"); preset.id = P + "wfx-preset"; preset.append(new Option("— พรีเซ็ตอาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น) —", ""));
+  Object.entries(FXW).forEach(([k, d]) => preset.append(new Option(`${d.icon} ${d.name} • ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)}${d.need ? "" : " • ชั้นสูง"}`, k)));
+  const icon = document.createElement("input"); icon.id = P + "custom-icon"; icon.placeholder = "ไอคอน (อีโมจิ — ไม่ใส่ก็ได้)"; icon.maxLength = 4;
+  const sel = document.createElement("select"); sel.id = P + "wfx-t"; sel.append(new Option("ไม่พ่วงสถานะ", "")); WFX_TYPES.forEach((t) => sel.append(new Option(`${FX_TYPES[t].icon} ${FX_TYPES[t].name}`, t)));
+  const v = num(P + "wfx-v", "ความแรง (เลือดไหล/พิษ 1–3 • ทอย 1–2 = ลดค่าทอย)", 1, 3), m = num(P + "wfx-m", "ระยะเวลา นาที (1–5 • มึนงง = 1 นาที)", 1, 5), pr = num(P + "wfx-p", "โอกาสติด % ต่อการโจมตีที่โดน (1–100)", 1, 100);
+  preset.addEventListener("change", () => { const d = FXW[preset.value]; if (!d) return; $(P + "custom-name").value = d.name; $(P + "custom-dmg").value = d.dmg; $(P + "custom-dur").value = d.dur; icon.value = d.icon; sel.value = d.fx.t; v.value = Math.abs(d.fx.v); m.value = d.fx.m; pr.value = d.fx.p; });
+  box.append(preset, icon, sel, v, m, pr, mk("p", "muted", "อาวุธติดสถานะ: มนุษย์ใช้ได้เท่านั้น ได้ผลกับทั้งซอมบี้และมนุษย์ที่ถูกโจมตี (ผู้ถูกโจมตีทอยโอกาสเอง) • เลือกพรีเซ็ตเพื่อกรอกช่องด้านบนให้อัตโนมัติ แล้วแก้เองได้"));
+}
+function wfxAdminRead(P) {
+  const out = {}, icon = [...(($(P + "custom-icon") || {}).value || "").trim()].slice(0, 2).join(""), t = ($(P + "wfx-t") || {}).value || "";
+  if (icon) out.icon = icon;
+  if (WFX_TYPES.includes(t)) {
+    const mag = Math.max(1, Math.min(t === "dice" ? 2 : 3, parseInt($(P + "wfx-v").value, 10) || 1)), mins = t === "stun" ? 1 : Math.max(1, Math.min(5, parseInt($(P + "wfx-m").value, 10) || 3)), pr = Math.max(1, Math.min(100, parseInt($(P + "wfx-p").value, 10) || 30));
+    out.fx = { t, v: t === "dice" ? -mag : t === "stun" ? 1 : mag, m: mins, p: pr };
+  }
+  return out;
+}
 function buildAdmin() {
   buildAdminWB();
   fillSelect($("adm-ann-zone"), [["all", "ทุกโซน"], ...Object.entries(ZONES).map(([id, z]) => [id, "เฉพาะ " + z.name])]);
@@ -2988,10 +3139,10 @@ function buildAdmin() {
   fillSelect($("adm-ev-zone"), Object.entries(ZONES).filter(([id]) => id !== "safe").map(([id, z]) => [id, z.name]));
   fillSelect($("adm-ev-type"), Object.entries(EVENT_TYPES).map(([id, t]) => [id, `${t.icon} ${t.name}`]));
   const itemOpts = Object.entries(ITEMS).map(([id, i]) => [id, `${i.icon} ${i.name}`]);
-  itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
+  itemOpts.push(...Object.entries(FXW).map(([k, d]) => [k, `⚔️ ${d.icon} ${d.name} • ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)} (มนุษย์ใช้ได้เท่านั้น)`])); itemOpts.push(["custom", "✨ สร้างอาวุธเอง (Custom)"], ["custom_gear", "🛡️ สร้างเกราะ/อุปกรณ์เอง (Custom)"], ["custom_food", "🍽️ สร้างไอเทมเอง (อาหาร/น้ำ/สเตตัส/พิเศษ)"], ["skill", "📖 สกิลเอง (custom — ได้เป็นสกิล ไม่ใช่ไอเทม)"]);
   fillSelect($("adm-item"), itemOpts);
   fillSelect($("adm-q-item"), itemOpts);
-  buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor(); buildGiveUi();
+  buildStatInputs("adm-"); buildStatInputs("adm-q-"); buildStatEditor(); buildGiveUi(); buildWfxAdmin("adm-"); buildWfxAdmin("adm-q-");
   buildSkillBox("adm-skill-box", "adm-spk-"); buildSkillBox("adm-q-skill-box", "adm-q-spk-");
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
@@ -3026,18 +3177,22 @@ $("adm-ann-send").addEventListener("click", async () => {
 
 // P = คำนำหน้า id ของฟอร์ม: "adm-" = เสกไอเทม, "adm-q-" = รางวัลภารกิจ
 function readAdminItem(P = "adm-") {
-  const itemId = $(P + "item").value;
+  let itemId = $(P + "item").value;
+  const fxp = FXW[itemId] ? itemId : null; if (fxp) itemId = "custom";   // ⚔️ พรีเซ็ตอาวุธติดสถานะในรายการไอเทมโดยตรง = อาวุธ custom ที่มี fx
   // สกิล: คืน skill (null ถ้ากรอกไม่ผ่าน — readSkillForm toast บอกเหตุผลแล้ว) ผู้เรียกต้องเช็กก่อนใช้
   if (itemId === "skill") return { itemId, skill: readSkillForm(P + "spk-") };
   const qty = Math.max(1, Math.min(99, parseInt($(P + "qty").value, 10) || 1));
   const isFood = itemId === "custom_food", isGear = itemId === "custom_gear";
   let customData = null, def = ITEMS[itemId];
 
-  if (itemId === "custom") {
+  if (itemId === "custom" && fxp) {
+    const d = FXW[fxp]; customData = { name: d.name, dmg: d.dmg, dur: d.dur, icon: d.icon, fx: { ...d.fx } };
+    def = { name: d.name, type: "weapon", maxDur: d.dur };
+  } else if (itemId === "custom") {
     const cName = $(P + "custom-name").value.trim() || "อาวุธปริศนา";
     const cDmg = parseInt($(P + "custom-dmg").value, 10) || 10;
     const cDur = parseInt($(P + "custom-dur").value, 10) || 10;
-    customData = { name: cName, dmg: cDmg, dur: cDur };
+    customData = { name: cName, dmg: cDmg, dur: cDur, ...wfxAdminRead(P) };
     def = { name: cName, type: "weapon", maxDur: cDur };
   }
   if (isFood) {
@@ -3095,7 +3250,7 @@ $("adm-spawn").addEventListener("click", async () => {
         await push(ref(db, "zoneItems/" + z), {
           id: itemId, qty: single ? 1 : qty,
           ...(def.type === "weapon" ? { dur: def.maxDur } : {}),
-          ...(itemId === "custom" ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon" } : {}),
+          ...(itemId === "custom" ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(customData.icon ? { icon: customData.icon } : {}), ...(customData.fx ? { fx: customData.fx } : {}) } : {}),
           ...(isFood ? foodFields(customData) : {}),
           ...(isGear ? gearFields(customData) : {})
         });
@@ -3121,7 +3276,7 @@ $("adm-spawn").addEventListener("click", async () => {
           await update(ref(db), {
             [`inventory/${target}/${k}`]: {
               id: itemId, qty: 1, dur: def.maxDur,
-              ...(customData ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon" } : {})
+              ...(customData ? { name: customData.name, dmg: customData.dmg, maxDur: customData.dur, type: "weapon", ...(customData.icon ? { icon: customData.icon } : {}), ...(customData.fx ? { fx: customData.fx } : {}) } : {})
             }
           });
         }
@@ -3733,7 +3888,7 @@ $("adm-q-post").addEventListener("click", async () => {
   const { itemId, qty, isFood, isGear, customData, def } = R;
   let reward;
   if (itemId === "skill") reward = { id: "skill", qty: 1, ...R.skill };
-  else if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon" };
+  else if (itemId === "custom") reward = { id: "custom", qty: 1, dur: customData.dur, maxDur: customData.dur, name: customData.name, dmg: customData.dmg, type: "weapon", ...(customData.icon ? { icon: customData.icon } : {}), ...(customData.fx ? { fx: customData.fx } : {}) };
   else if (isFood) return toast("รางวัลอาหารสร้างเองไม่รองรับแล้ว ให้มอบด้วยมือ");
   else if (isGear) reward = { id: "custom_gear", qty: 1, ...gearFields(customData) };
   else if (def.type === "weapon") reward = { id: itemId, qty: 1, dur: def.maxDur };
@@ -3827,43 +3982,48 @@ const EVO_STEP = [3, 6, 10, 15];                     // ราคาแต้ม
 const EVO_DAY = 86400000, EVO_DAILY_CAP = 25, EVO_CLAIM_MAX = 10, EVO_RESET_CD = 86400000, EVO_REFUND = 0.7;
 const EVO_LINES = {
   hunter: { key: "h", icon: "🩸", name: "สายตะกละ", title: "อสูรตะกละ", tag: "วิ่งไว กัดแรง หิวโหย",
-    tiers: [["เขี้ยวคม", "พละกำลัง +1"], ["กระหายเลือด", "กัดโดนฟื้น HP 3"], ["แผลเน่า", "เหยื่อที่โดนกัดเลือดไหล (2 HP/รอบ นาน 3 นาที)"], ["อสูรตะกละ", "พละกำลัง +1 อีก และดูดเลือดเป็น 5 HP"]],
-    cost: "ราคา: หิวเร็วขึ้น 10/20/30/40% ตามขั้น" },
+    tiers: [["เขี้ยวคม", "พละกำลัง +1"], ["กระหายเลือด", "กัดโดนฟื้น HP 3"], ["แผลเน่า", "เหยื่อที่โดนกัดเลือดไหล (2 HP/รอบ นาน 3 นาที)"], ["อสูรตะกละ", "พละกำลัง +1 อีก และดูดเลือดเป็น 5 HP (มิวเตชันขั้น 8 = 8 HP)"]],
+    cost: "ราคา: หิวเร็วขึ้น 15/30/40/50% ตามขั้น และตั้งแต่ขั้น 2 อาหารที่ได้จากการกัด/เนื้อเน่าเหลือ 75%" },
   giant: { key: "g", icon: "🗿", name: "สายซากหนา", title: "ยักษ์ซากอมตะ", tag: "อึดถึก ตายยาก ช้า",
-    tiers: [["หนังด้าน", "HP +20 และความคงทน +1"], ["ไขมันเกราะ", "ดาเมจที่ได้รับ −10%"], ["ไม่ยอมตาย", "ตายครั้งแรกของวัน DNA ไม่หาย"], ["ยักษ์ซากอมตะ", "HP +20 อีก"]],
-    cost: "ราคา: ว่องไวลด 1/2/3/3 (หลบยาก) และฟื้นฟูพลังงาน −1 ตั้งแต่ขั้น 3" },
+    tiers: [["หนังด้าน", "HP +30 และความคงทน +2"], ["ไขมันเกราะ", "ดาเมจที่ได้รับ −15%"], ["ไม่ยอมตาย", "ตายครั้งแรกของวัน DNA ไม่หาย"], ["ยักษ์ซากอมตะ", "HP +20 อีก (รวม +50)"]],
+    cost: "ราคา: ว่องไวลด 0/1/2/2 (หลบ −0/3/6/6%) และตั้งแต่ขั้น 3 พลังงานสูงสุด −20 ฟื้นฟูพลังงาน −1" },
   shade: { key: "s", icon: "🕷️", name: "สายเลื้อยคลาน", title: "นักล่าความมืด", tag: "เงียบ ว่อง ซุ่มโจมตี",
-    tiers: [["ก้าวเงียบ", "ว่องไว +2 (หลบ +6%)"], ["จมูกไว", "ค้นหาเสียพลังงานน้อยลง 20% (10→8)"], ["ซุ่มตะปบ", "ฟาดแรกหลังเข้าโซนภายใน 1 นาที ดาเมจ +50%"], ["นักล่าความมืด", "ว่องไว +1 อีก และซุ่มเป็น +100%"]],
+    tiers: [["ก้าวเงียบ", "ว่องไว +2 (หลบ +6%)"], ["จมูกไว", "ค้นหาเสียพลังงานน้อยลง 20% (10→8)"], ["ซุ่มตะปบ", "ฟาดแรกหลังเข้าโซนภายใน 1 นาที ดาเมจ ×2.5 และทอยแรก +2"], ["นักล่าความมืด", "ว่องไว +1 อีก และซุ่มเป็น ×4"]],
     cost: "ราคา: HP สูงสุด −10 (ขั้น 2) และ −20 (ขั้น 3 ขึ้นไป)" }
 };
 
 const evoToday = () => { const n = serverNow(); return n - (n % EVO_DAY); };
 function evoT(k) { return state.profile?.faction === "zombie" && state.evo ? state.evo[k] || 0 : 0; }
+// ขั้นมิวเตชันของสายตะกละ (0–4) — ได้จากฟังก์ชัน mutAct (state.mutD) • ฮีลตอนกัด 8 ที่ขั้น 4 (rules อ่าน mut/{uid}/h ตรงกัน)
+const mutTierH = () => (state.profile?.faction === "zombie" && state.mutD && state.mutD.line === "hunter" ? Number(state.mutD.m) || 0 : 0);
+const evoFoodMult = () => (evoT("h") >= 2 ? 0.75 : 1);   // สายตะกละขั้น 2+: อาหารที่ได้จากการกัด/เนื้อเน่าเหลือ 75% (use.js ตรงกัน)
 
-// โบนัส/ข้อเสียสุทธิต่อสเตตัส จากขั้นที่กำหนด (เพดานโบนัสฝั่งบวก: str +2, hp +4, agi +4, tough +2)
+// โบนัส/ข้อเสียสุทธิต่อสเตตัส จากขั้นที่กำหนด (เพดานโบนัสฝั่งบวก: str +2, hp +5, agi +4, tough +2) — hp ต้องตรงกับ rules (users/hp) และ functions/use.js, hboss.js
 function evoBonusAt(k, e) {
   const h = e?.h || 0, g = e?.g || 0, s = e?.s || 0;
-  const cap = { str: 2, hp: 4, agi: 4, tough: 2 };
+  const cap = { str: 2, hp: 5, agi: 4, tough: 2 };
   let v = 0;
   if (k === "str") v = (h >= 1 ? 1 : 0) + (h >= 4 ? 1 : 0);
-  else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
-  else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][g];
-  else if (k === "tough") v = g >= 1 ? 1 : 0;
+  else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
+  else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][g];
+  else if (k === "tough") v = g >= 1 ? 2 : 0;
+  else if (k === "st") v = g >= 3 ? -2 : 0;
   else if (k === "regen") v = g >= 3 ? -1 : 0;
   return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
 }
 function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
 
 function searchCost() { return Math.ceil((evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? (gearHas("toolkit") ? 1.6 : 2) : 1)); }                 // ค้นหาไว: เสียพลังงาน −20%
-function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.9)) : dmg; }   // ไขมันเกราะ: −10%
+function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.85)) : dmg; }   // ไขมันเกราะ: −15%
 function evoTitleKey() { const e = state.evo; return !e || state.profile?.faction !== "zombie" ? null : e.h === 4 ? "hunter" : e.g === 4 ? "giant" : e.s === 4 ? "shade" : null; }
 function evoTitleText(key) { const L = EVO_LINES[key]; return L ? `${L.icon}${L.title}` : ""; }
 
 // ซุ่มตะปบ: คืนตัวคูณดาเมจ (1 = ไม่ได้ซุ่ม) — ใช้ได้ครั้งเดียวต่อการเดินทาง 1 ครั้ง (ภายใน 55 วิ ให้เข้มกว่า rules 60 วิ)
+const AMB_ROLL = 2;   // ซุ่ม: ทอยแรก +2 (rules อนุญาตเมื่อมีแฟล็ก amb — ต้องตรงกัน)
 function ambushMult() {
   const s = evoT("s"), lt = state.profile?.lastTravel;
   if (s < 3 || typeof lt !== "number" || state.evoAmbFor === lt) return 1;
-  return serverNow() - lt <= 55000 ? (s >= 4 ? 2 : 1.5) : 1;
+  return serverNow() - lt <= 55000 ? (s >= 4 ? 4 : 2.5) : 1;
 }
 
 // ระเบียน bites: dna = 1 (กัดโดน) หรือ 6 (กัดโดน + ติดเชื้อครั้งแรก) — rules ตรวจว่า 6 ใช้ได้เฉพาะตอนเหยื่อเพิ่งติดเชื้อจริง
@@ -3894,7 +4054,7 @@ function syncEvoTitle() {
 
 // สายตะกละ: หิวเร็วขึ้นตามขั้น (หักอาหารเพิ่มเอง ทีละ 30 วิ ขณะออนไลน์ — rules อนุญาตให้ food ลดได้เสมอ)
 async function evoHungerTick() {
-  const pct = [0, 0.1, 0.2, 0.3, 0.4][evoT("h")], p = state.profile;
+  const pct = [0, 0.15, 0.3, 0.4, 0.5][evoT("h")], p = state.profile;
   if (!pct || !p || p.hp <= 0 || state.busy || state.evoHBusy) return;
   state.evoHAcc = (state.evoHAcc || 0) + (pct * 30000) / FOOD_DECAY_MS.zombie;
   const n = Math.floor(state.evoHAcc); if (n < 1) return;
@@ -3920,7 +4080,7 @@ function evoClaimWrites(u, bites, realHp = 0) {
   } else if (n > 0) msg += " (🧬 DNA วันนี้เต็มแล้ว)";
   const h = evoT("h");
   if (realHp > 0 && realHp < maxHp()) {
-    const heal = Math.min(h >= 4 ? 5 : h >= 2 ? 3 : 2, maxHp() - realHp);   // พื้นฐาน 2 / สายตะกละขั้น 2-3 = 3 / ขั้น 4 = 5 — ต้องตรงกับ rules (users/hp)
+    const heal = Math.min(h >= 4 && mutTierH() >= 4 ? 8 : h >= 4 ? 5 : h >= 2 ? 3 : 2, maxHp() - realHp);   // พื้นฐาน 2 / สายตะกละขั้น 2-3 = 3 / ขั้น 4 = 5 / มิวเตชันขั้น 8 = 8 — ต้องตรงกับ rules (users/hp)
     u[`users/${uid}/hp`] = realHp + heal; 
     msg += ` 🩸 ฟื้น HP +${heal}`;
   }
@@ -11104,6 +11264,10 @@ function tuneDefs() {
   rows.push(["hc_drop", "น้ำหนักดรอป 🧬 ชิ้นส่วน DNA ในศูนย์วิจัย (ตารางรวม ~110 • 8 ≈ 7% ต่อการค้น)", 8, 0, 40, "📡 ภารกิจ HC"]);
   rows.push(["hc_goal", "เป้าหมายส่งชิ้นส่วน DNA รวมทั้งเซิร์ฟเวอร์ (ชิ้น)", 300, 10, 5000, "📡 ภารกิจ HC"]);
   rows.push(["hc_pm", "โอกาสเจอธาราต่อการค้น 1 ครั้งที่ศูนย์วิจัย (‰ — 4 = 0.4%, ซอมบี้ได้ครึ่งหนึ่ง) • ใครเจอก่อนคือผู้ค้นพบของทั้งเซิร์ฟเวอร์ เฉลี่ยทั้งโลกค้นรวม ~250 ครั้ง • ต้องใช้ฟังก์ชัน hcAct + rules ใหม่", 4, 0, 1000, "📡 ภารกิจ HC"]);
+  rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
+  rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);
+  rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด ค่าเริ่มต้น, 0 = ปิด • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 1, 0, 1, "🏹 บอสเผ่ามนุษย์"]);
+  rows.push(["hb_pct", "โอกาสเจอบอสเผ่ามนุษย์เทียบบอสฝั่งมนุษย์ (% — 100 = เท่ากัน, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "🏹 บอสเผ่ามนุษย์"]);
   rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
@@ -11175,6 +11339,31 @@ function econSnapshot(tot) {
   if (!L.length || now - L[L.length - 1].t > 3600000) { L.push({ t: now, tot }); LS.set(key, L.slice(-30)); }
   return base;
 }
+// ---- 📉 สถิติผู้เล่น (แดชบอร์ดเจ้าของ) — ฟังก์ชันล้วน ทดสอบที่ tests/sim/telemetry.js • ไม่เขียนข้อมูลเพิ่มนอกจากตัวนับ ach (patk/phit/pdmg z|h, pdie)
+const RET_B = [[600000, "ไม่ถึง 10 นาที"], [3600000, "10 นาที–1 ชม."], [86400000, "1–24 ชม."], [259200000, "1–3 วัน"], [Infinity, "เกิน 3 วัน"]];
+const medianOf = (arr) => { if (!arr.length) return null; const s = [...arr].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+function retCompute(people, now) {   // "หายไป" = ไม่เห็นในเกมเกิน 24 ชม. • ระยะที่เล่น = seenAt − createdAt
+  const rows = people.filter((p) => p.u && typeof p.u.createdAt === "number" && p.u.role !== "owner" && p.u.role !== "gm");
+  const isGone = (p) => now - (typeof p.u.seenAt === "number" ? p.u.seenAt : p.u.createdAt) > 86400000;
+  const gone = rows.filter(isGone), buckets = RET_B.map(([, label]) => ({ label, n: 0 }));
+  gone.forEach((p) => { const life = Math.max(0, (typeof p.u.seenAt === "number" ? p.u.seenAt : p.u.createdAt) - p.u.createdAt); buckets[RET_B.findIndex(([lim]) => life < lim)].n++; });
+  const srch = gone.map((p) => p.a?.c?.srch || 0), zones = {};
+  gone.forEach((p) => { const z = p.u.zone || "?"; zones[z] = (zones[z] || 0) + 1; });
+  const fac = (f) => { const all = rows.filter((p) => (p.u.faction === "zombie" ? "zombie" : "human") === f); return { n: all.length, gone: all.filter(isGone).length }; };
+  return { n: rows.length, gone: gone.length, active: rows.length - gone.length, buckets, medSrch: medianOf(srch), never: srch.filter((x) => x < 1).length, dead: gone.filter((p) => p.u.hp === 0).length, zones: Object.entries(zones).sort((x, y) => y[1] - x[1]).slice(0, 3), human: fac("human"), zombie: fac("zombie") };
+}
+const pvpLineKey = () => { const e = state.evo || {}, t = [["h", e.h || 0], ["g", e.g || 0], ["s", e.s || 0]].sort((a, b) => b[1] - a[1])[0]; return t[1] >= 1 ? t[0] : "n"; };   // สายวิวัฒนาการหลักของผู้ถูกโจมตี (ขั้นสูงสุด; ยังไม่วิวัฒนาการ = n)
+function pvpLinesCompute(people) {   // ซอมบี้ถูกโจมตีแยกตามสาย (บันทึกโดยผู้ถูกโจมตีเอง): qa รับโจมตี / qh โดน / qd ดาเมจรวม / qx ล้ม
+  const R = {}; ["h", "g", "s", "n"].forEach((l) => { R[l] = { atk: 0, hit: 0, dmg: 0, died: 0 }; });
+  people.forEach((p) => { const c = p.a?.c; if (!c) return; for (const l in R) { R[l].atk += c["qa" + l] || 0; R[l].hit += c["qh" + l] || 0; R[l].dmg += c["qd" + l] || 0; R[l].died += c["qx" + l] || 0; } });
+  return R;
+}
+function pvpCompute(people) {   // ตัวนับบันทึกโดยผู้ถูกโจมตี: matrix[ฝ่ายผู้โจมตี][ฝ่ายผู้ถูกโจมตี]
+  const M = { z: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } }, h: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } } }, died = { human: 0, zombie: 0 };
+  people.forEach((p) => { const c = p.a?.c; if (!c || !p.u) return; const df = p.u.faction === "zombie" ? "zombie" : "human"; ["z", "h"].forEach((af) => { const m = M[af][df]; m.atk += c["patk" + af] || 0; m.hit += c["phit" + af] || 0; m.dmg += c["pdmg" + af] || 0; }); died[df] += c.pdie || 0; });
+  return { M, died };
+}
+// ---- /สถิติผู้เล่น
 async function econRender(box) {
   box.append(mk("p", "muted", "กำลังรวบรวมข้อมูล…"));
   try {
@@ -11192,6 +11381,20 @@ async function econRender(box) {
     if (flags.length) flags.forEach((f) => box.append(mk("div", "", f))); else box.append(mk("div", "muted", "ยังไม่พบสัญญาณผิดปกติ"));
     box.append(mk("div", "hub-day", "👥 ผู้เล่น"));
     box.append(mk("div", "", `ทั้งหมด ${X.n} • 🧑 ${X.human} • 🧟 ${X.zombie} • ออนใน 24 ชม. ${X.active} • ล้มอยู่ ${X.dead}`));
+    try {   // 📉 ผู้เล่นใหม่หายตรงไหน + 🥊 PvP
+      const R = retCompute(D.people, D.at), V = pvpCompute(D.people), pc = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "–");
+      box.append(mk("div", "hub-day", "📉 ผู้เล่นหายตรงไหน (ไม่เห็นเกิน 24 ชม. = หาย • ไม่นับ GM/เจ้าของ)"));
+      box.append(mk("div", "", `สมัครแล้ว ${R.n} • ยังเล่นอยู่ ${R.active} • หายไป ${R.gone} • 🧑 หาย ${R.human.gone}/${R.human.n} • 🧟 หาย ${R.zombie.gone}/${R.zombie.n}`));
+      if (R.gone) {
+        box.append(mk("div", "", "ระยะที่เล่นก่อนหาย: " + R.buckets.map((x) => `${x.label} ${x.n}`).join(" • ")));
+        box.append(mk("div", "", `คนที่หาย: ค้นหามัธยฐาน ${R.medSrch === null ? "–" : Math.round(R.medSrch)} ครั้ง • ไม่เคยค้นหาเลย ${R.never} • หายตอนล้มอยู่ ${R.dead}${R.zones.length ? " • โซนล่าสุด " + R.zones.map(([z, n]) => `${ZONES[z]?.name || z} ${n}`).join(", ") : ""}`));
+      }
+      box.append(mk("div", "hub-day", "🥊 PvP (นับเมื่อผู้ถูกโจมตีเล่นเวอร์ชันนี้ • ผู้โจมตี→ผู้ถูกโจมตี)"));
+      const F = { z: "🧟", h: "🧑" }, DF = { human: "🧑", zombie: "🧟" }; let any = false;
+      ["z", "h"].forEach((af) => ["human", "zombie"].forEach((df) => { const m = V.M[af][df]; if (!m.atk) return; any = true; box.append(mk("div", "", `${F[af]}→${DF[df]}: โจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจเฉลี่ย ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"}`)); }));
+      { const LN = { h: "🩸 ตะกละ", g: "🗿 ซากหนา", s: "🕷️ เลื้อยคลาน", n: "ยังไม่วิวัฒน์" }, PL = pvpLinesCompute(D.people); Object.entries(PL).forEach(([l, m]) => { if (m.atk) box.append(mk("div", "", `🧟 ${LN[l]} ถูกโจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจที่รับ/ครั้งที่โดน ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"} • ล้ม ${m.died}`)); }); }
+      box.append(mk("div", any ? "" : "muted", any ? `ล้มจาก PvP: 🧑 ${V.died.human} • 🧟 ${V.died.zombie}` : "ยังไม่มีข้อมูล PvP (เริ่มนับเมื่อผู้ถูกโจมตีอัปเดตเวอร์ชันนี้)"));
+    } catch (e) { console.warn("telemetry", e); }
     const hrs = base ? Math.max(1, Math.round((Date.now() - base.t) / 3600000)) : 0;
     box.append(mk("div", "hub-day", `📊 กิจกรรมรวม (ตลอดชีพ${base ? ` • เทียบ ${hrs} ชม.ก่อน` : " • ยังไม่มีสแนปช็อตเก่าให้เทียบ — เปิดซ้ำภายหลัง"})`));
     ECON_KEYS.forEach(([k, label]) => { const d = base ? X.tot[k] - (base.tot[k] || 0) : null; box.append(mk("div", "", `${label}: ${fmt(X.tot[k])}${d ? `  (+${fmt(d)})` : ""}`)); });

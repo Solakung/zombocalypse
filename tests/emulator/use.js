@@ -22,6 +22,12 @@ const rej = async (p, m) => { try { await p; } catch (e) { if (m && !String(e.me
   await rej(u.run("h", { slot: "mat" }, NOW), "ใช้ไม่ได้"); await rej(u.run("h", { slot: "rotten_meat" }, NOW), "ซอมบี้เท่านั้น");
   await rej(u.run("z", { slot: "canned_food" }, NOW), "กินอาหารทั่วไปไม่ลง"); assert.strictEqual((await db.ref("inventory/z/canned_food/qty").get()).val(), 1, "failed use must not consume");
   r = await u.run("z", { slot: "rotten_meat" }, NOW); assert(r.ok && r.msgs.some((m) => m.includes("อาหาร")));
+  // สายตะกละขั้น 2+: เนื้อเน่าเติมอาหาร 75% (20 → 15) • ขั้น 1/ไม่มีสาย = 20
+  { const fresh = async (h) => { await db.ref("users/z").update({ food: 20, foodTs: NOW - 10000 }); await db.ref("inventory/z/rotten_meat").set({ id: "rotten_meat", qty: 5 }); if (h === null) await db.ref("evo/z").remove(); else await db.ref("evo/z").set({ dna: 0, sp: 0, line: "hunter", h, g: 0, s: 0, day: 0, gain: 0, fd: 0, rs: 0 }); };
+    await fresh(null); r = await u.run("z", { slot: "rotten_meat" }, NOW); assert(r.msgs.includes("อาหาร +20"), "ไม่มีสาย +20");
+    await fresh(1); r = await u.run("z", { slot: "rotten_meat" }, NOW); assert(r.msgs.includes("อาหาร +20"), "ตะกละขั้น 1 +20");
+    await fresh(2); r = await u.run("z", { slot: "rotten_meat" }, NOW); assert(r.msgs.includes("อาหาร +15"), "ตะกละขั้น 2 +15");
+    await fresh(4); r = await u.run("z", { slot: "rotten_meat" }, NOW); assert(r.msgs.includes("อาหาร +15"), "ตะกละขั้น 4 +15"); await db.ref("evo/z").remove(); }
   r = await u.run("h", { slot: "canned_food" }, NOW); assert.deepStrictEqual(r.msgs, ["อาหาร +40"]); assert.strictEqual((await db.ref("inventory/h/canned_food/qty").get()).val(), 1); assert.strictEqual((await db.ref("users/h/food").get()).val(), 90);
   // เต็มแล้ว (ไม่เปลี่ยนอะไร) ต้องไม่หักของ
   await db.ref("users/h").update({ food: 100, foodTs: NOW - 5000 }); await rej(u.run("h", { slot: "canned_food" }, NOW), "เต็มอยู่แล้ว"); assert.strictEqual((await db.ref("inventory/h/canned_food/qty").get()).val(), 1);

@@ -85,18 +85,19 @@ function makeUse(db, admin) {
       const fac = p.faction === "zombie" ? "zombie" : "human";
       if (def.zombieOnly && fac !== "zombie") fail("failed-precondition", "เนื้อเน่า… มีแต่ซอมบี้เท่านั้นที่กินลง");
       const zombieNoFood = fac === "zombie" && def.food > 0 && !def.gmOnly && !def.zombieOnly && !custom;
-      const foodGain = zombieNoFood ? 0 : num(def.food);
+      const foodGain = zombieNoFood ? 0 : fac === "zombie" && def.zombieOnly && !custom && num(evo.h) >= 2 ? Math.floor(num(def.food) * 0.75) : num(def.food);   // สายตะกละขั้น 2+: เนื้อเน่าเติมอาหาร 75% (script.js evoFoodMult ตรงกัน)
       // ---- สถานะที่ใช้คำนวณ (เหมือนฝั่งเกม: บัฟ/สถานะหมดก่อนเวลาจริง 1 วินาที)
       const buffEnd = buff && typeof buff.bstart === "number" ? buff.bstart + num(buff.mins) * 60000 : 0, buffActive = buffEnd - 1000 > now;
       const effActive = (t) => { const e = effects[t]; return !!e && typeof e.bstart === "number" && e.bstart + num(e.mins) * 60000 - 1000 > now; };
       const effV = (t) => (effActive(t) ? num(effects[t].v) : 0);
       const evoBonus = (k) => {
         if (fac !== "zombie") return 0;
-        const h = num(evo.h), g = num(evo.g), s = num(evo.s), cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0;
+        const h = num(evo.h), g = num(evo.g), s = num(evo.s), cap = { str: 2, hp: 5, agi: 4, tough: 2 }; let v = 0;
         if (k === "str") v = (h >= 1 ? 1 : 0) + (h >= 4 ? 1 : 0);
-        else if (k === "hp") v = (g >= 1 ? 2 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
-        else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 1, 2, 3, 3][Math.min(4, Math.max(0, g))];
-        else if (k === "tough") v = g >= 1 ? 1 : 0;
+        else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0);
+        else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][Math.min(4, Math.max(0, g))];
+        else if (k === "tough") v = g >= 1 ? 2 : 0;
+        else if (k === "st") v = g >= 3 ? -2 : 0;
         else if (k === "regen") v = g >= 3 ? -1 : 0;
         return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
       };

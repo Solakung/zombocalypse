@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@600;800&family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2026-10-06.1052">
+  <link rel="stylesheet" href="style.css?v=2026-10-07.0333">
 </head>
 <body>
   <div id="toast" role="status" aria-live="polite"></div>
@@ -178,6 +178,26 @@
         <button id="boss-claim" class="btn primary hidden">🎁 รับรางวัล</button>
       </div>
       <div id="boss-skills" class="boss-actions" style="margin-top: 8px;"></div>
+    </div>
+  </div>
+
+  <!-- ===== บอสเผ่ามนุษย์ (ฝั่งซอมบี้) — functions/hboss.js ===== -->
+  <div id="hb-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="hb-title">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head"><h2 id="hb-title">—</h2></div>
+      <div id="hb-art" class="boss-art hidden"></div>
+      <p id="hb-tag" class="muted" style="margin: 6px 0 10px;"></p>
+      <div class="bar boss"><i id="bar-hb"></i><span id="txt-hb"></span></div>
+      <div class="bar hp" style="margin-top: 6px;"><i id="bar-hb-me"></i><span id="txt-hb-me"></span></div>
+      <ul id="hb-log" class="boss-log"></ul>
+      <div class="boss-actions">
+        <button id="hb-attack" class="btn primary">🦷 ขย้ำ</button>
+        <button id="hb-bandage" class="btn ghost">🩹 ผ้าพันแผล</button>
+        <button id="hb-medkit" class="btn ghost">🧰 ชุดปฐมพยาบาล</button>
+        <button id="hb-moss" class="btn ghost">🌿 มอส</button>
+        <button id="hb-flee" class="btn danger">🏃 หนี</button>
+        <button id="hb-claim" class="btn primary hidden">🎁 รับรางวัล</button>
+      </div>
     </div>
   </div>
 
@@ -535,6 +555,6 @@
     </div>
   </div>
 
-  <script type="module" src="script.js?v=2026-10-06.1052"></script>
+  <script type="module" src="script.js?v=2026-10-07.0333"></script>
 </body>
 </html>
