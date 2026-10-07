@@ -58,3 +58,34 @@
 - **มนุษย์ได้อะไรจากการล้มซอมบี้ผู้เล่น** (รางวัลสู้ชนะ) • พิจารณาเพดานหลบหลีก/ทนทาน/ฮีลปลายเกม
 - ร่างแก้บาลานซ์ที่เก็บไว้แล้ว: `proposals/pvp-pair-cooldown.patch` (คูลดาวน์ต่อเป้าหมาย — ผู้เล่นมนุษย์ไม่เห็นด้วยกับฝั่งซอมบี้ จึงพักไว้)
 - ไอเดียเพิ่มเติมที่คุยแล้วแต่ **มีในเกมอยู่แล้ว** (ไม่ต้องทำ): ฤดูกาล/ซีซัน, สภาพอากาศ, เทศกาล, ค่าหัว, โปรเจกต์ค่าย/รัง, เป้าหมายโลกรายวัน, หอเกียรติยศ, ทีมสำรวจ
+
+## ไอเดีย: บอสเผ่ามนุษย์สำหรับผู้เล่นซอมบี้ (ยังไม่ลงมือ — ยังไม่เปิด PR)
+เผ่ามนุษย์ = ผู้รอดชีวิตที่ไม่ยอมเข้า Safe Zone อยู่ป่าเถื่อนตามโซน เป็นภัยของซอมบี้เหมือนที่ซอมบี้ป่าเป็นภัยของมนุษย์ (โลกสมมาตร) • เผ่าเหล่านี้ต่อยอดเป็นชาวเมืองในไอเดียเมืองใหม่ได้
+
+| โซน | เผ่า | จุดเด่น/กลไก | รางวัลฝั่งซอมบี้ |
+|---|---|---|---|
+| 🌲 ป่า | เผ่านายพราน (หัวหน้านักล่าวางกับดัก) | กับดักทำให้เลือดไหล (ระบบเลือดไหลเดิม) ตีเจ็บแต่ตัวเปราะ | ซากเนื้อ + ต่อมกลายพันธุ์ |
+| 🚓 สถานีตำรวจ | หน่วยปราบจลาจล (หัวหน้าถือโล่) | โล่ลดดาเมจจากการกัดจนกว่าจะแตก ต้องตีโล่ก่อน | DNA |
+| ⚓ ท่าเรือ | โจรสลัดท่าเรือ (กัปตันถือฉมวก) | ทนสูง หลบหลีกต่ำ ตีหนักช้า | ซากเนื้อเยอะ + ของสะสม |
+| 🏭 โรงงาน | ช่างเหล็ก (คนงานพ่นไฟ) | ไฟเผาตามเวลา เกราะหนา | ต่อมกลายพันธุ์ |
+| 🏥 โรงพยาบาล | ลัทธิหมอผี (เชื่อว่าซอมบี้ "รักษาได้") | ฉีดยาลดบัฟชั่วคราว ตีเบาแต่กวนใจ | อวัยวะกลายพันธุ์หายาก |
+| 🕳️ อุโมงค์ | เผ่าใต้ดิน (มองเห็นในมืด ตีก่อน) | ตีก่อนเสมอ 1 ครั้ง | DNA เยอะ |
+
+หลักการ: เจอจากการค้นหา + คูลดาวน์ + หนีได้ (โครงเดียวกับบอสฝั่งมนุษย์) • ยากตามระยะจาก Safe Zone (ใกล้/กลาง/ไกลเหมือนค่าเดินทาง) • กลไกเล่นกับสเตตัสซอมบี้ (ว่องไว/ทน/กัด) • รางวัลเป็นของซอมบี้จริงๆ
+
+ข้อควรรู้ก่อนทำ: ต้องวาดภาพบอสใหม่ ~6 ภาพ • รางวัลบอสเดิมผูกกับ rules (~17 KB) → ควรให้ฟังก์ชันออกรางวัล ไม่เพิ่มใน rules • ยังไม่ได้เช็กว่าระบบบอสในโค้ดผูกกับฝั่งมนุษย์แค่ไหน • บอสเดิม `img/boss/{zone}.webp` เป็นซอมบี้ (เช่น police = ตำรวจซอมบี้ถือโล่) → บอสเผ่าใหม่ต้องดูเป็น "มนุษย์ที่ยังมีชีวิต" ชัดเจน
+
+### พรอมต์วาดภาพบอส (สำหรับโปรแกรมสร้างภาพ — ตั้งชื่อไฟล์แนะนำ `img/boss/hb_<โซน>.webp`)
+ขนาดเดียวกับบอสเดิม: **768×400 px (สัดส่วน ~1.92:1 แนวนอน)** — สร้างใหญ่กว่าแล้วย่อ (เช่น 1536×800) สไตล์เดิม: ภาพวาดดิจิทัลมืดหม่น มีหมอก โทนสีหม่น มีแสงส้มจากตะเกียง/ไฟ ตัวบอสอยู่กลางภาพ
+
+**สไตล์รวม (ใส่ท้ายทุกพรอมต์):**
+`digital painting, gritty post-apocalyptic game illustration, dark moody atmosphere, volumetric fog, muted desaturated palette with warm orange lantern/fire accents, painterly semi-realistic, boss character centered in an environment, wide landscape composition 1.92:1, no text, no watermark, no logo. The character is a LIVING HUMAN (not a zombie, no rotting skin), hostile and dangerous.`
+
+1. **ป่า — เผ่านายพราน (`hb_forest`)**: `A grizzled tribal hunter chief in a foggy dark forest, bone-and-hide armor with antler headdress, tribal face paint, holding a crossbow, steel bear traps and rope snares on the ground, skull charms hanging from branches, warm torch glow in the mist,`
+2. **สถานีตำรวจ — หน่วยปราบจลาจล (`hb_police`)**: `A living riot-police commander in battered improvised riot armor, scratched transparent riot shield with welded spikes, baton in hand, a barricade of overturned police cars at the station entrance, faint red-and-blue light, determined human face, tactical gear (clearly different from an undead cop),`
+3. **ท่าเรือ — โจรสลัดท่าเรือ (`hb_port`)**: `A weathered dock pirate captain with an eye patch and patched long coat, holding a heavy harpoon, rusted shipping containers and cranes behind him, foggy harbor with a swinging lantern, chains and ropes, living human,`
+4. **โรงงาน — ช่างเหล็ก (`hb_factory`)**: `A hulking steelworker in a scorched welding mask and leather apron with a flamethrower tank on his back, a jet of fire lighting the scene, flying sparks, molten metal and steel beams in a dark abandoned factory, living human,`
+5. **โรงพยาบาล — ลัทธิหมอผี (`hb_hospital`)**: `A hooded cult doctor in a blood-stained lab coat and surgical mask holding a large syringe, silhouettes of robed followers behind, candles on hospital gurneys, faint green glowing serum, eerie hospital corridor, living human,`
+6. **อุโมงค์ — เผ่าใต้ดิน (`hb_tunnel`)**: `A pale tunnel-dweller tribe chief wearing ragged layered clothes and night-vision goggles, wielding a spear made of rebar, blue-green glow-sticks lighting a dripping dark subway tunnel, shadowy tribe members in the background, living human,`
+
+(ใช้เป็นข้อความเดียวต่อภาพ: พรอมต์ข้อใดข้อหนึ่ง + สไตล์รวมต่อท้าย)
