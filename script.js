@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0445";
+const APP_VERSION = "2026-10-07.0508";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2593,7 +2593,7 @@ function jailRender() {
   const I = state.jailInfo || {}, t = state.jail.t || 1, busy = !!state.jailBusy, now = serverNow();
   $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}${state.jail.red ? " • 🔴 ผู้ก่อเหตุซ้ำ โทษ ×2 จ่ายประกันไม่ได้" : ""}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานในคุก (มินิเกมจำลำดับ) ลดโทษได้ 2–5 นาที/ครั้ง รวมไม่เกินครึ่งหนึ่ง`;
   $("jail-work").disabled = busy || now < (state.jail.wcd || 0); $("jail-esc").disabled = busy || now < (state.jail.et || 0) + 300000;
-  $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy; $("jail-bail").classList.toggle("hidden", !!state.jail.red);
+  const dg = state.jail.dig || 0; $("jail-dig").textContent = `🕳️ ขุดช่องโหว่ ${dg}/3`; $("jail-dig").disabled = busy || state.jwBusy || dg >= 3 || now < (state.jail.dgcd || 0); $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy; $("jail-bail").classList.toggle("hidden", !!state.jail.red);
 }
 async function jailSync() {   // ให้โซนของเกมตรงกับสถานะคุก: ติดคุก → เข้าโซนคุก • หมดโทษ/ประกัน/แหกคุก → ย้ายออกตามที่เซิร์ฟเวอร์กำหนด
   if (state.jailSyncBusy || !state.uid || !state.profile) return; state.jailSyncBusy = true;
@@ -2681,16 +2681,44 @@ function jailPubListen() {
   if (state.jailPubOn || !state.uid) return; state.jailPubOn = true;
   onValue(ref(db, "jailpub"), (snap) => { state.jailpub = snap.val() || {}; try { worldRefresh(); } catch { /* ข้าม */ } }, (er) => console.warn("jailpub", er?.code || er));
 }
-async function jailRescue(uid, name, entry) {
-  if (state.jailBusy) return; state.jailBusy = true;
+// เกจแกว่งซ้าย-ขวา (ขุดช่องโหว่/ช่วยแหกคุก): เซิร์ฟเวอร์ออกโจทย์ {t0, c, period, half} — เข็มวิ่งตามเวลาเซิร์ฟเวอร์ กดตอนเข็มอยู่ในโซนเขียว • คืนเวลาที่กด (0 = ไม่ได้กด/หมดเวลา)
+const jgPos = (ch, ts) => { const ph = ((((ts - ch.t0) % ch.period) + ch.period) % ch.period) / ch.period; return ph < 0.5 ? ph * 2 : 2 - ph * 2; };
+function jailGauge(ch, title) {
+  return new Promise((resolve) => {
+    const body = jwEl(), modal = $("jail-work-modal"); body.innerHTML = ""; modal.classList.remove("hidden"); state.jwBusy = true;
+    body.append(mk("div", "", title)); const bar = mk("div"); bar.style.cssText = "position:relative;height:40px;margin:16px 0;border-radius:8px;background:#20252b;border:1px solid #444;overflow:hidden";
+    const zone = mk("div"); zone.style.cssText = `position:absolute;top:0;bottom:0;left:${((ch.c - ch.half) * 100).toFixed(1)}%;width:${(ch.half * 200).toFixed(1)}%;background:rgba(80,200,120,.55)`;
+    const needle = mk("div"); needle.style.cssText = "position:absolute;top:0;bottom:0;width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 6px #fff"; bar.append(zone, needle);
+    let done = false, raf = 0; const finish = (ts) => { if (done) return; done = true; cancelAnimationFrame(raf); clearTimeout(tm); press.disabled = true; resolve(ts); };
+    const press = btn("🖐️ กด!", () => finish(serverNow()), "btn primary"); press.style.cssText = "width:100%;min-height:64px;font-size:22px"; body.append(bar, press);
+    const tick = () => { if (done) return; needle.style.left = (jgPos(ch, serverNow()) * 100).toFixed(1) + "%"; raf = requestAnimationFrame(tick); }; tick();
+    const tm = setTimeout(() => finish(0), Math.round(ch.period * 3.2));
+  });
+}
+async function jailDig() {   // ผู้ต้องขังขุดช่องโหว่ไว้ให้ผู้ช่วย (ไม่ต้องออนไลน์พร้อมกัน): กดตรงโซนเขียว = +1 ช่องโหว่ (สูงสุด 3) โอกาสช่วยแหกคุกของผู้ช่วยเพิ่ม +10% ต่อช่อง
+  if (state.jailBusy || state.jwBusy || !jailActive()) return; state.jailBusy = true; jailRender();
   try {
-    const mins = entry ? Math.max(1, Math.round(((entry.u || 0) - serverNow()) / 60000)) : 0;
-    if (!confirm(`ช่วย ${name} แหกคุก? สำเร็จ ${T("jail_rescue", 40)}%: เขาออกทันที แต่คุณทั้งคู่กลายเป็นส้ม (เข้า Safe Zone ไม่ได้) • ล้มเหลว: คุณถูกขังไปด้วย โทษเท่ากับเขา (${entry?.t ? "ชั้นโทษ " + entry.t : ""}${entry?.red ? " • 🔴 ×2" : ""} ~${entry ? Math.round(mins) : "?"} นาทีที่เหลือของเขา แต่คุณติดเต็มโทษ)`)) return;
-    const r = await jailCall({ a: "rescue", target: uid });
-    if (r.rescued) { toast(`🔓 ช่วย ${r.target} แหกคุกสำเร็จ! แต่คุณกลายเป็นส้มแล้ว`); logLine(`🔓 คุณช่วย ${r.target} แหกคุกสำเร็จ — คุณทั้งคู่เป็นผู้ก่อเหตุ`, "system"); }
-    else { toast(`🚨 ช่วยแหกคุกล้มเหลว! คุณถูกขังไปด้วย (โทษเท่ากัน ~${Math.round((r.tm || 0))} นาที)`); }
+    const st = await jailCall({ a: "digStart" }), ts = await jailGauge(st.ch, `🕳️ ขุดช่องโหว่ (${st.dig}/${st.digMax}) — กดตอนเข็มอยู่ในโซนเขียว`);
+    const r = await jailCall({ a: "digHit", ts }); state.jail = { ...(state.jail || {}), dig: r.dig, dgcd: serverNow() + 45000 };
+    toast(r.hit ? `🕳️ ขุดสำเร็จ! ช่องโหว่ ${r.dig}/${r.digMax} (เพื่อนช่วยแหกคุกได้ง่ายขึ้น +10%)` : "❌ พลาด ขุดไม่เข้า");
   } catch (e) { toast(hbMsg(e)); }
-  finally { state.jailBusy = false; jailRender(); jailSync(); try { worldRefresh(); } catch { /* ข้าม */ } }
+  finally { state.jwBusy = false; state.jailBusy = false; $("jail-work-modal")?.classList.add("hidden"); jailRender(); }
+}
+async function jailRescue(uid, name, entry) {
+  if (state.jailBusy || state.jwBusy) return; state.jailBusy = true;
+  try {
+    const base = T("jail_rescue", 10), step = 10, dig = entry?.d || 0, cap = T("jail_rescuemax", 70);
+    if (!confirm(`ช่วย ${name} แหกคุก?\nโอกาสสำเร็จ = ${base}% + ${step}% ต่อช่องโหว่ที่เขาขุดไว้ (ตอนนี้ ${dig}/3) + ${step}% ต่อรอบเกจที่คุณกดตรง (3 รอบ) สูงสุด ${cap}%\n• สำเร็จ: เขาออกทันที แต่คุณทั้งคู่กลายเป็นส้ม (เข้า Safe Zone ไม่ได้)\n• ล้มเหลว: คุณถูกขังไปด้วย โทษเท่ากับเขา (${entry?.t ? "ชั้นโทษ " + entry.t : ""}${entry?.red ? " • 🔴 ×2" : ""} ติดเต็มโทษ)\n• ลองได้ทุก 10 นาที`)) return;
+    let st = await jailCall({ a: "rescueStart", target: uid }), r = null, ch = st.ch, hits = 0;
+    for (let round = 1; round <= st.rounds; round++) {
+      const ts = await jailGauge(ch, `🔓 ช่วย ${name} แหกคุก — รอบ ${round}/${st.rounds} • กดตอนเข็มอยู่ในโซนเขียว (ตรงแล้ว ${hits}/${round - 1})`);
+      r = await jailCall({ a: "rescueHit", ts }); hits = r.hits ?? hits; if (r.done) break; ch = r.ch;
+    }
+    state.jwBusy = false; $("jail-work-modal")?.classList.add("hidden");
+    if (r?.rescued) { toast(`🔓 ช่วย ${r.target} แหกคุกสำเร็จ! (โอกาส ${r.chance}%) แต่คุณกลายเป็นส้มแล้ว`); logLine(`🔓 คุณช่วย ${r.target} แหกคุกสำเร็จ — คุณทั้งคู่เป็นผู้ก่อเหตุ`, "system"); }
+    else if (r) { toast(`🚨 ช่วยแหกคุกล้มเหลว (โอกาส ${r.chance}%)! คุณถูกขังไปด้วย (โทษเท่ากัน ~${Math.round(r.tm || 0)} นาที)`); }
+  } catch (e) { toast(hbMsg(e)); }
+  finally { state.jwBusy = false; state.jailBusy = false; $("jail-work-modal")?.classList.add("hidden"); jailRender(); jailSync(); try { worldRefresh(); } catch { /* ข้าม */ } }
 }
 function jailWorldRows(box) {
   if (!jailOn()) return;
@@ -2700,12 +2728,12 @@ function jailWorldRows(box) {
   const can = !jailActive() && state.profile?.hp > 0 && !["safe", "casino", "jail"].includes(state.zone);
   list.sort((a, b) => a[1].u - b[1].u).forEach(([uid, e]) => {
     const row = mk("div", "world-row"), mins = Math.max(1, Math.ceil((e.u - now) / 60000));
-    row.append(mk("div", "", `⛓️ ${e.n}${e.red ? " 🔴" : ""} — เหลือ ~${mins} นาที (ชั้นโทษ ${e.t || 1})`));
+    row.append(mk("div", "", `⛓️ ${e.n}${e.red ? " 🔴" : ""} — เหลือ ~${mins} นาที (ชั้นโทษ ${e.t || 1}) • 🕳️ ช่องโหว่ ${e.d || 0}/3 (+${(e.d || 0) * 10}%)`));
     const b = btn("🔓 ช่วยแหกคุก", () => jailRescue(uid, e.n, e), "btn ghost mini"); b.disabled = !can; if (!can) b.title = "ต้องอยู่นอกเมือง (ไม่ใช่ Safe Zone/คาสิโน) และไม่ได้ติดคุกอยู่";
     row.append(b); box.append(row);
   });
 }
-$("jail-work").addEventListener("click", jailWorkOpen); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
+$("jail-work").addEventListener("click", jailWorkOpen); $("jail-dig").addEventListener("click", jailDig); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
 // ---- /คุก
 
 /* =========================================================
@@ -11535,7 +11563,8 @@ function tuneDefs() {
   rows.push(["jail_pct", "โอกาสถูกจับเมื่อคนส้มถูกล้ม (% — 100 = จับทุกครั้ง)", 100, 0, 100, "⛓️ คุก"]);
   rows.push(["jail_bailpct", "ค่าประกันเพิ่มตามค่าหัวบนตัว (% ของค่าหัว — 0 = ไม่คิดตามค่าหัว)", 25, 0, 200, "⛓️ คุก"]);
   rows.push(["jail_escbty", "แหกคุกสำเร็จ: ทรัพย์สินตัวเองที่ถูกตั้งเป็นค่าหัวบนตัว (แต้ม — ต้องเปิด bty2_on, 0 = ไม่ตั้ง)", 20, 0, 200, "⛓️ คุก"]);
-  rows.push(["jail_rescue", "โอกาสช่วยแหกคุกสำเร็จ (% — ล้มเหลวผู้ช่วยติดคุกไปด้วยโทษเท่ากัน)", 40, 0, 100, "⛓️ คุก"]);
+  rows.push(["jail_rescue", "โอกาสช่วยแหกคุกพื้นฐาน (% — เพิ่ม +10% ต่อช่องโหว่ที่ผู้ต้องขังขุด ≤3 และต่อเกจที่ผู้ช่วยกดตรง ≤3 • ล้มเหลวผู้ช่วยติดคุกไปด้วยโทษเท่ากัน)", 10, 0, 100, "⛓️ คุก"]);
+  rows.push(["jail_rescuemax", "โอกาสช่วยแหกคุกสูงสุด (%)", 70, 0, 100, "⛓️ คุก"]);
   rows.push(["crim_red", "ก่อเหตุครั้งที่เท่าไรใน 24 ชม. กลายเป็นสีแดง 🔴 (ผู้ก่อเหตุซ้ำ)", 3, 2, 4, "🟠 สถานะส้ม"]);
   rows.push(["crim_redh", "ระยะเวลาสถานะแดง (ชั่วโมง)", 6, 1, 72, "🟠 สถานะส้ม"]);
   rows.push(["jail_esc", "โอกาสแหกคุกสำเร็จ (%)", 25, 0, 100, "⛓️ คุก"]);
