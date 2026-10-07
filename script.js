@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0805";
+const APP_VERSION = "2026-10-07.0816";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1244,6 +1244,7 @@ function startGame() {
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
   setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);
   setTimeout(() => { try { tutBoot(); } catch { /* ข้าม */ } }, 2500);   // 🎓 บทสอนผู้เล่นใหม่
+  [800, 2500, 6000].forEach((ms) => setTimeout(() => { try { topTidyInit(); } catch (e) { console.warn("topTidy", e); } }, ms));   // 📱 จัดแถบบนมือถือ (ปุ่มถูกสร้างทยอยหลังเริ่มเกม)
   setTimeout(() => { try { if (state.profile?.faction === "zombie") mutSync(); } catch { /* ข้าม */ } }, 6000);   // โหลดขั้นมิวเตชัน (ฮีลตอนกัดขั้น 8)   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
@@ -1638,7 +1639,7 @@ function renderInv() {
         if (canDismantle(it)) btnGrp.append(btn(`รื้อ +${salvageYield(it)}`, () => dismantleWeapon(slot), "btn ghost mini"));
       }
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     } else if (def.type === "gear") {
       const worn = state.profile?.[def.slot] === slot, mine = (state.profile?.faction === "zombie") === !!def.zombieOnly;
@@ -1649,7 +1650,7 @@ function renderInv() {
       btnGrp.append(wb);
       if (state.profile?.faction === "human" && state.zone === "safe" && armorYield(it)) btnGrp.append(btn(`รื้อ +${armorYield(it)}`, () => dismantleArmor(slot), "btn ghost mini"));   // ได้เศษวัสดุคืน (ต่ำกว่าต้นทุนคราฟต์)
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     } else {
       const lbl = mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`);
@@ -1660,7 +1661,7 @@ function renderInv() {
       if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)), hotPinBtn(slot));
       if (def.type === "stat") btnGrp.append(btn("🧪 ใช้", () => statOpen()));
       else btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     }
     ul.append(li); try { invInfoHook(li, it); } catch { /* ข้าม */ }
@@ -5505,6 +5506,7 @@ function gearBar() {
   if (!bar) { bar = mk("div", "muted"); bar.id = "gear-bar"; bar.style.cssText = "margin:4px 0 8px;font-size:13px"; ul.before(bar); }
   const slots = GEAR_SLOT_BY_FAC[p.faction] || [];
   bar.textContent = slots.map((s) => `${GEAR_SLOTS[s]}: ${gearDef(s) ? gearDef(s).icon + " " + gearDef(s).name : "—"}`).join(" • ") + (gearRed() ? ` • ลดดาเมจรวม ${gearRed()}%` : "");
+  bar.classList.toggle("hidden", !slots.some((s) => gearDef(s)));   // ยังไม่ได้สวมอะไรเลย = ไม่ต้องโชว์บรรทัด "—"
 }
 
 // ---- เควสรายวันผูกโซน (นิยามสร้างจากสูตรนี้ เจ้าของกดเติมได้) ----
@@ -9954,7 +9956,7 @@ function tutSteps(fac) {
     { t: Z ? "นี่คือโซนทั้งหมด ⚠ คือระดับอันตราย ⚡ คือพลังงานที่ใช้เดินทาง ซอมบี้ป่าจะเมินคุณ แต่ 🥩 เนื้อเน่าเจอได้เฉพาะนอก Safe Zone — ลองเริ่มที่ 🌲 ป่าลึกหรือ 🏚️ เขตเมืองร้างก่อน" : "นี่คือโซนทั้งหมดค่ะ ⚠ คือระดับอันตราย (ยิ่งสูง ยิ่งเจอซอมบี้ แต่ของก็ดีขึ้น) ⚡ คือพลังงานที่ใช้เดินทาง แนะนำเริ่มที่ 🌲 ป่าลึก (อันตราย 2) หรือ 🏚️ เขตเมืองร้างก่อนนะคะ", target: () => $("zone-list"), act: "next", pre: () => setTab("map") },
     { t: Z ? "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกัน ที่ Safe Zone ต่อสู้ไม่ได้ แต่นอกกำแพง กัดมนุษย์โดนจะเติมอาหาร +25 และฟื้น HP ส่วนเหยื่อจะติดเชื้อ — แต่มนุษย์ก็สู้กลับได้ ระวังตัว" : "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกันค่ะ ที่ Safe Zone ต่อสู้กันไม่ได้ แต่นอกกำแพง ซอมบี้ผู้เล่นโจมตีคุณได้ และคุณก็สู้กลับได้ — ถ้าถูกกัดจะติดเชื้อ ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส", target: () => $("player-list"), act: "next", pre: () => setTab("map") },
     { ...tab("chat", "แชท", "💬"), t: "แท็บ “💬 แชท” ใช้คุยกับคนในโซนเดียวกัน ลองแตะดูค่ะ ถ้ามีอะไรสงสัยถามเพื่อนๆ ได้" },
-    { t: "เสร็จแล้วค่ะ! ถ้าลืมอะไร กด “วิธีเล่น” ได้ตลอด และแถบ 🧭 ด้านบนจะบอกภารกิจถัดไปพร้อมของรางวัล ขอให้รอดนะ", target: () => $("btn-guide"), act: "next", pre: () => setTab("chat") }
+    { t: "เสร็จแล้วค่ะ! ถ้าลืมอะไร เปิด “วิธีเล่น” ได้ตลอด (ปุ่ม ⋯ มุมบน) และแถบ 🧭 ด้านบนจะบอกภารกิจถัดไปพร้อมของรางวัล ขอให้รอดนะ", target: () => { const g = $("btn-guide"); return g && g.offsetParent ? g : $("btn-more"); }, act: "next", pre: () => setTab("chat") }
   ].map((x) => ({ who, nm, mood, ...x }));
 }
 const tutLayer = () => {
@@ -10025,6 +10027,53 @@ function tutBoot(n = 0) {   // รอโปรไฟล์/ตัวนับพ
   } catch (e) { console.warn("tutBoot", e); }
 }
 // ---- /บทสอน
+
+// ---- 📱 แถบบนมือถือ: เห็นเฉพาะปุ่มที่ใช้บ่อย ที่เหลืออยู่ใต้ "⋯" (ทำงานเฉพาะจอ ≤900px — เดสก์ท็อปเหมือนเดิม)
+// ปุ่มเดิมทุกตัวยังอยู่ใน DOM (แค่ซ่อน) โค้ดอื่นที่อ้าง id/ต่อท้ายปุ่มจึงไม่พัง • เมนู ⋯ เป็นปุ่มสำเนาที่กดแล้วสั่ง click ปุ่มจริง • จุดแจ้งเตือน (btn-dot) ของปุ่มที่ซ่อนส่งมาที่ ⋯
+const TOP_PRIMARY = ["btn-base", "btn-quests", "btn-market", "btn-sk"];   // ที่พัก • ภารกิจ • ตลาด • ทักษะ (ซอมบี้เพิ่ม วิวัฒนาการ • ทีมงานเพิ่ม Admin)
+const topMobile = () => matchMedia("(max-width: 900px)").matches;
+function topTidy() {
+  const tb = document.querySelector(".topbar"), row = document.querySelector(".top-actions"); if (!tb || !row) return;
+  const mobile = topMobile(), keep = new Set([...TOP_PRIMARY, "btn-more", ...(isStaff() ? ["btn-admin"] : []), ...(state.profile?.faction === "zombie" ? ["btn-evo"] : [])]);
+  let more = $("btn-more"); if (!more) { more = btn("⋯", topMoreOpen, "btn ghost mini"); more.id = "btn-more"; more.title = "เมนูอื่นๆ"; more.setAttribute("aria-label", "เมนูอื่นๆ"); row.append(more); }
+  let dot = false;
+  row.querySelectorAll(":scope > button").forEach((b) => { if (b === more) return; const hide = mobile && !keep.has(b.id); b.classList.toggle("tidy-hide", hide); if (hide && b.classList.contains("btn-dot") && !b.classList.contains("hidden")) dot = true; });
+  more.classList.toggle("hidden", !mobile); more.classList.toggle("btn-dot", mobile && dot);
+  document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight + "px");
+}
+function topMoreOpen() {
+  let m = $("top-more"); if (!m) {
+    m = mk("div", "modal sheet hidden"); m.id = "top-more"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "เมนู");
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), head = mk("div", "modal-head"); head.append(mk("h2", "", "เมนู"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "top-more-body"; body.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:8px"; box.append(head, body); m.append(box); document.body.append(m);
+  }
+  const body = $("top-more-body"); body.innerHTML = ""; topTidy();
+  document.querySelectorAll(".top-actions > button.tidy-hide:not(.hidden)").forEach((orig) => {
+    let label = (orig.textContent || "").trim(); if (!label) return;
+    if (!/[\u0E00-\u0E7F]/.test(label) && orig.title) label += " " + orig.title.split(/ • |:/)[0].slice(0, 22);   // ปุ่มที่เป็นอีโมจิล้วนเติมชื่อจาก title กันงงในเมนู
+    const b = btn(label, () => { m.classList.add("hidden"); setTimeout(() => orig.click(), 60); }, orig.classList.contains("primary") ? "btn primary" : "btn ghost"); b.style.minHeight = "46px";
+    if (orig.classList.contains("btn-dot")) b.classList.add("btn-dot"); b.dataset.for = orig.id; body.append(b);
+  });
+  m.classList.remove("hidden");
+}
+function topTidyInit() {
+  topTidy(); const row = document.querySelector(".top-actions"); if (!row || state.topObs) return;
+  let q = 0; const kick = () => { if (q) return; q = requestAnimationFrame(() => { q = 0; try { topTidy(); } catch { /* ข้าม */ } }); };
+  state.topObs = new MutationObserver(kick); state.topObs.observe(row, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  addEventListener("resize", kick); matchMedia("(max-width: 900px)").addEventListener?.("change", kick);
+  const who = document.querySelector(".topbar .who"); if (who) { who.style.cursor = "pointer"; who.addEventListener("click", (e) => { if (topMobile() && !e.target.closest("button")) $("btn-profile")?.click(); }); }   // แตะชื่อ = เปิดโปรไฟล์
+}
+// ข่าวระบบ/วิทยุในแชทบนมือถือ: พับเหลือ 3 บรรทัด แตะเพื่อขยาย (ข้อความผู้เล่นไม่ถูกบดบังด้วยข่าวยาวๆ)
+$("chat-log")?.addEventListener("click", (e) => { const m = e.target.closest?.(".msg.system"); if (m) m.classList.toggle("open"); });
+// ปุ่ม "ทำลาย" ในกระเป๋า: กดครั้งแรกเป็น "ยืนยันทำลาย" (หมดเวลา 4 วินาทีแล้วกลับ) กันกดพลาดติดปุ่มทิ้ง
+function destroyBtn(slot) {
+  const b = btn("⋯", () => {
+    if (b.dataset.arm) { clearTimeout(b._t); delete b.dataset.arm; b.textContent = "⋯"; b.className = "btn ghost mini"; return destroyItem(slot); }
+    b.dataset.arm = "1"; b.textContent = "ทำลาย?"; b.className = "btn danger mini"; b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = "⋯"; b.className = "btn ghost mini"; }, 4000);
+  }, "btn ghost mini"); b.title = "ทำลายไอเทมทิ้งถาวร (กดสองครั้ง)"; b.setAttribute("aria-label", "ทำลายไอเทม (กดสองครั้ง)"); return b;
+}
+// ---- /แถบบนมือถือ
 
 /* =========================================================
    49.3) 🌱 แปลงปลูกในที่พัก (functions/garden.js — gardenAct) • ไม่แตะ rules
