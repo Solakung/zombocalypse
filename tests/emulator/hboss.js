@@ -41,19 +41,19 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   q(0); r = await hb.run("l", { a: "roll" }, T0); assert.strictEqual(r.hit, false); assert.strictEqual(queue.length, 1, "โซนที่ไม่มีเผ่าไม่ทอย"); queue.length = 0;
   // ---- ทอยเจอ: ไม่เจอ (0.99) / เจอ (0) ป่า W=2%
   q(0.99); r = await hb.run("z", { a: "roll" }, T0); assert.strictEqual(r.hit, false); left();
-  q(0.0199); r = await hb.run("z", { a: "roll" }, T0 + 1000); assert.strictEqual(r.hit, true); left(); assert.strictEqual(r.fight.hp, 70); assert.strictEqual(r.fight.name, "หัวหน้าเผ่านายพราน"); assert.strictEqual(r.hp, 150);
+  q(0.0199); r = await hb.run("z", { a: "roll" }, T0 + 1000); assert.strictEqual(r.hit, true); left(); assert.strictEqual(r.fight.hp, 50); assert.strictEqual(r.fight.name, "หัวหน้าเผ่านายพราน"); assert.strictEqual(r.hp, 150);
   q(0.0); r = await hb.run("z", { a: "roll" }, T0 + 2000); assert.strictEqual(r.hit, false); assert(r.fight); assert.strictEqual(queue.length, 1, "มีบอสอยู่แล้วไม่ทอยซ้ำ"); queue.length = 0;
-  assert.strictEqual((await hb.run("z", { a: "state" }, T0 + 2000)).fight.hp, 70);
+  assert.strictEqual((await hb.run("z", { a: "state" }, T0 + 2000)).fight.hp, 50);
   // ---- สู้: ทอย 4 (×1) ดาเมจ 5+3=8 → บอส 62 / บอสตี: โดน(0) ไม่หลบ(.99) ดาเมจ 7 (lo) → ผู้เล่น 143 + เลือดไหล
   q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 3000); left();
-  assert.strictEqual(r.fight.hp, 62); assert.strictEqual(r.hp, 143); assert.deepStrictEqual(r.fight.pdot, { n: 2, per: 3 }); assert.strictEqual((await db.ref("users/z/hp").get()).val(), 143);
+  assert.strictEqual(r.fight.hp, 42); assert.strictEqual(r.hp, 144); assert.deepStrictEqual(r.fight.pdot, { n: 2, per: 3 }); assert.strictEqual((await db.ref("users/z/hp").get()).val(), 144);
   // รอบสอง: ทอย 6 (×1.5) = 12 → 50 / แผลเก่า −3 / บอสฟาดพลาด (0.99)
-  q(D(6), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 4000); left(); assert.strictEqual(r.fight.hp, 50); assert.strictEqual(r.hp, 140); assert.strictEqual(r.fight.pdot.n, 1);
+  q(D(6), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 4000); left(); assert.strictEqual(r.fight.hp, 30); assert.strictEqual(r.hp, 141); assert.strictEqual(r.fight.pdot.n, 1);
   // ทอย 1 = พลาดหนัก ไม่เสียเลือดบอส
-  q(D(1), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 5000); left(); assert.strictEqual(r.fight.hp, 50); assert.strictEqual(r.hp, 137); assert.strictEqual(r.fight.pdot, null);
+  q(D(1), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 5000); left(); assert.strictEqual(r.fight.hp, 30); assert.strictEqual(r.hp, 138); assert.strictEqual(r.fight.pdot, null);
   // ---- หลบ/ทน: agi 10 → หลบ 30% (ค่า 0.1 หลบ) / ทน tough 3 ลดดาเมจ (ขั้นต่ำ 1)
-  await db.ref("stats/z").update({ agi: 10, tough: 3 }); q(D(4), 0, 0.1); r = await hb.run("z", { a: "attack" }, T0 + 6000); left(); assert.strictEqual(r.hp, 137); assert(r.log.some((l) => l.includes("หลบ")));
-  q(D(4), 0, 0.5, 0); r = await hb.run("z", { a: "attack" }, T0 + 7000); left(); assert.strictEqual(r.hp, 137 - 4, "7−3=4"); await db.ref("users/z/hp").set(150);
+  await db.ref("stats/z").update({ agi: 10, tough: 3 }); q(D(4), 0, 0.1); r = await hb.run("z", { a: "attack" }, T0 + 6000); left(); assert.strictEqual(r.hp, 138); assert(r.log.some((l) => l.includes("หลบ")));
+  q(D(4), 0, 0.5, 0); r = await hb.run("z", { a: "attack" }, T0 + 7000); left(); assert.strictEqual(r.hp, 138 - 3, "6−3=3"); await db.ref("users/z/hp").set(150);
   await db.ref("stats/z").update({ agi: 0, tough: 0 });
   // ---- มึนงงโจมตีไม่ได้ / หนี
   await db.ref("effects/z/stun").set({ bstart: T0, mins: 5, v: 1 }); await rej(hb.run("z", { a: "attack" }, T0 + 8000), "มึนงง"); await db.ref("effects/z").remove();
@@ -75,21 +75,21 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   await rej(hb.run("z", { a: "claim" }, T0 + 405000), "ไม่มีการต่อสู้");
   // ---- กลไกเฉพาะเผ่า
   const enc = async (zone, now) => { await db.ref("users/z").update({ zone, hp: 150 }); await db.ref("hboss/z").remove(); q(0.0); const x = await hb.run("z", { a: "roll" }, now); assert(x.hit, "encounter " + zone); left(); return x; };
-  // โล่ตำรวจ: โล่ 40 ดูดดาเมจก่อน
-  await enc("police", T0 + 500000); q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 501000); left(); assert.strictEqual(r.fight.shield, 32); assert.strictEqual(r.fight.hp, 110); assert(r.log[0].includes("โล่รับไป 8"));
-  await db.ref("hboss/z/shield").set(5); q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 502000); left(); assert.strictEqual(r.fight.shield, 0); assert.strictEqual(r.fight.hp, 107, "ดาเมจ 8 − โล่ 5 = 3 ทะลุ"); assert(r.log[0].includes("โล่แตก"));
+  // โล่ตำรวจ: โล่ 25 ดูดดาเมจก่อน
+  await enc("police", T0 + 500000); q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 501000); left(); assert.strictEqual(r.fight.shield, 17); assert.strictEqual(r.fight.hp, 70); assert(r.log[0].includes("โล่รับไป 8"));
+  await db.ref("hboss/z/shield").set(5); q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 502000); left(); assert.strictEqual(r.fight.shield, 0); assert.strictEqual(r.fight.hp, 67, "ดาเมจ 8 − โล่ 5 = 3 ทะลุ"); assert(r.log[0].includes("โล่แตก"));
   // ยาหมอลัทธิ: โดนแล้วโจมตีถัดไป 2 ครั้งเหลือ 60% (8→5)
-  await enc("hospital", T0 + 510000); q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 511000); left(); assert.strictEqual(r.fight.weak.n, 2); assert.strictEqual(r.fight.hp, 72);
-  q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 512000); left(); assert.strictEqual(r.fight.hp, 72 - 5); assert.strictEqual(r.fight.weak.n, 1);
-  // ฉมวกกัปตัน: รอบที่ 3 ตีแรง ×1.5 (14→21)
+  await enc("hospital", T0 + 510000); q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 511000); left(); assert.strictEqual(r.fight.weak.n, 2); assert.strictEqual(r.fight.hp, 52);
+  q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 512000); left(); assert.strictEqual(r.fight.hp, 52 - 5); assert.strictEqual(r.fight.weak.n, 1);
+  // ฉมวกกัปตัน: รอบที่ 3 ตีแรง ×1.5 (12→18)
   await enc("port", T0 + 520000); q(D(4), 0.99); await hb.run("z", { a: "attack" }, T0 + 521000); left(); q(D(4), 0.99); await hb.run("z", { a: "attack" }, T0 + 522000); left();
-  q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 523000); left(); assert.strictEqual(r.hp, 150 - 21); assert(r.log.some((l) => l.includes("ฉมวกกระชาก")));
-  // ช่างเหล็ก: ไฟเผา 4 ต่อรอบ 2 รอบ
-  await enc("factory", T0 + 530000); q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 531000); left(); assert.deepStrictEqual(r.fight.pdot, { n: 2, per: 4 }); assert.strictEqual(r.hp, 150 - 9);
-  q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 532000); left(); assert.strictEqual(r.hp, 150 - 9 - 4);
-  // เผ่าใต้ดิน: ตีก่อนตอนเจอ 2 ครั้ง (ครั้งละ 6) / ตีสองครั้งต่อรอบ
-  await db.ref("users/z").update({ zone: "tunnel", hp: 150 }); await db.ref("hboss/z").remove(); q(0.0, 0, 0.99, 0, 0, 0.99, 0); r = await hb.run("z", { a: "roll" }, T0 + 540000); left(); assert(r.hit); assert.strictEqual(r.hp, 150 - 12); assert.strictEqual(r.fight.round, 1);
-  q(D(4), 0, 0.99, 0, 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 541000); left(); assert.strictEqual(r.hp, 150 - 24);
+  q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 523000); left(); assert.strictEqual(r.hp, 150 - 18); assert(r.log.some((l) => l.includes("ฉมวกกระชาก")));
+  // ช่างเหล็ก: ไฟเผา 3 ต่อรอบ 2 รอบ
+  await enc("factory", T0 + 530000); q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 531000); left(); assert.deepStrictEqual(r.fight.pdot, { n: 2, per: 3 }); assert.strictEqual(r.hp, 150 - 8);
+  q(D(4), 0.99); r = await hb.run("z", { a: "attack" }, T0 + 532000); left(); assert.strictEqual(r.hp, 150 - 8 - 3);
+  // เผ่าใต้ดิน: ตีก่อนตอนเจอ 2 ครั้ง (ครั้งละ 5) / ตีสองครั้งต่อรอบ
+  await db.ref("users/z").update({ zone: "tunnel", hp: 150 }); await db.ref("hboss/z").remove(); q(0.0, 0, 0.99, 0, 0, 0.99, 0); r = await hb.run("z", { a: "roll" }, T0 + 540000); left(); assert(r.hit); assert.strictEqual(r.hp, 150 - 10); assert.strictEqual(r.fight.round, 1);
+  q(D(4), 0, 0.99, 0, 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 541000); left(); assert.strictEqual(r.hp, 150 - 20);
   // ---- ถังโทเค็น: 12 ครั้งแรกทอยได้ ครั้งที่ 13 ถูกจำกัด (เติม 1 ครั้งต่อ 15 วิ)
   await mk(); await db.ref("hbrl").remove();
   for (let i = 0; i < 12; i++) { q(0.99); r = await hb.run("z", { a: "roll" }, T0 + 700000); assert(!r.limited, "i=" + i); left(); }
