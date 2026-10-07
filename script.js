@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0431";
+const APP_VERSION = "2026-10-07.0445";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -3370,11 +3370,44 @@ function buildAdmin() {
   fillSelect($("adm-q-need"), [["", "ไม่ต้องส่งของ (ทำตามที่บรรยาย)"], ...NEED_ITEMS.map((id) => [id, `ต้องส่ง ${ITEMS[id].icon} ${ITEMS[id].name}`])]);
 }
 
+
+// ---- 🛠️ Admin Console: แท็บหมวดหมู่ — รวมทุกอย่างในปุ่ม Admin ปุ่มเดียว (เดิมเศรษฐกิจ/ปรับค่าเกมของเจ้าของอยู่แยกในแท็บ 📈 🎛️ ของหน้าสรุป)
+const ADM_CATS = [["players", "👥 ผู้เล่น"], ["comms", "📣 สื่อสาร"], ["items", "🎁 ไอเทม"], ["world", "🌍 โลก"], ["econ", "📈 เศรษฐกิจ", true], ["tune", "🎛️ ปรับค่า", true]];   // true = เฉพาะเจ้าของ
+const ADM_MAP = [[/แดชบอร์ดผู้เล่น|สเตตัส|บัฟ|ติดเชื้อ|รูปโปรไฟล์/, "players"], [/ประกาศ|แชท/, "comms"], [/ไอเทม|สกิล|ภารกิจ/, "items"], [/เหตุการณ์|บอสโลก|World Boss/, "world"]];
+const admCatOf = (sec) => { const t = sec.querySelector("h3")?.textContent || ""; for (const [rx, c] of ADM_MAP) if (rx.test(t)) return c; return "players"; };
+function admTuneRender(pane) {
+  const groups = []; tuneDefs().forEach((r) => { if (!groups.includes(r[5])) groups.push(r[5]); });
+  const sel = document.createElement("select"); sel.style.cssText = "width:100%;margin-bottom:8px";
+  [["", "ทุกหมวด"], ["__force", "⚡ บังคับเหตุการณ์/สภาพอากาศ"], ...groups.map((g) => [g, g])].forEach(([v, l]) => sel.append(new Option(l, v)));
+  sel.value = state.admTuneGrp || ""; sel.addEventListener("change", () => { state.admTuneGrp = sel.value; admTab("tune"); });
+  pane.append(sel); tuneRender(pane, state.admTuneGrp || "");
+}
+function admTab(t) {
+  const m = $("admin-modal"); if (!m) return; const owner = state.profile?.role === "owner";
+  if (!ADM_CATS.some(([k, , o]) => k === t && (!o || owner))) t = "players";
+  state.admTab = t; LS.set("zc_admtab", t);
+  m.querySelectorAll("#adm-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
+  m.querySelectorAll(".adm-section[data-cat]").forEach((sec) => sec.classList.toggle("hidden", sec.dataset.cat !== t));
+  const pane = $("adm-pane"); if (!pane) return; const wide = t === "econ" || t === "tune"; pane.classList.toggle("hidden", !wide); pane.textContent = "";
+  if (t === "econ") econRender(pane); else if (t === "tune") admTuneRender(pane);
+}
+function admTabsInit() {
+  const m = $("admin-modal"); if (!m) return; const box = m.querySelector(".modal-box"), owner = state.profile?.role === "owner";
+  m.querySelectorAll(".adm-section").forEach((sec) => { if (sec.id !== "adm-pane") sec.dataset.cat = admCatOf(sec); });   // รวมส่วนที่ถูกเพิ่มทีหลัง (เช่น รูปโปรไฟล์ที่ถูกรายงาน)
+  if (!$("adm-tabs")) {
+    const tabs = mk("div", "hub-tabs"); tabs.id = "adm-tabs"; tabs.style.cssText = "position:sticky;top:-16px;z-index:3;background:var(--panel);padding:8px 0;margin:0 -4px";
+    ADM_CATS.filter(([, , o]) => !o || owner).forEach(([k, l]) => { const b = btn(l, () => admTab(k), "btn ghost mini"); b.dataset.t = k; tabs.append(b); });
+    box.querySelector(".modal-head").after(tabs);
+    const pane = mk("div", "adm-section hidden"); pane.id = "adm-pane"; box.append(pane);
+  }
+  admTab(state.admTab || LS.get("zc_admtab", "players"));
+}
+// ---- /Admin Console แท็บ
 $("btn-admin").addEventListener("click", () => {
   if (!isStaff()) return;
   try { profGmSection(); } catch { /* ข้าม */ }
   $("adm-clear-zone").value = state.zone; watchMutes();
-  $("admin-modal").classList.remove("hidden"); loadDash();
+  admTabsInit(); $("admin-modal").classList.remove("hidden"); loadDash();
 });
 $("adm-close").addEventListener("click", () => $("admin-modal").classList.add("hidden"));
 $("adm-mode").addEventListener("change", (e) => {
@@ -5699,7 +5732,7 @@ function hubTab(tab) {
   const m = $("hub-modal"); if (!m) return; m.dataset.tab = tab;
   m.querySelectorAll(".hub-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === tab));
   const box = $("hub-body"); box.textContent = "";
-  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else if (tab === "fame") fameRender(box); else if (tab === "econ" && state.profile?.role === "owner") econRender(box); else if (tab === "tune" && state.profile?.role === "owner") tuneRender(box); else hubJournal(box);
+  if (tab === "day" || tab === "week") hubSummary(box, tab); else if (tab === "rank") hubRank(box); else if (tab === "ach") achRender(box); else if (tab === "world") worldRender(box); else if (tab === "fame") fameRender(box); else hubJournal(box);
 }
 function openHub(tab = "day") {
   let m = $("hub-modal");
@@ -5707,7 +5740,7 @@ function openHub(tab = "day") {
     m = mk("div", "modal hidden"); m.id = "hub-modal"; m.setAttribute("role", "dialog");
     const bx = mk("div", "modal-box"); bx.style.maxWidth = "440px";
     const hd = mk("div", "modal-head"); hd.append(mk("h2", "", "📊 สรุป • ความสำเร็จ • โลก"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
-    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["fame", "🏆"], ["log", "บันทึก"], ...(state.profile?.role === "owner" ? [["econ", "📈"], ["tune", "🎛️"]] : [])].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
+    const tabs = mk("div", "hub-tabs"); [["day", "วันนี้"], ["week", "สัปดาห์"], ["rank", "อันดับ"], ["ach", "🏅"], ["world", "🌍"], ["fame", "🏆"], ["log", "บันทึก"]].forEach(([t, l]) => { const b = btn(l, () => hubTab(t), "btn ghost mini"); b.dataset.t = t; tabs.append(b); });
     const body = mk("div", "hub-body"); body.id = "hub-body";
     bx.append(hd, tabs, body); m.append(bx); document.body.append(m);
     m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
@@ -11429,7 +11462,7 @@ function tuneListen() {
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
-    try { worldRefresh(); const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "tune" && !(document.activeElement && document.activeElement.tagName === "INPUT")) hubTab("tune"); } catch { /* ข้าม */ }
+    try { worldRefresh(); const am = $("admin-modal"); if (am && !am.classList.contains("hidden") && state.admTab === "tune" && !(document.activeElement && ["INPUT", "SELECT"].includes(document.activeElement.tagName))) admTab("tune"); } catch { /* ข้าม */ }
   }, (er) => console.warn("tune", er?.code || er));
 }
 function tuneDefs() {
@@ -11524,12 +11557,13 @@ function tuneDefs() {
   rows.push(["salv_pct", "อัตราเศษวัสดุที่ได้จากการรื้อเกราะ (% ของเพดาน • 100 = เต็ม, ลดได้อย่างเดียว)", 100, 0, 100, "🔩 รื้อเกราะ"]);
   return rows;
 }
-function tuneRender(box) {
-  try { evtForceRows(box); wxForceRows(box); } catch (e) { console.warn("evtForceRows", e); }
+function tuneRender(box, only = "") {   // only = ชื่อหมวดที่จะแสดง ("" = ทุกหมวด, "__force" = เฉพาะปุ่มบังคับเหตุการณ์/อากาศ)
+  if (!only || only === "__force") { try { evtForceRows(box); wxForceRows(box); } catch (e) { console.warn("evtForceRows", e); } }
+  if (only === "__force") return;
   box.append(mk("div", "muted", "ปรับแล้วทุกเครื่องได้ค่าใหม่ทันที ไม่ต้องรีเฟรช • ช่องว่าง/รีเซ็ต = กลับไปใช้ค่าตั้งต้น • ผลของเป้าหมาย/ภารกิจที่เริ่มแล้วจะใช้ยอดใหม่ทันที"));
   let grp = "";
   const order = []; tuneDefs().forEach((r) => { if (!order.includes(r[5])) order.push(r[5]); });
-  tuneDefs().sort((a, b) => order.indexOf(a[5]) - order.indexOf(b[5])).forEach(([key, label, def, mn, mx, g]) => {
+  tuneDefs().filter((r) => !only || r[5] === only).sort((a, b) => order.indexOf(a[5]) - order.indexOf(b[5])).forEach(([key, label, def, mn, mx, g]) => {
     if (g !== grp) { grp = g; box.append(mk("div", "hub-day", g)); }
     const tuned = typeof state.tune?.[key] === "number", cur = T(key, def);
     const row = mk("div", "world-row tune-row"); row.append(mk("div", "", label));
@@ -11648,7 +11682,7 @@ async function econRender(box) {
     box.append(mk("div", "hub-day", "🎒 ของในมือผู้เล่นทุกคนรวมกัน"));
     const top = Object.entries(X.inv).filter(([, q]) => q > 0).sort((a, b) => b[1] - a[1]).slice(0, 10);
     box.append(mk("div", "", top.length ? top.map(([id, q]) => `${ITEMS[id]?.icon || "📦"} ${ITEMS[id]?.name || id} ${fmt(q)}`).join(" • ") : "ไม่มีข้อมูล"));
-    const row = mk("div", "row"); row.append(btn("รีเฟรชข้อมูล", () => { state.econCache = null; hubTab("econ"); }, "btn ghost mini")); box.append(row);
+    const row = mk("div", "row"); row.append(btn("รีเฟรชข้อมูล", () => { state.econCache = null; admTab("econ"); }, "btn ghost mini")); box.append(row);
   } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดแดชบอร์ดไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("econ", e); }
 }
 
