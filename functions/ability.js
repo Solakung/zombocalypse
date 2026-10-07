@@ -18,9 +18,9 @@ const careerOf = (c) => {
   return { k: best[0], L: CAREER_LV.filter((v) => best[1] >= v).length };
 };
 const evoLine = (e, m = {}) => {
-  const t = { hunter: Number(e.h) || 0, giant: Number(e.g) || 0, shade: Number(e.s) || 0 }, max = Math.max(t.hunter, t.giant, t.shade);
+  const t = { hunter: Number(e.h) || 0, giant: Number(e.g) || 0, shade: Number(e.s) || 0, pack: Number(e.p) || 0 }, max = Math.max(t.hunter, t.giant, t.shade, t.pack);
   if (max < 1) return null;
-  const pref = { hunter: "h", giant: "g", shade: "s" }, k = [e.line, "hunter", "giant", "shade"].find((x) => x && t[x] === max && (x !== e.line || t[e.line] === max));
+  const pref = { hunter: "h", giant: "g", shade: "s", pack: "p" }, k = [e.line, "hunter", "giant", "shade", "pack"].find((x) => x && t[x] === max && (x !== e.line || t[e.line] === max));
   const kk = k || "hunter", mt = max >= 4 ? Math.min(4, Number(m[pref[kk]]) || 0) : 0;   // มิวเตชัน (mutate.js) เพิ่มขั้นต่อจากขั้น 4 ได้อีก 4 ขั้น
   return { k: kk, L: Math.min(4, max) + mt };
 };
@@ -32,9 +32,10 @@ const ABIL = {
   trader: { f: "h", i: "💼", n: "สายส่งวัสดุ", d: "เจอเศษวัสดุ สารเคมี และอาหารมากขึ้น", cost: ["scrap", 2], eff: (L) => ({ sc: 1 + 0.07 * L, f: 1 + 0.04 * L, it: { chem: 1 + 0.10 * L } }) },
   hunterz: { f: "z", i: "🩸", n: "ล่ากลิ่น", d: "เนื้อเน่าเจอมากขึ้น ว่างเปล่าน้อยลง", cost: ["rotten_meat", 2], eff: (L) => ({ rm: 1 + 0.10 * L, n: 1 - 0.05 * L }) },
   giantz: { f: "z", i: "🗿", n: "ผิวหนา", d: "ลดดาเมจที่ได้รับ และทนสถานะผิดปกติ", cost: ["rotten_meat", 2], eff: (L) => ({ cut: 0.05 * L }) },
-  shadez: { f: "z", i: "🕷️", n: "ซุ่มเงียบ", d: "ค้นแล้วว่างเปล่าน้อยลง ของหายากออกง่ายขึ้น", cost: ["rotten_meat", 2], eff: (L) => ({ n: 1 - 0.10 * L, r: 1 + 0.06 * L }) }
+  shadez: { f: "z", i: "🕷️", n: "ซุ่มเงียบ", d: "ค้นแล้วว่างเปล่าน้อยลง ของหายากออกง่ายขึ้น", cost: ["rotten_meat", 2], eff: (L) => ({ n: 1 - 0.10 * L, r: 1 + 0.06 * L }) },
+  packz: { f: "z", i: "🦖", n: "เสียงเรียกฝูง", d: "ลูกฝูงรับดาเมจแทนบ่อยขึ้น และหลบง่ายขึ้นชั่วคราว", cost: ["rotten_meat", 2], eff: (L) => ({ icpt: 0.03 * L, dodge: 0.03 * L }) }
 };
-const ZMAP = { hunter: "hunterz", giant: "giantz", shade: "shadez" };
+const ZMAP = { hunter: "hunterz", giant: "giantz", shade: "shadez", pack: "packz" };
 const dur = (L) => (8 + 2 * Le(L)) * 60000;                 // 10/12/14/16 นาที
 const cdOf = (id, L) => (ABIL[id].cd || (100 - 10 * Le(L))) * 60000;   // ปกติ 90/80/70/60 นาที (หมอ 45 นาที)
 const AID_DAY = 5, AID_REW = [["herb_bundle", 1]];

@@ -57,17 +57,17 @@ function makeHboss(db, rnd) {
     else if (k === "tough") v = g >= 1 ? 2 : 0;
     else if (k === "st") v = g >= 3 ? -2 : 0;
     else if (k === "regen") v = g >= 3 ? -1 : 0;
-    v += PK.packBonus(k, PK.packTier(evo));   // สายแรปเตอร์ (evo.p ใส่จาก pack/{uid}/t ใน load)
+    v += PK.packBonus(k, PK.packTier(evo), PK.packMut(evo));   // สายแรปเตอร์ (evo.p = ขั้น • evo.mp = มิวเตชัน mut/{uid}/p ใส่ใน load)
     return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
   }
   async function load(uid, now) {
-    const [pS, stS, bS, eS, evS, fS, pkS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`stats/${uid}`).get(), db.ref(`buffs/${uid}`).get(), db.ref(`effects/${uid}`).get(), db.ref(`evo/${uid}`).get(), db.ref(`hboss/${uid}`).get(), db.ref(`pack/${uid}`).get()]);
-    const p = pS.val(), stats = col(stS.val()), buff = bS.val(), effects = col(eS.val()), evo = { ...col(evS.val()), p: num(col(pkS.val()).t) };
+    const [pS, stS, bS, eS, evS, fS, mtS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`stats/${uid}`).get(), db.ref(`buffs/${uid}`).get(), db.ref(`effects/${uid}`).get(), db.ref(`evo/${uid}`).get(), db.ref(`hboss/${uid}`).get(), db.ref(`mut/${uid}`).get()]);
+    const p = pS.val(), stats = col(stS.val()), buff = bS.val(), effects = col(eS.val()), evo = { ...col(evS.val()), mp: num(col(mtS.val()).p) };
     const buffActive = !!buff && typeof buff.bstart === "number" && buff.bstart + num(buff.mins) * 60000 - 1000 > now;
     const effActive = (t) => { const e = effects[t]; return !!e && typeof e.bstart === "number" && e.bstart + num(e.mins) * 60000 - 1000 > now; };
     const statOf = (k) => num(stats[k]) + (buffActive ? num(buff[k]) : 0) + evoBonus(evo, k);
     const pt = PK.packTier(evo);
-    return { p, statOf, pack: pt, maxHp: HP_BASE + 10 * statOf("hp"), stunned: effActive("stun"), diceMod: effActive("dice") ? Math.min(0, num(effects.dice.v)) : 0, f: fS.exists() ? col(fS.val()) : {} };
+    return { p, statOf, pack: pt, packM: PK.packMut(evo), maxHp: HP_BASE + 10 * statOf("hp"), stunned: effActive("stun"), diceMod: effActive("dice") ? Math.min(0, num(effects.dice.v)) : 0, f: fS.exists() ? col(fS.val()) : {} };
   }
   const fightView = (f) => { const b = BOSSES[f.boss]; return { boss: f.boss, name: b.name, icon: b.icon, tag: b.tag, hp: f.hp, max: f.max, shield: f.shield || 0, shieldMax: b.shield || 0, pdot: f.pdN > 0 ? { n: f.pdN, per: f.pdP } : null, pack: f.pk ? { t: num(f.pk) } : null, weak: f.wkN > 0 ? { n: f.wkN, pct: b.weak ? b.weak.pct : 0 } : null, round: f.round || 0, art: "hb_" + f.boss }; };
 
@@ -77,9 +77,9 @@ function makeHboss(db, rnd) {
     const heavy = b.heavy && f.round % b.heavy === 0;
     for (let i = 0; i < b.hits; i++) {
       if (rf() >= b.acc) { lines.push(`${b.name}ฟาดพลาด`); continue; }
-      const dc = ctx.pack ? Math.min(PK.DODGE_CAP, Math.max(0, DODGE_PER_POINT * ctx.statOf("agi")) + PK.dodgeBonus(ctx.pack)) : Math.max(0, DODGE_PER_POINT * ctx.statOf("agi"));
+      const dc = ctx.pack ? Math.min(PK.DODGE_CAP, Math.max(0, DODGE_PER_POINT * ctx.statOf("agi")) + PK.dodgeBonus(ctx.pack, ctx.packM)) : Math.max(0, DODGE_PER_POINT * ctx.statOf("agi"));
       if (rf() < dc) { lines.push(`🌀 คุณหลบ${b.verb}ได้`); continue; }
-      if (ctx.pack && f.pk && rf() < PK.INTERCEPT[ctx.pack]) { lines.push(`🦖 ลูกฝูงกระโจนมารับ${b.verb}แทน!`); continue; }
+      if (ctx.pack && f.pk && rf() < PK.intercept(ctx.pack, ctx.packM)) { lines.push(`🦖 ลูกฝูงกระโจนมารับ${b.verb}แทน!`); continue; }
       let dmg = ri(b.dmg[0], b.dmg[1]); if (heavy) dmg = Math.round(dmg * 1.5);
       dmg = Math.max(1, dmg - Math.max(0, ctx.statOf("tough")));
       total += dmg; landed++;
@@ -166,7 +166,7 @@ function makeHboss(db, rnd) {
       }
       if (!ended && c.pack && nf.pk && a !== "flee") {   // ลูกฝูงกัดบอสทุกรอบที่สู้ต่อ (โล่ดูดก่อน) — ไม่มีเลือด ไม่ตาย
         if (rf() < PK.BITE_ACC) {
-          const [lo, hi] = PK.BITE[c.pack]; let md = ri(lo, hi), ab = 0;
+          const [lo, hi] = PK.biteRange(c.pack, c.packM); let md = ri(lo, hi), ab = 0;
           if (nf.shield > 0) { ab = Math.min(nf.shield, md); nf.shield -= ab; md -= ab; }
           bossHp = Math.max(0, bossHp - md); log.push(`🦖 ลูกฝูงงับบอส −${md + ab}${ab ? ` (🛡️ โล่รับ ${ab})` : ""}`);
           if (bossHp === 0) ended = "won";

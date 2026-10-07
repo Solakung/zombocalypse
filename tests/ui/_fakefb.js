@@ -1,9 +1,10 @@
 // 🧪 Firebase จำลองในหน่วยความจำ + โหลดเกมจริง (index.html + script.js) — ใช้ร่วมกันของ uiboot / uitut
-// boot({ faction, role, createdAt (ms หรือ "now"), inventory, viewport, ms }) → { pg, br, errs, state() }
+// boot({ faction, role, createdAt (ms หรือ "now"), inventory, seed (โหนดฐานข้อมูลเพิ่มเติม), viewport, ms }) → { pg, br, errs, state() }
 const { chromium } = require("/opt/node-tools/node_modules/playwright"); const fs = require("fs"), path = require("path");
 const ROOT = path.join(__dirname, "../../");
 const DBJS = `
 const now = Date.now(); const CFG = window.__CFG || {}; const DB = window.__DB = { users: { u1: { username: "tester", faction: CFG.faction || "human", role: CFG.role || "player", banned: false, zone: "safe", hp: 100, stamina: 100, staminaTs: now, food: 100, foodTs: now, water: 100, waterTs: now, createdAt: CFG.createdAt === "now" ? now - 30000 : (CFG.createdAt ?? now - 1e9), seenAt: now } }, stats: { u1: { str: 1, hp: 1, st: 1, regen: 0, agi: 0, tough: 0 } }, ...(CFG.inventory ? { inventory: { u1: CFG.inventory } } : {}) };
+if (CFG.seed) for (const [k, v] of Object.entries(CFG.seed)) DB[k] = v;   // boot({ seed }) ใส่โหนดเริ่มต้นเพิ่ม (เช่น evo)
 const L = []; const SV = { __sv: 1 };
 const norm = (p) => String(p || "").split("/").filter(Boolean).join("/");
 const getAt = (p) => { let c = DB; for (const k of norm(p).split("/").filter(Boolean)) { if (c == null || typeof c !== "object") return null; c = c[k]; } return c === undefined ? null : c; };
@@ -36,7 +37,7 @@ async function boot(o = {}) {
   const br = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }); const errs = [];
   const ctx = await br.newContext({ viewport: o.viewport || { width: 360, height: 780 }, isMobile: !o.desktop, hasTouch: !o.desktop }); const pg = await ctx.newPage();
   pg.on("pageerror", (e) => errs.push("PAGEERROR " + String(e && e.stack || e).split("\n").slice(0, 4).join(" | "))); pg.on("console", (m) => { if (m.type() === "error") errs.push("CONSOLE " + m.text().slice(0, 300)); });
-  await pg.addInitScript((cfg) => { window.__CFG = cfg; }, { faction: o.faction || "human", role: o.role || "player", createdAt: o.createdAt === "now" ? "now" : (o.createdAt ?? null), inventory: o.inventory || null });
+  await pg.addInitScript((cfg) => { window.__CFG = cfg; }, { faction: o.faction || "human", role: o.role || "player", createdAt: o.createdAt === "now" ? "now" : (o.createdAt ?? null), inventory: o.inventory || null, seed: o.seed || null });
   await pg.route("**/*", async (r) => {
     const u = r.request().url();
     if (u.includes("gstatic.com/firebasejs")) { const body = u.includes("firebase-database") ? DBJS : u.includes("firebase-auth") ? AUTH : u.includes("firebase-app") ? APP : u.includes("firebase-functions") ? FN : ST; return r.fulfill({ contentType: "application/javascript", body }); }

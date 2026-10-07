@@ -23,6 +23,7 @@ const { makeLearn } = require("./learn");
 const { makeAbility } = require("./ability");
 const { makeCook } = require("./cook");
 const { makePack } = require("./pack");
+const { makeGround } = require("./ground");
 const { makeWar } = require("./war");
 const { makeCasino } = require("./casino");
 const { makeSlave } = require("./slave");
@@ -262,6 +263,13 @@ const packSys = makePack(admin.database());
 exports.packAct = onCall(async (req) => {
   try { return await packSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("packAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🧹 เคลียร์ของที่ผู้เล่นวางทิ้งไว้บนพื้นโซนเมื่อเกิน ground_ttl_h ชั่วโมง (ค่าเริ่มต้น 6; 0 = ปิด) — ไคลเอนต์เรียกตอนเข้าโซน (functions/ground.js)
+const groundSys = makeGround(admin.database());
+exports.groundAct = onCall(async (req) => {
+  try { return await groundSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("groundAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
 
 // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ/สเตตัส (ผลคำนวณและเขียนที่ฝั่งเซิร์ฟเวอร์ — rules ไม่มีกิ่ง eatSlot ของการกินแล้ว ยกเว้นยาในการสู้บอส)
