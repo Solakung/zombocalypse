@@ -29,6 +29,7 @@ const { makeHc } = require("./hc");
 const { makeZwar } = require("./zwar");
 const { makeForge } = require("./forge");
 const { makeHboss } = require("./hboss");
+const { makeCrim } = require("./crim");
 const { makeFxw } = require("./fxw");
 const { makeUse } = require("./use");
 
@@ -222,6 +223,13 @@ const fxwSys = makeFxw(admin.database());
 exports.fxwAct = onCall(async (req) => {
   try { return await fxwSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("fxwAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🟠 สถานะส้ม (ฆ่าผู้เล่นฝ่ายเดียวกัน → เข้า Safe Zone ไม่ได้) — ปิดอยู่จนกว่าตั้ง tune crim_on = 1 (functions/crim.js)
+const crimSys = makeCrim(admin.database());
+exports.crimAct = onCall(async (req) => {
+  try { return await crimSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("crimAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
 
 // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ/สเตตัส (ผลคำนวณและเขียนที่ฝั่งเซิร์ฟเวอร์ — rules ไม่มีกิ่ง eatSlot ของการกินแล้ว ยกเว้นยาในการสู้บอส)

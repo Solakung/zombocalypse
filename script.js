@@ -55,6 +55,7 @@ const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.d
 const useCall = (data) => httpsCallable(fns, "useAct")(data).then((r) => r.data);   // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ (functions/use.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
 const fxwCall = (data) => httpsCallable(fns, "fxwAct")(data).then((r) => r.data);   // ⚔️ อาวุธติดสถานะ ค้นเจอ (functions/fxw.js; คราฟต์ผ่าน forgeCall)
+const crimCall = (data) => httpsCallable(fns, "crimAct")(data).then((r) => r.data);   // 🟠 สถานะส้ม (functions/crim.js)
 const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data);   // 🏹 บอสเผ่ามนุษย์สำหรับซอมบี้ (functions/hboss.js)
 
 /* ---------------------------------------------------------
@@ -62,7 +63,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0333";
+const APP_VERSION = "2026-10-07.0404";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1001,7 +1002,7 @@ function renderTravelState() {
     if (!t) { t = mk("span", "travel-tag"); b.insertBefore(t, b.querySelector(".danger-tag")); }
     const here = b.dataset.zone === state.zone;
     b.classList.toggle("cooling", !here && (cd > 0 || dead));
-    t.textContent = here ? "" : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
+    t.textContent = here ? "" : b.dataset.zone === "safe" && crimMe() ? "🟠 ห้ามเข้า" : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
     t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
   });
   try { zmapBadges(); } catch { /* ยังไม่พร้อม */ }
@@ -1034,7 +1035,7 @@ function renderBars() {
 
   const starving = (fd === 0 || wt === 0);
   renderDanger($("danger-bar"));
-  $("btn-scavenge").disabled = (starving ? (state.zone !== "safe" || p.hp <= STARVE_HP) : st < searchCost()) || effActive("stun");
+  $("btn-scavenge").disabled = (starving ? ((state.zone !== "safe" && !crimMe()) || p.hp <= STARVE_HP) : st < searchCost()) || effActive("stun");
   const fxEl = $("me-effects");
   if (fxEl) {
     fxEl.textContent = FX_KEYS.filter(effActive).map((t) => `${FX_TYPES[t].icon}${fxName(t)}${t === "dice" ? sgn(effV(t)) : ""} ${Math.max(1, Math.ceil((effEnd(state.effects[t]) - serverNow()) / 60000))}น.`).concat(poisonImmLeft() > 0 ? [`🛡️ต้านพิษ ${Math.ceil(poisonImmLeft() / 60000)}น.`] : []).join("  ");
@@ -1331,6 +1332,7 @@ async function enterZone(z, initial = false, moved = false) {
         if (state.profile.hp <= 0) return;
         if (state.boss || state.hb) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
         const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
+        if (z === "safe" && crimMe()) return toast(`🟠 คุณเป็นผู้ก่อเหตุ เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที (หรือจ่ายค่าประกันที่แถบส้ม)`);
         if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
         if (cur < cost) return toast(`พลังงานไม่พอเดินทาง (ต้องใช้ ${cost})`);
         await update(ref(db), {
@@ -1565,7 +1567,7 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${crimActive(c.key) ? " 🟠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
     if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
@@ -1993,15 +1995,16 @@ async function processDeath(attempt = 0) {
     if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
     if (state.boss) u[`bossFights/${uid}`] = null;
     { const en = evoDeathWrites(u); if (en) lost.push(en); }
-    u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = "safe"; u[`users/${uid}/lastDeath`] = serverTimestamp();
+    const rz = crimMe() ? "ruins" : "safe";   // ส้มฟื้นที่ Safe Zone ไม่ได้ → เขตเมืองร้าง
+    u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = rz; u[`users/${uid}/lastDeath`] = serverTimestamp();
     const deadZone = state.zone;
     if (state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
     await update(ref(db), u);
     // ตรวจหลังฟื้น: ถ้าฐานข้อมูลยังมีเชื้อค้าง (ไม่ควรเกิด) ให้บันทึกลง console + แจ้งผู้เล่นให้รักษา/แจ้งแอดมิน (ล้างเองตอน HP>0 ไม่ได้ตาม rules)
     if (p.infected) setTimeout(async () => { try { const hpS = (await get(ref(db, `users/${uid}`))).val(); if (hpS && hpS.infected && hpS.hp === 50) { console.warn("infection survived respawn", hpS.infected); logLine("🦠 เชื้อยังค้างหลังฟื้น — ใช้ชุดปฐมพยาบาลหรือมอสเพื่อรักษา (หรือแจ้งแอดมิน)", "system"); } } catch { /* ข้าม */ } }, 4000);
     try { if (effDanger(deadZone) >= 5) feedPost(3, deadZone); } catch { /* ข้าม */ }
-    logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ Safe Zone${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
-    await enterZone("safe", false, true);
+    logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ ${rz === "safe" ? "Safe Zone" : "เขตเมืองร้าง (ส้มเข้า Safe Zone ไม่ได้)"}${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
+    await enterZone(rz, false, true);
   } catch (e) {
     console.error("death", e);
     if (attempt < 2) setTimeout(() => { state.dying = false; processDeath(attempt + 1); }, 2000);
@@ -2023,7 +2026,7 @@ async function scavengeOnce() {
   const wt = curWater();
   const starving = (fd === 0 || wt === 0);
 
-  if (starving && state.zone !== "safe") return toast("หิวหรือกระหายจนหมดแรง ค้นหาข้างนอกไม่ไหว — กินอาหาร/ดื่มน้ำก่อน (หรือกลับไปค้นหาใน Safe Zone)");
+  if (starving && state.zone !== "safe" && !crimMe()) return toast("หิวหรือกระหายจนหมดแรง ค้นหาข้างนอกไม่ไหว — กินอาหาร/ดื่มน้ำก่อน (หรือกลับไปค้นหาใน Safe Zone)");
   if (starving && p.hp <= STARVE_HP) return toast(`HP ต่ำเกินไปที่จะฝืนค้นหาตอนหิว (เสีย ${STARVE_HP} HP ต่อครั้ง) กินหรือดื่มก่อน`);
   if (!starving && cur < searchCost()) return toast("พลังงานไม่พอ");
   {
@@ -2491,6 +2494,35 @@ $("hb-flee").addEventListener("click", () => hbRound("flee"));
 for (const id of ["bandage", "medkit", "moss"]) $("hb-" + id).addEventListener("click", () => hbRound("heal", id));
 $("hb-claim").addEventListener("click", hbClaim);
 // ---- /บอสเผ่ามนุษย์
+
+// ---- 🟠 สถานะส้ม — functions/crim.js • ฆ่าผู้เล่นฝ่ายเดียวกันนอก Safe Zone → เข้า Safe Zone ไม่ได้ (rules กั้นด้วย) • ปิดอยู่จนกว่าเจ้าของตั้ง tune crim_on = 1
+const crimOn = () => T("crim_on", 0) === 1;
+const crimActive = (uid, now = serverNow()) => { const c = state.crim?.[uid]; return !!c && typeof c.until === "number" && c.until > now; };   // ไม่เช็ค crimOn: rules กั้นตามข้อมูลจริงแม้ปิดระบบทีหลัง
+const crimMe = () => !!state.uid && crimActive(state.uid);
+const crimMinsLeft = () => Math.max(1, Math.ceil(((state.crim?.[state.uid]?.until || 0) - serverNow()) / 60000));
+function crimRender() {
+  const bar = $("crim-bar"); if (!bar) return;
+  const on = crimMe(); bar.classList.toggle("hidden", !on);
+  if (on) $("crim-txt").textContent = `🟠 คุณเป็นผู้ก่อเหตุ (ฆ่าผู้เล่นฝ่ายเดียวกัน) — เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที`;
+  try { renderTravelState(); } catch { /* ยังไม่พร้อม */ }
+}
+function crimListen() {
+  onValue(ref(db, "crim"), (snap) => { state.crim = snap.val() || {}; crimRender(); if (state.psnap) { try { renderPlayers(state.psnap); } catch { /* ข้าม */ } } }, (er) => console.warn("crim", er?.code || er));
+  setInterval(crimRender, 30000);
+}
+async function crimReport(role, other) {   // หลังเป้าหมายล้ม (HP 0 ถูกเขียนแล้ว) แจ้งเซิร์ฟเวอร์ให้ตรวจเอง — พลาดไม่กระทบเกม
+  try { if (crimOn() && other) await crimCall({ a: "report", role, other }); } catch (e) { console.warn("crim report", e?.code || e); }
+}
+async function crimBail() {
+  try {
+    const st = await crimCall({ a: "state" });
+    if (!st.active) { toast("คุณไม่ได้เป็นส้มแล้ว"); return; }
+    if (!confirm(`จ่ายค่าประกัน ${st.bailPts} แต้ม? (เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3 — ระบบหักให้เอง) แล้วเข้า Safe Zone ได้ทันที — ก่อเหตุซ้ำใน 24 ชม. โทษจะหนักขึ้น`)) return;
+    const r = await crimCall({ a: "bail" }); toast(`จ่ายค่าประกัน ${r.pts} แต้มแล้ว`); logLine("🟠 จ่ายค่าประกันแล้ว กลับเข้า Safe Zone ได้", "info");
+  } catch (e) { toast(hbMsg(e)); }
+}
+$("crim-bail").addEventListener("click", crimBail);
+// ---- /สถานะส้ม
 
 /* =========================================================
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
@@ -3024,6 +3056,7 @@ async function freeHit(targetUid, targetName, w, sk = null) {
 
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
+  if (!dodged && left === 0 && state.players[targetUid]?.faction === p.faction) crimReport("attacker", targetUid);   // 🟠 ฆ่าฝ่ายเดียวกัน (เซิร์ฟเวอร์ตรวจเงื่อนไขเอง)
 }
 
 function listenAttacks() {
@@ -3080,7 +3113,7 @@ async function resolveAttack(key, a) {
 
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
-
+  if (landed && newHp === 0 && state.players[key]?.faction === p.faction) crimReport("victim", key);   // 🟠 ถูกฝ่ายเดียวกันฆ่า (เซิร์ฟเวอร์ตรวจเงื่อนไขเอง)
 }
 
 /* =========================================================
@@ -6907,7 +6940,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
+  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -11264,6 +11297,9 @@ function tuneDefs() {
   rows.push(["hc_drop", "น้ำหนักดรอป 🧬 ชิ้นส่วน DNA ในศูนย์วิจัย (ตารางรวม ~110 • 8 ≈ 7% ต่อการค้น)", 8, 0, 40, "📡 ภารกิจ HC"]);
   rows.push(["hc_goal", "เป้าหมายส่งชิ้นส่วน DNA รวมทั้งเซิร์ฟเวอร์ (ชิ้น)", 300, 10, 5000, "📡 ภารกิจ HC"]);
   rows.push(["hc_pm", "โอกาสเจอธาราต่อการค้น 1 ครั้งที่ศูนย์วิจัย (‰ — 4 = 0.4%, ซอมบี้ได้ครึ่งหนึ่ง) • ใครเจอก่อนคือผู้ค้นพบของทั้งเซิร์ฟเวอร์ เฉลี่ยทั้งโลกค้นรวม ~250 ครั้ง • ต้องใช้ฟังก์ชัน hcAct + rules ใหม่", 4, 0, 1000, "📡 ภารกิจ HC"]);
+  rows.push(["crim_on", "🟠 สถานะส้ม: ฆ่าผู้เล่นฝ่ายเดียวกัน → เข้า Safe Zone ไม่ได้ (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน crimAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "🟠 สถานะส้ม"]);
+  rows.push(["crim_min", "ระยะเวลาส้มต่อครั้ง (นาที — คูณจำนวนครั้งใน 24 ชม. สูงสุด ×4)", 45, 1, 600, "🟠 สถานะส้ม"]);
+  rows.push(["crim_bail", "ค่าประกันปลดส้ม (แต้มมูลค่าต่อครั้ง — เศษเหล็ก/ตะปู 1 • เคมี/เศษหนัง 2 • เทปกาว 3)", 20, 1, 500, "🟠 สถานะส้ม"]);
   rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด ค่าเริ่มต้น, 0 = ปิด • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 1, 0, 1, "🏹 บอสเผ่ามนุษย์"]);
