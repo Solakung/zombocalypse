@@ -918,3 +918,37 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .clog-chg { background: rgba(240,180,60,.28); }
 .clog-fix { background: rgba(110,160,240,.28); }
 #clog-body ul { list-style: none; padding-left: 0 !important; }
+
+/* ---- 🎓 บทสอนผู้เล่นใหม่ (ไฟสปอตไลต์ + การ์ด NPC) ---- */
+#tut-layer { position: fixed; inset: 0; z-index: 9000; pointer-events: none; }
+#tut-layer.hidden { display: none; }
+.tut-blk { position: fixed; background: rgba(6, 8, 10, .74); pointer-events: auto; }
+.tut-ring { position: fixed; display: none; border: 2px solid var(--hazard, #e0a030); border-radius: 10px; box-shadow: 0 0 0 4px rgba(224,160,48,.25), 0 0 18px rgba(224,160,48,.55); pointer-events: none; animation: tutPulse 1.4s ease-in-out infinite; }
+@keyframes tutPulse { 0%, 100% { box-shadow: 0 0 0 3px rgba(224,160,48,.2), 0 0 10px rgba(224,160,48,.4); } 50% { box-shadow: 0 0 0 8px rgba(224,160,48,.12), 0 0 22px rgba(224,160,48,.75); } }
+.tut-card { position: fixed; left: 10px; right: 10px; bottom: calc(66px + env(safe-area-inset-bottom)); max-width: 520px; margin: 0 auto; display: flex; gap: 10px; padding: 10px; border-radius: 12px; background: var(--panel, #20252b); border: 1px solid var(--hazard, #e0a030); box-shadow: 0 10px 30px rgba(0,0,0,.6); pointer-events: auto; }
+.tut-card.tut-top { bottom: auto; top: calc(64px + env(safe-area-inset-top)); }
+.tut-por { flex: 0 0 64px; height: 64px; border-radius: 10px; background: #14171b center/cover no-repeat; border: 1px solid #444; }
+.tut-body { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.tut-name { color: var(--hazard, #e0a030); font-size: 14px; }
+.tut-txt { font-size: 14px; line-height: 1.5; }
+.tut-row { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+.tut-prog { margin-right: auto; font-size: 12px; opacity: .7; }
+#tut-skip { position: fixed; top: calc(8px + env(safe-area-inset-top)); right: 8px; pointer-events: auto; opacity: .85; }
+@media (prefers-reduced-motion: reduce) { .tut-ring { animation: none; } }
+
+/* ---- 📱 แถบบนมือถือ / แชท / โทสต์ (ลดความรก) ---- */
+@media (max-width: 900px) {
+  .tidy-hide { display: none !important; }
+  #btn-base { order: 0; } #btn-quests { order: 1; } #btn-market { order: 2; } #btn-sk { order: 3; } #btn-evo { order: 4; } #btn-admin { order: 5; } #btn-more { order: 6; min-width: 38px; padding: 4px 6px; }
+  .top-actions { padding-right: 0; gap: 4px; -webkit-mask-image: none; mask-image: none; }
+  .top-actions .btn { padding: 4px 8px; font-size: 13px; }
+  .coach { padding: 5px 8px; gap: 6px; }
+  .coach-t { -webkit-line-clamp: 1; font-size: 13px; }
+  .coach .btn { min-height: 30px; padding: 2px 10px; }
+  .msg.system .bubble { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+  .msg.system.open .bubble { display: block; -webkit-line-clamp: unset; }
+  #toast { bottom: auto; top: calc(var(--topbar-h, 120px) + 6px); transform: translate(-50%, -24px); }
+  #toast.show { transform: translate(-50%, 0); }
+}
+#top-more .modal-box { max-width: 420px; }
+

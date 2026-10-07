@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0730";
+const APP_VERSION = "2026-10-07.0816";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -492,14 +492,14 @@ const ZONES = {
   safe: { name: "Safe Zone", icon: "🏕️", danger: 0, desc: "ค่ายพักพิง ปลอดภัย ต่อสู้ไม่ได้ เสบียงมีแค่พอเสมอตัว ส่วนใหญ่เป็นวัสดุคราฟต์ — อยากได้ของจริงต้องออกไปข้างนอก", drops: [{ id: "canned_food", w: 4 }, { id: "bread", w: 5 }, { id: "water", w: 9 }, { id: "fruit", w: 5 }, { id: "bandage", w: 3 }, { id: "scrap", w: 22 }, { id: null, w: 52 }] },   // คาดหวังอาหาร ~3.1 / น้ำ ~4.1 ต่อครั้ง ≈ ต้นทุนค้นหา (3 / 4)
   ruins: { name: "เขตเมืองร้าง", icon: "🏚️", danger: 4, desc: "ตึกพังและซากรถ ระวังซอมบี้ตามซอกตึก", drops: [{ id: "zombie", w: 15 }, { id: "canned_food", w: 12 }, { id: "bread", w: 8 }, { id: "water", w: 12 }, { id: "fruit", w: 4 }, { id: "energy_drink", w: 3 }, { id: "wooden_bat", w: 5 }, { id: "spiked_bat", w: 3 }, { id: "knife", w: 6 }, { id: "scrap", w: 12 }, { id: null, w: 20 }] },
   mall: { name: "ห้างสรรพสินค้าร้าง", icon: "🏬", danger: 6, desc: "ของกินเยอะ แต่ซอมบี้ก็เยอะเช่นกัน", drops: [{ id: "zombie", w: 25 }, { id: "canned_food", w: 12 }, { id: "soup", w: 3 }, { id: "choco_bar", w: 3 }, { id: "bread", w: 10 }, { id: "water", w: 16 }, { id: "energy_drink", w: 6 }, { id: "crowbar", w: 10 }, { id: "scrap", w: 8 }, { id: null, w: 7 }] },
-  hospital: { name: "โรงพยาบาล", icon: "🏥", danger: 7, desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 28 }, { id: "bandage", w: 15 }, { id: "medkit", w: 10 }, { id: "moss", w: 6 }, { id: "water", w: 10 }, { id: "energy_drink", w: 5 }, { id: "scrap", w: 8 }, { id: "antidote", w: 5 }, { id: "serum", w: 3 }, { id: "trauma_kit", w: 2 }, { id: "chem", w: 4 }, { id: null, w: 4 }] },
+  hospital: { name: "โรงพยาบาล", icon: "🏥", danger: 7, desc: "ยาและเวชภัณฑ์เยอะ แต่อันตรายมาก", drops: [{ id: "zombie", w: 28 }, { id: "bandage", w: 10 }, { id: "medkit", w: 6 }, { id: "moss", w: 4 }, { id: "water", w: 10 }, { id: "energy_drink", w: 5 }, { id: "scrap", w: 8 }, { id: "antidote", w: 1 }, { id: "serum", w: 2 }, { id: "trauma_kit", w: 1 }, { id: "chem", w: 4 }, { id: null, w: 21 }] },
   police: { name: "สถานีตำรวจ", icon: "🚓", danger: 9, desc: "สถานที่หาอาวุธชั้นดี ถ้าคุณรอดจากฝูงผีได้", drops: [{ id: "zombie", w: 30 }, { id: "pistol", w: 10 }, { id: "knife", w: 12 }, { id: "bandage", w: 5 }, { id: "bread", w: 5 }, { id: "energy_drink", w: 5 }, { id: "shotgun", w: 5 }, { id: "stim_shot", w: 3 }, { id: null, w: 25 }] },
-  forest: { name: "ป่าลึก", icon: "🌲", danger: 2, desc: "เงียบสงบ ผลไม้และมอสขึ้นชุก อาจเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 18 }, { id: "moss", w: 12 }, { id: "crowbar", w: 8 }, { id: "pistol", w: 3 }, { id: "pocket_knife", w: 1 }, { id: "scrap", w: 8 }, { id: null, w: 25 }] },
-  factory: { name: "โรงงานร้าง", icon: "🏭", danger: 5, desc: "เครื่องจักรสนิมเขรอะ เศษวัสดุและสารเคมีเพียบ อาวุธหนักๆ ก็พอมี", drops: [{ id: "zombie", w: 20 }, { id: "scrap", w: 15 }, { id: "chem", w: 10 }, { id: "energy_drink", w: 5 }, { id: "fire_axe", w: 6 }, { id: "spiked_bat", w: 5 }, { id: "pocket_knife", w: 6 }, { id: "canned_food", w: 6 }, { id: "antidote", w: 3 }, { id: null, w: 24 }] },
+  forest: { name: "ป่าลึก", icon: "🌲", danger: 2, desc: "เงียบสงบ ผลไม้และมอสขึ้นชุก อาจเจอของแปลกๆ ซ่อนอยู่", drops: [{ id: "zombie", w: 10 }, { id: "water", w: 15 }, { id: "fruit", w: 18 }, { id: "moss", w: 8 }, { id: "crowbar", w: 8 }, { id: "pistol", w: 3 }, { id: "pocket_knife", w: 1 }, { id: "scrap", w: 8 }, { id: null, w: 29 }] },
+  factory: { name: "โรงงานร้าง", icon: "🏭", danger: 5, desc: "เครื่องจักรสนิมเขรอะ เศษวัสดุและสารเคมีเพียบ อาวุธหนักๆ ก็พอมี", drops: [{ id: "zombie", w: 20 }, { id: "scrap", w: 15 }, { id: "chem", w: 10 }, { id: "energy_drink", w: 5 }, { id: "fire_axe", w: 6 }, { id: "spiked_bat", w: 5 }, { id: "pocket_knife", w: 6 }, { id: "canned_food", w: 6 }, { id: "antidote", w: 1 }, { id: null, w: 26 }] },
   port: { name: "ท่าเรือ", icon: "⚓", danger: 5, desc: "ตู้คอนเทนเนอร์เรียงรายเต็มไปด้วยเสบียง ระวังฝูงซอมบี้หลบอยู่หลังตู้", drops: [{ id: "zombie", w: 18 }, { id: "canned_food", w: 14 }, { id: "water_jug", w: 8 }, { id: "army_meal", w: 4 }, { id: "choco_bar", w: 8 }, { id: "bread", w: 6 }, { id: "fruit", w: 5 }, { id: "scrap", w: 8 }, { id: "pocket_knife", w: 4 }, { id: "crossbow", w: 3 }, { id: "soup", w: 4 }, { id: null, w: 18 }] },
-  base: { name: "ค่ายทหารร้าง", icon: "🪖", danger: 8, desc: "คลังแสงและเสบียงทหาร ของดีจริงแต่ทหารผีเฝ้าอยู่เต็มพื้นที่", drops: [{ id: "zombie", w: 30 }, { id: "army_meal", w: 10 }, { id: "shotgun", w: 5 }, { id: "pistol", w: 8 }, { id: "crossbow", w: 4 }, { id: "trauma_kit", w: 4 }, { id: "stim_shot", w: 5 }, { id: "medkit", w: 5 }, { id: "bandage", w: 5 }, { id: "water_jug", w: 6 }, { id: null, w: 18 }] },
-  tunnel: { name: "อุโมงค์ใต้ดิน", icon: "🕳️", danger: 10, desc: "มืดสนิทและอับชื้น ซอมบี้ชุกที่สุดในเมือง แต่ของหายากซ่อนอยู่ข้างใน", drops: [{ id: "zombie", w: 35 }, { id: "chem", w: 10 }, { id: "scrap", w: 8 }, { id: "samurai_sword", w: 3 }, { id: "shotgun", w: 4 }, { id: "serum", w: 5 }, { id: "antidote", w: 5 }, { id: "trauma_kit", w: 3 }, { id: "stim_shot", w: 5 }, { id: "soup", w: 4 }, { id: null, w: 18 }] },
-  lab: { name: "ศูนย์วิจัยร้าง", icon: "🧬", danger: 9, desc: "ห้องแล็บใต้ดินของโครงการที่ล้มเหลว ตัวอย่างและยาทดลองยังเหลืออยู่เต็มตู้ แต่สิ่งที่ถูกทดลองก็ยังเดินอยู่ด้วย", drops: [{ id: "zombie", w: 30 }, { id: "chem", w: 12 }, { id: "lab_sample", w: 8 }, { id: "scrap", w: 8 }, { id: "serum", w: 6 }, { id: "antidote", w: 6 }, { id: "stim_shot", w: 5 }, { id: "energy_drink", w: 4 }, { id: "trauma_kit", w: 3 }, { id: null, w: 18 }] }
+  base: { name: "ค่ายทหารร้าง", icon: "🪖", danger: 8, desc: "คลังแสงและเสบียงทหาร ของดีจริงแต่ทหารผีเฝ้าอยู่เต็มพื้นที่", drops: [{ id: "zombie", w: 30 }, { id: "army_meal", w: 10 }, { id: "shotgun", w: 5 }, { id: "pistol", w: 8 }, { id: "crossbow", w: 4 }, { id: "trauma_kit", w: 3 }, { id: "stim_shot", w: 5 }, { id: "medkit", w: 4 }, { id: "bandage", w: 4 }, { id: "water_jug", w: 6 }, { id: null, w: 21 }] },
+  tunnel: { name: "อุโมงค์ใต้ดิน", icon: "🕳️", danger: 10, desc: "มืดสนิทและอับชื้น ซอมบี้ชุกที่สุดในเมือง แต่ของหายากซ่อนอยู่ข้างใน", drops: [{ id: "zombie", w: 35 }, { id: "chem", w: 10 }, { id: "scrap", w: 8 }, { id: "samurai_sword", w: 3 }, { id: "shotgun", w: 4 }, { id: "serum", w: 3 }, { id: "antidote", w: 1 }, { id: "trauma_kit", w: 2 }, { id: "stim_shot", w: 5 }, { id: "soup", w: 4 }, { id: null, w: 25 }] },
+  lab: { name: "ศูนย์วิจัยร้าง", icon: "🧬", danger: 9, desc: "ห้องแล็บใต้ดินของโครงการที่ล้มเหลว ตัวอย่างและยาทดลองยังเหลืออยู่เต็มตู้ แต่สิ่งที่ถูกทดลองก็ยังเดินอยู่ด้วย", drops: [{ id: "zombie", w: 30 }, { id: "chem", w: 12 }, { id: "lab_sample", w: 8 }, { id: "scrap", w: 8 }, { id: "serum", w: 4 }, { id: "antidote", w: 1 }, { id: "stim_shot", w: 5 }, { id: "energy_drink", w: 4 }, { id: "trauma_kit", w: 2 }, { id: null, w: 26 }] }
 };
 // คาสิโนเถื่อน: โซนสงบแบบ Safe Zone (ห้ามต่อสู้/ไม่เจอซอมบี้/ไม่ค้นหา) — ซ่อนจาก Object.keys(ZONES) โดยตั้งใจ เพื่อไม่ให้ระบบอีเวนต์/ภารกิจ/บอสโลกสุ่มลงโซนนี้ (ปุ่มเดินทางเพิ่มเองใน buildZoneList)
 Object.defineProperty(ZONES, "casino", { enumerable: false, value: { name: "คาสิโนเถื่อน", icon: "🎰", danger: 0, desc: "บ่อนใต้ดินของพวกรอดชีวิตที่เห็นแก่ได้ ห้ามตีกัน แลกของเป็นชิป เล่นพนัน หรือจ่ายด้วยเลือด — ⚠️ การพนันไม่เคยทำให้ใครรวย", drops: [{ id: null, w: 1 }] } });
@@ -1243,6 +1243,8 @@ function startGame() {
   state.sessionStart = serverNow() - 30000;
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
   setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);
+  setTimeout(() => { try { tutBoot(); } catch { /* ข้าม */ } }, 2500);   // 🎓 บทสอนผู้เล่นใหม่
+  [800, 2500, 6000].forEach((ms) => setTimeout(() => { try { topTidyInit(); } catch (e) { console.warn("topTidy", e); } }, ms));   // 📱 จัดแถบบนมือถือ (ปุ่มถูกสร้างทยอยหลังเริ่มเกม)
   setTimeout(() => { try { if (state.profile?.faction === "zombie") mutSync(); } catch { /* ข้าม */ } }, 6000);   // โหลดขั้นมิวเตชัน (ฮีลตอนกัดขั้น 8)   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
@@ -1414,7 +1416,8 @@ const HELP_LINES = [
   "/w ชื่อ ข้อความ — กระซิบกับคนในโซนเดียวกัน (หรือกดปุ่ม กระซิบ ในรายชื่อ)",
   "/s ข้อความ — ตะโกนให้ทุกโซนได้ยิน (พัก 30 วินาที)",
   "/roll [6|20|100] — ทอยลูกเต๋าให้คนในโซนเห็น",
-  "/guide — เปิดคู่มือวิธีเล่น (หิว เดินทาง โทษตาย)"
+  "/guide — เปิดคู่มือวิธีเล่น (หิว เดินทาง โทษตาย)",
+  "/tutorial — ดูบทสอนผู้เล่นใหม่ซ้ำ"
 ];
 
 function findZonePlayer(rest) {
@@ -1454,6 +1457,7 @@ async function sendChat(raw) {
     case "help": case "?": case "ช่วยเหลือ":
       HELP_LINES.forEach((l) => logLine(l, "info")); return;
     case "guide": case "วิธีเล่น": openGuide(); return;
+    case "tutorial": case "บทสอน": tutEnd(false); tutStart(0, true); return;
     case "me": case "ท่าทาง":
       if (!rest) return toast("ใช้: /me ท่าทางของตัวละคร");
       return postZone(rest, "emote");
@@ -1635,7 +1639,7 @@ function renderInv() {
         if (canDismantle(it)) btnGrp.append(btn(`รื้อ +${salvageYield(it)}`, () => dismantleWeapon(slot), "btn ghost mini"));
       }
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     } else if (def.type === "gear") {
       const worn = state.profile?.[def.slot] === slot, mine = (state.profile?.faction === "zombie") === !!def.zombieOnly;
@@ -1646,7 +1650,7 @@ function renderInv() {
       btnGrp.append(wb);
       if (state.profile?.faction === "human" && state.zone === "safe" && armorYield(it)) btnGrp.append(btn(`รื้อ +${armorYield(it)}`, () => dismantleArmor(slot), "btn ghost mini"));   // ได้เศษวัสดุคืน (ต่ำกว่าต้นทุนคราฟต์)
       btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     } else {
       const lbl = mk("span", "", `${def.icon || "📦"} ${def.name} ×${it.qty}`);
@@ -1657,7 +1661,7 @@ function renderInv() {
       if (def.type === "consumable") btnGrp.append(btn("ใช้", () => useItem(slot)), hotPinBtn(slot));
       if (def.type === "stat") btnGrp.append(btn("🧪 ใช้", () => statOpen()));
       else btnGrp.append(btn("ทิ้ง", () => dropItem(slot), "btn danger mini"));
-      btnGrp.append(btn("ทำลาย", () => destroyItem(slot), "btn ghost mini"));
+      btnGrp.append(destroyBtn(slot));
       li.append(btnGrp);
     }
     ul.append(li); try { invInfoHook(li, it); } catch { /* ข้าม */ }
@@ -5502,6 +5506,7 @@ function gearBar() {
   if (!bar) { bar = mk("div", "muted"); bar.id = "gear-bar"; bar.style.cssText = "margin:4px 0 8px;font-size:13px"; ul.before(bar); }
   const slots = GEAR_SLOT_BY_FAC[p.faction] || [];
   bar.textContent = slots.map((s) => `${GEAR_SLOTS[s]}: ${gearDef(s) ? gearDef(s).icon + " " + gearDef(s).name : "—"}`).join(" • ") + (gearRed() ? ` • ลดดาเมจรวม ${gearRed()}%` : "");
+  bar.classList.toggle("hidden", !slots.some((s) => gearDef(s)));   // ยังไม่ได้สวมอะไรเลย = ไม่ต้องโชว์บรรทัด "—"
 }
 
 // ---- เควสรายวันผูกโซน (นิยามสร้างจากสูตรนี้ เจ้าของกดเติมได้) ----
@@ -9925,6 +9930,151 @@ function coachRender() {
   if (D.allGot) { const f = mk("div", "world-row evt-live"); f.append(mk("div", "", D.finalGot ? "✅ รับรางวัลปิดท้ายแล้ว" : `🎉 รางวัลปิดท้าย: ${mRew(D.final)}`)); if (!D.finalGot) f.append(btn("🎁 รับรางวัลปิดท้าย", async () => { try { const r = await coachSync("claim", { id: "final" }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🧭 จบบทเรียน: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } coachBar(); coachRender(); }, "btn primary mini")); body.append(f); }
 }
 
+// ---- 🎓 บทสอนผู้เล่นใหม่ (จับมือทำ ข้ามได้) — เฉพาะบัญชีที่สร้างใหม่หลัง TUT_SINCE และอายุไม่เกิน 24 ชม. • ไม่แตะ rules/functions
+// ไฟสปอตไลต์ + NPC (มนุษย์ = มิรา • ซอมบี้ = ธารา) พาทำจริงทีละขั้น: ดูแถบสถานะ → เปิดแท็บกระเป๋า → กดค้นหา → ใช้ของ → ดูโซน/ผู้เล่น → แชท → คู่มือ • เล่นซ้ำได้ด้วย /tutorial
+// สถานะ: ach counter `tutdone` (ข้ามเครื่องได้) + LS (ขั้นล่าสุด/จบ) • ปิดทั้งระบบด้วย tune tut_on = 0 • แก้วันตัดบัญชีด้วย tut_since (มิลลิวินาทีแบบ epoch)
+const TUT_SINCE = Date.UTC(2026, 9, 7, 1, 0);
+const tutDone = () => ((state.ach?.c?.tutdone || 0) >= 1) || !!LS.get(lsKey("tutdone"), 0);
+function tutEligible() {
+  const p = state.profile; if (!p || p.banned || T("tut_on", 1) !== 1 || p.role === "owner" || p.role === "gm") return false;
+  if (typeof p.createdAt !== "number" || p.createdAt < T("tut_since", TUT_SINCE) || serverNow() - p.createdAt > 86400000) return false;
+  return !tutDone();
+}
+const tutTabsOn = () => { const tb = document.querySelector(".tabbar"); return !!tb && getComputedStyle(tb).display !== "none"; };
+const tutTab = (t) => document.querySelector(`.tabbar [data-tab="${t}"]`), tutPanel = (t) => document.querySelector(`.layout .panel[data-panel="${t}"]`);
+function tutSteps(fac) {
+  const Z = fac === "zombie", who = Z ? "tara" : "mira", nm = Z ? "ธารา" : "มิรา", mood = Z ? "😐" : "😊";
+  const tab = (t, label, emo) => ({ t: `ลองแตะแท็บ “${emo} ${label}” ด้านล่างดูสิ`, target: () => (tutTabsOn() ? tutTab(t) : tutPanel(t)), act: tutTabsOn() ? "click" : "next", pre: () => { if (!tutTabsOn()) setTab(t); } });
+  return [
+    { t: Z ? `...ตื่นแล้วสินะ ฉัน${nm} นักวิจัยของค่ายนี้ ร่างกายคุณไม่เหมือนคนทั่วไป กฎของคุณต่างออกไป ฉันจะพาดูให้ทีละอย่าง ไม่นานหรอก` : `ยินดีต้อนรับสู่ Safe Zone ค่ะ ฉัน${nm} หมอประจำค่ายนี้ ข้างนอกกำแพงมีทั้งซอมบี้และคนเอาแต่ได้ ก่อนออกไป ฉันจะพาดูของที่ต้องรู้ก่อน แป๊บเดียวเท่านั้นค่ะ`, target: null, act: "next" },
+    { t: Z ? "นี่คือสภาพร่างกายคุณ ❤️ HP ถ้าถึง 0 จะล้มลง • ⚡ พลังงานใช้ตอนค้นหากับเดินทาง • 🍖 อาหารของคุณลดเร็วกว่ามนุษย์ และกินอาหารคนทั่วไปไม่ได้ ต้องกัดคนให้โดน หรือหา 🥩 เนื้อเน่านอกกำแพง • 💧 น้ำก็ลดเรื่อยๆ" : "นี่คือสภาพร่างกายคุณค่ะ ❤️ HP ถ้าถึง 0 จะล้มลง • ⚡ พลังงานใช้ตอนค้นหากับเดินทาง • 🍖 อาหารกับ 💧 น้ำลดลงเรื่อยๆ ตามเวลา ถ้าหมด ค้นหาข้างนอกไม่ไหว หมั่นกินหมั่นดื่มนะคะ", target: () => document.querySelector(".topbar .bars"), act: "next" },
+    { ...tab("bag", "กระเป๋า / ค้นหา", "🎒"), t: "ต่อไปไปที่กระเป๋ากันค่ะ — ลองแตะแท็บ “🎒 กระเป๋า / ค้นหา” ด้านล่างดูสิ" },
+    { t: "นี่คือปุ่มค้นหา ใน Safe Zone ปลอดภัยดี ลองกดดู 1 ครั้งนะ จะเจอวัสดุหรือเสบียงเล็กน้อย (ใช้พลังงานนิดหน่อย)", target: () => $("btn-scavenge"), act: "search", pre: () => setTab("bag") },
+    { t: Z ? "ของที่เจอจะเข้ากระเป๋าตรงนี้ ซอมบี้ใช้ยา ผ้าพันแผล มอส และวัสดุคราฟต์ได้ แต่กินอาหารคนทั่วไปไม่ได้ — อย่าลืมหา 🥩 เนื้อเน่านอกกำแพง" : "ของที่เจอจะเข้ากระเป๋าตรงนี้ค่ะ มีทั้งอาหาร น้ำ ยา และวัสดุคราฟต์ ยิ่งออกไปไกล ของยิ่งดี แต่ก็อันตรายขึ้นตามไปด้วย", target: () => $("inv-list"), act: "next", pre: () => setTab("bag") },
+    { t: "แตะไอเทมที่กินหรือใช้ได้ (อาหาร น้ำ ผ้าพันแผล) เพื่อใช้ ลองใช้ 1 ชิ้นดูนะ", target: () => $("inv-list"), act: "use", pre: () => setTab("bag"), skipIf: () => Z || !invList().some(([, it]) => { const d = defOf(it); return !!d && (d.food > 0 || d.water > 0 || d.heal > 0); }) },
+    { ...tab("map", "โซน / ผู้เล่น", "🗺️"), t: "ถัดไปคือแผนที่ค่ะ — ลองแตะแท็บ “🗺️ โซน / ผู้เล่น” ด้านล่างดูสิ" },
+    { t: Z ? "นี่คือโซนทั้งหมด ⚠ คือระดับอันตราย ⚡ คือพลังงานที่ใช้เดินทาง ซอมบี้ป่าจะเมินคุณ แต่ 🥩 เนื้อเน่าเจอได้เฉพาะนอก Safe Zone — ลองเริ่มที่ 🌲 ป่าลึกหรือ 🏚️ เขตเมืองร้างก่อน" : "นี่คือโซนทั้งหมดค่ะ ⚠ คือระดับอันตราย (ยิ่งสูง ยิ่งเจอซอมบี้ แต่ของก็ดีขึ้น) ⚡ คือพลังงานที่ใช้เดินทาง แนะนำเริ่มที่ 🌲 ป่าลึก (อันตราย 2) หรือ 🏚️ เขตเมืองร้างก่อนนะคะ", target: () => $("zone-list"), act: "next", pre: () => setTab("map") },
+    { t: Z ? "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกัน ที่ Safe Zone ต่อสู้ไม่ได้ แต่นอกกำแพง กัดมนุษย์โดนจะเติมอาหาร +25 และฟื้น HP ส่วนเหยื่อจะติดเชื้อ — แต่มนุษย์ก็สู้กลับได้ ระวังตัว" : "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกันค่ะ ที่ Safe Zone ต่อสู้กันไม่ได้ แต่นอกกำแพง ซอมบี้ผู้เล่นโจมตีคุณได้ และคุณก็สู้กลับได้ — ถ้าถูกกัดจะติดเชื้อ ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส", target: () => $("player-list"), act: "next", pre: () => setTab("map") },
+    { ...tab("chat", "แชท", "💬"), t: "แท็บ “💬 แชท” ใช้คุยกับคนในโซนเดียวกัน ลองแตะดูค่ะ ถ้ามีอะไรสงสัยถามเพื่อนๆ ได้" },
+    { t: "เสร็จแล้วค่ะ! ถ้าลืมอะไร เปิด “วิธีเล่น” ได้ตลอด (ปุ่ม ⋯ มุมบน) และแถบ 🧭 ด้านบนจะบอกภารกิจถัดไปพร้อมของรางวัล ขอให้รอดนะ", target: () => { const g = $("btn-guide"); return g && g.offsetParent ? g : $("btn-more"); }, act: "next", pre: () => setTab("chat") }
+  ].map((x) => ({ who, nm, mood, ...x }));
+}
+const tutLayer = () => {
+  let L = $("tut-layer"); if (L) return L;
+  L = mk("div"); L.id = "tut-layer";
+  ["t", "b", "l", "r", "c"].forEach((k) => { const d = mk("div", "tut-blk"); d.dataset.k = k; L.append(d); });
+  const ring = mk("div", "tut-ring"); const card = mk("div", "tut-card"); const por = mk("div", "tut-por"); por.id = "tut-por";
+  const body = mk("div", "tut-body"), name = mk("b", "tut-name"), txt = mk("div", "tut-txt"), row = mk("div", "tut-row");
+  const nxt = btn("ต่อไป ▶", () => tutNext(), "btn primary mini"); nxt.id = "tut-next"; const skipStep = btn("ข้ามขั้นนี้", () => tutNext(true), "btn ghost mini"); skipStep.id = "tut-skipstep"; const prog = mk("span", "tut-prog"); prog.id = "tut-prog";
+  row.append(prog, skipStep, nxt); body.append(name, txt, row); card.append(por, body);
+  const skip = btn("ข้ามบทสอน ✕", () => tutSkipAll(), "btn ghost mini"); skip.id = "tut-skip";
+  L.append(ring, card, skip); document.body.append(L); return L;
+};
+function tutPlace() {
+  const T0 = state.tut; if (!T0 || !T0.on) return; const L = $("tut-layer"); if (!L) return;
+  const s = T0.steps[T0.i], tg = s && s.target ? s.target() : null, W = innerWidth, H = innerHeight, ring = L.querySelector(".tut-ring"), card = L.querySelector(".tut-card");
+  const r = tg && tg.offsetParent !== null ? tg.getBoundingClientRect() : null, pad = 6, inter = s.act !== "next";
+  const set = (k, x, y, w, h) => { const e = L.querySelector(`.tut-blk[data-k="${k}"]`); e.style.cssText = `left:${x}px;top:${y}px;width:${Math.max(0, w)}px;height:${Math.max(0, h)}px`; };
+  if (r && r.width > 0) {
+    const x = Math.max(0, r.left - pad), y = Math.max(0, r.top - pad), w = Math.min(W - x, r.width + pad * 2), h = Math.min(H - y, r.height + pad * 2);
+    set("t", 0, 0, W, y); set("b", 0, y + h, W, H - y - h); set("l", 0, y, x, h); set("r", x + w, y, W - x - w, h);
+    set("c", x, y, w, inter ? 0 : h); ring.style.cssText = `display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+    card.classList.toggle("tut-top", y + h / 2 > H * 0.5);
+  } else { set("t", 0, 0, W, H); set("b", 0, 0, 0, 0); set("l", 0, 0, 0, 0); set("r", 0, 0, 0, 0); set("c", 0, 0, 0, 0); ring.style.display = "none"; card.classList.remove("tut-top"); }
+}
+function tutShow() {
+  const T0 = state.tut; if (!T0) return; const L = tutLayer(), s = T0.steps[T0.i];
+  if (s.skipIf && s.skipIf()) { T0.i++; if (T0.i >= T0.steps.length) return tutEnd(true); return tutShow(); }
+  try { s.pre && s.pre(); } catch { /* ข้าม */ }
+  L.classList.remove("hidden"); L.querySelector(".tut-name").textContent = `${s.nm}`; L.querySelector(".tut-txt").textContent = s.t;
+  npcPortrait($("tut-por"), s.who, s.mood);
+  $("tut-prog").textContent = `${T0.i + 1}/${T0.steps.length}`;
+  $("tut-next").classList.toggle("hidden", s.act !== "next"); $("tut-skipstep").classList.toggle("hidden", s.act === "next");
+  $("tut-next").textContent = T0.i === T0.steps.length - 1 ? "เริ่มเล่น ▶" : "ต่อไป ▶";
+  LS.set(lsKey("tutstep"), T0.i);
+  const tg = s.target ? s.target() : null; if (tg && tg.scrollIntoView) { try { tg.scrollIntoView({ block: "center", behavior: "instant" }); } catch { /* ข้าม */ } }
+  // รอการกระทำจริงของผู้เล่น
+  T0.off && T0.off(); T0.off = null; const idx = T0.i;
+  if (s.act === "click" && tg) { const h = () => setTimeout(() => { if (state.tut && state.tut.i === idx) tutNext(); }, 350); tg.addEventListener("click", h, { once: true, capture: true }); T0.off = () => tg.removeEventListener("click", h, true); }
+  else if (s.act === "search" || s.act === "use") {
+    const key = s.act === "search" ? "srch" : "use", base = state.ach?.c?.[key] || 0;
+    const iv = setInterval(() => { if (!state.tut || state.tut.i !== idx) return clearInterval(iv); if ((state.ach?.c?.[key] || 0) > base) { clearInterval(iv); setTimeout(() => { if (state.tut && state.tut.i === idx) tutNext(); }, 900); } }, 400);
+    T0.off = () => clearInterval(iv);
+  }
+  tutPlace();
+}
+function tutNext(skipped) {
+  const T0 = state.tut; if (!T0) return; T0.off && T0.off(); T0.off = null; T0.i++;
+  if (T0.i >= T0.steps.length) return tutEnd(true); tutShow();
+}
+function tutEnd(done) {
+  const T0 = state.tut; if (T0) { T0.on = false; T0.off && T0.off(); cancelAnimationFrame(T0.raf); } state.tut = null;
+  $("tut-layer")?.classList.add("hidden");
+  if (done) { LS.set(lsKey("tutdone"), 1); try { achSet("tutdone", 1); } catch { /* ข้าม */ } toast("🎓 จบบทสอนแล้ว — ดูซ้ำได้ด้วยคำสั่ง /tutorial"); }
+}
+function tutSkipAll() { if (confirm("ข้ามบทสอนทั้งหมด? (ดูใหม่ได้ภายหลังด้วยคำสั่ง /tutorial ในช่องแชท)")) tutEnd(true); }
+function tutStart(from = 0, force = false) {
+  const p = state.profile; if (state.tut || !p || p.hp <= 0 || (!force && !tutEligible())) return;
+  const steps = tutSteps(p.faction === "zombie" ? "zombie" : "human"); state.tut = { on: true, i: Math.min(Math.max(0, from), steps.length - 1), steps, force };
+  const loop = () => { if (!state.tut || !state.tut.on) return; tutPlace(); state.tut.raf = requestAnimationFrame(loop); }; state.tut.raf = requestAnimationFrame(loop);
+  window.addEventListener("resize", tutPlace); tutShow();
+}
+function tutBoot(n = 0) {   // รอโปรไฟล์/ตัวนับพร้อมแล้วค่อยเริ่ม (กันเปิดตอนข้อมูลยังไม่ครบ)
+  try {
+    if (state.tut) return;
+    if (!state.profile || !state.ach?.loaded || !state.zone) { if (n < 25) setTimeout(() => tutBoot(n + 1), 1000); return; }
+    if (tutEligible() && !state.boss && !state.hb) { const st = Number(LS.get(lsKey("tutstep"), 0)) || 0; tutStart(st); }
+  } catch (e) { console.warn("tutBoot", e); }
+}
+// ---- /บทสอน
+
+// ---- 📱 แถบบนมือถือ: เห็นเฉพาะปุ่มที่ใช้บ่อย ที่เหลืออยู่ใต้ "⋯" (ทำงานเฉพาะจอ ≤900px — เดสก์ท็อปเหมือนเดิม)
+// ปุ่มเดิมทุกตัวยังอยู่ใน DOM (แค่ซ่อน) โค้ดอื่นที่อ้าง id/ต่อท้ายปุ่มจึงไม่พัง • เมนู ⋯ เป็นปุ่มสำเนาที่กดแล้วสั่ง click ปุ่มจริง • จุดแจ้งเตือน (btn-dot) ของปุ่มที่ซ่อนส่งมาที่ ⋯
+const TOP_PRIMARY = ["btn-base", "btn-quests", "btn-market", "btn-sk"];   // ที่พัก • ภารกิจ • ตลาด • ทักษะ (ซอมบี้เพิ่ม วิวัฒนาการ • ทีมงานเพิ่ม Admin)
+const topMobile = () => matchMedia("(max-width: 900px)").matches;
+function topTidy() {
+  const tb = document.querySelector(".topbar"), row = document.querySelector(".top-actions"); if (!tb || !row) return;
+  const mobile = topMobile(), keep = new Set([...TOP_PRIMARY, "btn-more", ...(isStaff() ? ["btn-admin"] : []), ...(state.profile?.faction === "zombie" ? ["btn-evo"] : [])]);
+  let more = $("btn-more"); if (!more) { more = btn("⋯", topMoreOpen, "btn ghost mini"); more.id = "btn-more"; more.title = "เมนูอื่นๆ"; more.setAttribute("aria-label", "เมนูอื่นๆ"); row.append(more); }
+  let dot = false;
+  row.querySelectorAll(":scope > button").forEach((b) => { if (b === more) return; const hide = mobile && !keep.has(b.id); b.classList.toggle("tidy-hide", hide); if (hide && b.classList.contains("btn-dot") && !b.classList.contains("hidden")) dot = true; });
+  more.classList.toggle("hidden", !mobile); more.classList.toggle("btn-dot", mobile && dot);
+  document.documentElement.style.setProperty("--topbar-h", tb.offsetHeight + "px");
+}
+function topMoreOpen() {
+  let m = $("top-more"); if (!m) {
+    m = mk("div", "modal sheet hidden"); m.id = "top-more"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "เมนู");
+    m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), head = mk("div", "modal-head"); head.append(mk("h2", "", "เมนู"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+    const body = mk("div"); body.id = "top-more-body"; body.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:8px"; box.append(head, body); m.append(box); document.body.append(m);
+  }
+  const body = $("top-more-body"); body.innerHTML = ""; topTidy();
+  document.querySelectorAll(".top-actions > button.tidy-hide:not(.hidden)").forEach((orig) => {
+    let label = (orig.textContent || "").trim(); if (!label) return;
+    if (!/[\u0E00-\u0E7F]/.test(label) && orig.title) label += " " + orig.title.split(/ • |:/)[0].slice(0, 22);   // ปุ่มที่เป็นอีโมจิล้วนเติมชื่อจาก title กันงงในเมนู
+    const b = btn(label, () => { m.classList.add("hidden"); setTimeout(() => orig.click(), 60); }, orig.classList.contains("primary") ? "btn primary" : "btn ghost"); b.style.minHeight = "46px";
+    if (orig.classList.contains("btn-dot")) b.classList.add("btn-dot"); b.dataset.for = orig.id; body.append(b);
+  });
+  m.classList.remove("hidden");
+}
+function topTidyInit() {
+  topTidy(); const row = document.querySelector(".top-actions"); if (!row || state.topObs) return;
+  let q = 0; const kick = () => { if (q) return; q = requestAnimationFrame(() => { q = 0; try { topTidy(); } catch { /* ข้าม */ } }); };
+  state.topObs = new MutationObserver(kick); state.topObs.observe(row, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  addEventListener("resize", kick); matchMedia("(max-width: 900px)").addEventListener?.("change", kick);
+  const who = document.querySelector(".topbar .who"); if (who) { who.style.cursor = "pointer"; who.addEventListener("click", (e) => { if (topMobile() && !e.target.closest("button")) $("btn-profile")?.click(); }); }   // แตะชื่อ = เปิดโปรไฟล์
+}
+// ข่าวระบบ/วิทยุในแชทบนมือถือ: พับเหลือ 3 บรรทัด แตะเพื่อขยาย (ข้อความผู้เล่นไม่ถูกบดบังด้วยข่าวยาวๆ)
+$("chat-log")?.addEventListener("click", (e) => { const m = e.target.closest?.(".msg.system"); if (m) m.classList.toggle("open"); });
+// ปุ่ม "ทำลาย" ในกระเป๋า: กดครั้งแรกเป็น "ยืนยันทำลาย" (หมดเวลา 4 วินาทีแล้วกลับ) กันกดพลาดติดปุ่มทิ้ง
+function destroyBtn(slot) {
+  const b = btn("⋯", () => {
+    if (b.dataset.arm) { clearTimeout(b._t); delete b.dataset.arm; b.textContent = "⋯"; b.className = "btn ghost mini"; return destroyItem(slot); }
+    b.dataset.arm = "1"; b.textContent = "ทำลาย?"; b.className = "btn danger mini"; b._t = setTimeout(() => { delete b.dataset.arm; b.textContent = "⋯"; b.className = "btn ghost mini"; }, 4000);
+  }, "btn ghost mini"); b.title = "ทำลายไอเทมทิ้งถาวร (กดสองครั้ง)"; b.setAttribute("aria-label", "ทำลายไอเทม (กดสองครั้ง)"); return b;
+}
+// ---- /แถบบนมือถือ
+
 /* =========================================================
    49.3) 🌱 แปลงปลูกในที่พัก (functions/garden.js — gardenAct) • ไม่แตะ rules
    - ลงเมล็ด → รดน้ำ (เวลาเหลือ −25%) / ใส่ปุ๋ย (+1 ผลผลิต กันศัตรูพืช) → เก็บเกี่ยว • ฤดูกาลมีผลกับเวลาโต • มีเหตุการณ์เล็กตอนเก็บ (ศัตรูพืช/กลายพันธุ์)
@@ -11557,6 +11707,7 @@ function tuneDefs() {
   rows.push(["bty_cap", "เพดานค่าหัวรวมต่อเป้าหมาย (แต้ม)", 200, 10, 2000, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
+  rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);
   rows.push(["jail_min", "ระยะโทษพื้นฐาน (นาที — คูณชั้นโทษ 1–4)", 30, 1, 600, "⛓️ คุก"]);
   rows.push(["jail_bail", "ค่าประกันออกจากคุก (แต้มมูลค่า × ชั้นโทษ)", 30, 1, 500, "⛓️ คุก"]);
