@@ -4,6 +4,7 @@
 // - ได้อาวุธเต็มความทน (dur = ค่าตั้งต้นของชนิดนั้น) ช่องคีย์ f_<ms><สุ่ม> • ถ้าสร้างช่องไม่ได้จะคืนวัตถุดิบ
 const crypto = require("crypto");
 const { fail, withLock, takeItem, addCapped } = require("./lib");
+const { FXW, giveWeapon } = require("./fxw");
 
 // out → ความทนตั้งต้น (ต้องตรง ITEMS[..].maxDur ในเกม)
 const DUR = { wooden_bat: 20, pocket_knife: 30, crowbar: 30, knife: 25, spiked_bat: 18, fire_axe: 16, crossbow: 14 };
@@ -64,6 +65,7 @@ function makeForge(db) {
     if (a === "dismantle") return dismantle(uid, data, now);
     if (a !== "craft") fail("invalid-argument", "ไม่รู้จักคำสั่ง");
     const id = String((data && data.id) || ""), r = RECIPES[id];
+    if (id.startsWith("fxw_")) return craftFxw(uid, id, now);   // อาวุธติดสถานะ (functions/fxw.js)
     if (!r) fail("invalid-argument", "สูตรนี้ไม่มี");
     return withLock(db, uid, now, async () => {
       const p = (await db.ref(`users/${uid}`).get()).val();
@@ -86,6 +88,25 @@ function makeForge(db) {
       const q = r.qty || 1;   // ของซ้อนช่อง (ช่อง = รหัสไอเทม เพดาน 99)
       if (!(await addCapped(db, uid, id, q))) { await refund(); fail("failed-precondition", "ช่องเก็บของชนิดนี้เต็ม (99)"); }
       return { ok: true, id, qty: q };
+    });
+  }
+  // ⚔️ อาวุธติดสถานะ: ต้องเปิด tune fxw_on • มนุษย์ที่ Safe Zone เท่านั้น • เฉพาะชั้น 1–2 (มีสูตร) • ช่องอาวุธ id custom + fx
+  async function craftFxw(uid, id, now) {
+    const d = FXW[id]; if (!d || !d.need) fail("invalid-argument", "สูตรนี้ไม่มี");
+    if ((await db.ref("tune/fxw_on").get()).val() !== 1) fail("failed-precondition", "ยังไม่เปิดให้ประกอบอาวุธติดสถานะ");
+    return withLock(db, uid, now, async () => {
+      const p = (await db.ref(`users/${uid}`).get()).val();
+      if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
+      if (!(p.hp > 0)) fail("failed-precondition", "ต้องมีชีวิตอยู่");
+      if (p.faction !== "human") fail("failed-precondition", "เฉพาะมนุษย์เท่านั้นที่คราฟต์ได้");
+      if (p.zone !== "safe") fail("failed-precondition", "ต้องคราฟต์ที่ Safe Zone");
+      const taken = [], refund = async () => { for (const [m, n] of taken) await addCapped(db, uid, m, n); };
+      for (const [m, n] of Object.entries(d.need)) {
+        if (!(await takeItem(db, uid, m, n))) { await refund(); fail("failed-precondition", "วัตถุดิบไม่พอ"); }
+        taken.push([m, n]);
+      }
+      try { const slot = await giveWeapon(db, uid, id, now); return { ok: true, id, slot }; }
+      catch (e) { await refund(); throw e; }
     });
   }
   async function dismantle(uid, data, now) {
