@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0419";
+const APP_VERSION = "2026-10-07.0425";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1005,7 +1005,7 @@ function renderTravelState() {
     if (!t) { t = mk("span", "travel-tag"); b.insertBefore(t, b.querySelector(".danger-tag")); }
     const here = b.dataset.zone === state.zone;
     b.classList.toggle("cooling", !here && (cd > 0 || dead));
-    t.textContent = here ? "" : b.dataset.zone === "safe" && crimMe() ? "🟠 ห้ามเข้า" : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
+    t.textContent = here ? "" : b.dataset.zone === "safe" && crimMe() ? (crimRed(state.uid) ? "🔴 ห้ามเข้า" : "🟠 ห้ามเข้า") : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
     t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
   });
   try { zmapBadges(); } catch { /* ยังไม่พร้อม */ }
@@ -1571,7 +1571,7 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${crimActive(c.key) ? " 🟠" : ""}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${crimMark(c.key)}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
     if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
@@ -1983,14 +1983,17 @@ async function processDeath(attempt = 0) {
   state.dying = true; stat("death");
   try {
     const u = {}, lost = [], uid = state.uid;
-    DEATH_STACK.forEach((id) => {
+    // ⛓️ ถูกจับ = ยกเว้นโทษตอนล้ม (ไม่หักของ/ความทนอาวุธ/วิวัฒนาการ) — รอผลการจับ (ผู้ถูกฆ่าเป็นคนเรียก) และรอ jail/{uid} โหลดตอนเข้าเกม
+    if (jailOn()) { try { if (state.jailWait) await Promise.race([state.jailWait, new Promise((r) => setTimeout(r, 6000))]); else if (state.jailReady) await Promise.race([state.jailReady, new Promise((r) => setTimeout(r, 3000))]); } catch { /* ข้าม */ } state.jailWait = null; }
+    const exempt = jailOn() && (jailActive() || (state.jailCapAt && Date.now() - state.jailCapAt < 120000));
+    if (!exempt) DEATH_STACK.forEach((id) => {
       const it = state.inv[id]; if (!it || !(it.qty > 0)) return;
       const keep = Math.floor(it.qty * DEATH_KEEP);
       if (keep >= it.qty) return;
       lost.push(`${ITEMS[id].icon}×${it.qty - keep}`);
       if (keep > 0) u[`inventory/${uid}/${id}/qty`] = keep; else u[`inventory/${uid}/${id}`] = null;
     });
-    const ws = p.equipped, wi = ws && state.inv[ws];
+    const ws = p.equipped, wi = !exempt && ws && state.inv[ws];
     if (wi && typeof wi.dur === "number") {
       const nd = Math.floor(wi.dur * WEAPON_KEEP), wn = defOf(wi)?.name || "อาวุธ";
       if (nd <= 0) { u[`inventory/${uid}/${ws}`] = null; u[`users/${uid}/equipped`] = null; lost.push(`${wn} พัง`); }
@@ -1998,8 +2001,8 @@ async function processDeath(attempt = 0) {
     }
     if (p.infected) { u[`users/${uid}/infected`] = null; u[`users/${uid}/infectTs`] = null; }
     if (state.boss) u[`bossFights/${uid}`] = null;
-    { const en = evoDeathWrites(u); if (en) lost.push(en); }
-    const rz = jailActive() ? "jail" : crimMe() ? "ruins" : "safe";   // ติดคุก → ฟื้นในคุก • ส้มฟื้นที่ Safe Zone ไม่ได้ → เขตเมืองร้าง
+    if (!exempt) { const en = evoDeathWrites(u); if (en) lost.push(en); }
+    const rz = exempt || jailActive() ? "jail" : crimMe() ? "ruins" : "safe";   // ติดคุก → ฟื้นในคุก • ส้มฟื้นที่ Safe Zone ไม่ได้ → เขตเมืองร้าง
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = rz; u[`users/${uid}/lastDeath`] = serverTimestamp();
     const deadZone = state.zone;
     if (!bty2On() && state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
@@ -2007,7 +2010,7 @@ async function processDeath(attempt = 0) {
     // ตรวจหลังฟื้น: ถ้าฐานข้อมูลยังมีเชื้อค้าง (ไม่ควรเกิด) ให้บันทึกลง console + แจ้งผู้เล่นให้รักษา/แจ้งแอดมิน (ล้างเองตอน HP>0 ไม่ได้ตาม rules)
     if (p.infected) setTimeout(async () => { try { const hpS = (await get(ref(db, `users/${uid}`))).val(); if (hpS && hpS.infected && hpS.hp === 50) { console.warn("infection survived respawn", hpS.infected); logLine("🦠 เชื้อยังค้างหลังฟื้น — ใช้ชุดปฐมพยาบาลหรือมอสเพื่อรักษา (หรือแจ้งแอดมิน)", "system"); } } catch { /* ข้าม */ } }, 4000);
     try { if (effDanger(deadZone) >= 5) feedPost(3, deadZone); } catch { /* ข้าม */ }
-    logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ ${rz === "safe" ? "Safe Zone" : rz === "jail" ? "คุก" : "เขตเมืองร้าง (ส้มเข้า Safe Zone ไม่ได้)"}${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
+    logLine(`💀 คุณล้มลง… ฟื้นขึ้นที่ ${rz === "safe" ? "Safe Zone" : rz === "jail" ? "คุก (ถูกจับ — ไม่เสียของตอนล้ม)" : "เขตเมืองร้าง (ส้มเข้า Safe Zone ไม่ได้)"}${lost.length ? ` • สูญเสีย ${lost.join(" ")}` : ""}`, "system");
     await enterZone(rz, false, true);
   } catch (e) {
     console.error("death", e);
@@ -2504,11 +2507,15 @@ $("hb-claim").addEventListener("click", hbClaim);
 const crimOn = () => T("crim_on", 0) === 1;
 const crimActive = (uid, now = serverNow()) => { const c = state.crim?.[uid]; return !!c && typeof c.until === "number" && c.until > now; };   // ไม่เช็ค crimOn: rules กั้นตามข้อมูลจริงแม้ปิดระบบทีหลัง
 const crimMe = () => !!state.uid && crimActive(state.uid);
+const crimRed = (uid) => crimActive(uid) && state.crim[uid].red === true;   // 🔴 ผู้ก่อเหตุซ้ำ (ก่อเหตุครั้งที่ 3+ ใน 24 ชม.)
+const crimMark = (uid) => (crimActive(uid) ? (crimRed(uid) ? " 🔴" : " 🟠") : "");
 const crimMinsLeft = () => Math.max(1, Math.ceil(((state.crim?.[state.uid]?.until || 0) - serverNow()) / 60000));
 function crimRender() {
   const bar = $("crim-bar"); if (!bar) return;
   const on = crimMe(); bar.classList.toggle("hidden", !on);
-  if (on) $("crim-txt").textContent = `🟠 คุณเป็นผู้ก่อเหตุ (ฆ่าผู้เล่นฝ่ายเดียวกัน) — เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที`;
+  const red = crimRed(state.uid);
+  if (on) $("crim-txt").textContent = red ? `🔴 คุณเป็นผู้ก่อเหตุซ้ำ — เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที • จ่ายค่าประกันไม่ได้ (ถ้าถูกจับ โทษคุก ×2)` : `🟠 คุณเป็นผู้ก่อเหตุ (ฆ่าผู้เล่นฝ่ายเดียวกัน) — เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที`;
+  { const b = $("crim-bail"); if (b) b.classList.toggle("hidden", red); }
   try { renderTravelState(); } catch { /* ยังไม่พร้อม */ }
 }
 function crimListen() {
@@ -2584,9 +2591,9 @@ function jailRender() {
   const bar = $("jail-bar"); if (!bar) return;
   const on = jailActive() && state.zone === "jail"; bar.classList.toggle("hidden", !on); if (!on) return;
   const I = state.jailInfo || {}, t = state.jail.t || 1, busy = !!state.jailBusy, now = serverNow();
-  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานลดโทษครั้งละ 2 นาที (รวมไม่เกินครึ่งหนึ่ง)`;
+  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}${state.jail.red ? " • 🔴 ผู้ก่อเหตุซ้ำ โทษ ×2 จ่ายประกันไม่ได้" : ""}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานลดโทษครั้งละ 2 นาที (รวมไม่เกินครึ่งหนึ่ง)`;
   $("jail-work").disabled = busy || now < (state.jail.wt || 0) + 20000; $("jail-esc").disabled = busy || now < (state.jail.et || 0) + 300000;
-  $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy;
+  $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy; $("jail-bail").classList.toggle("hidden", !!state.jail.red);
 }
 async function jailSync() {   // ให้โซนของเกมตรงกับสถานะคุก: ติดคุก → เข้าโซนคุก • หมดโทษ/ประกัน/แหกคุก → ย้ายออกตามที่เซิร์ฟเวอร์กำหนด
   if (state.jailSyncBusy || !state.uid || !state.profile) return; state.jailSyncBusy = true;
@@ -2605,7 +2612,8 @@ async function jailSync() {   // ให้โซนของเกมตรง�
 }
 function jailListen() {
   if (state.jailOn || !state.uid) return; state.jailOn = true;
-  onValue(ref(db, `jail/${state.uid}`), (snap) => { state.jail = snap.val(); jailRender(); jailSync(); }, (er) => console.warn("jail", er?.code || er));
+  state.jailReady = new Promise((r) => { state.jailReadyRes = r; });
+  onValue(ref(db, `jail/${state.uid}`), (snap) => { state.jail = snap.val(); if (state.jailReadyRes) { state.jailReadyRes(); state.jailReadyRes = null; } jailRender(); jailSync(); }, (er) => console.warn("jail", er?.code || er));
   setInterval(() => { jailRender(); if ((state.zone === "jail") !== jailActive()) jailSync(); }, 15000);
 }
 async function jailAction(a) {
@@ -2624,8 +2632,39 @@ async function jailAction(a) {
 async function jailCapture(role, other) {   // ฆ่าคนส้มแล้ว (HP 0 ถูกเขียนแล้ว) → ให้เซิร์ฟเวอร์ตรวจเงื่อนไขและจับเอง
   try {
     if (!jailOn() || !other) return; const r = await jailCall({ a: "capture", role, other });
+    if (r?.captured && r.who === state.uid) state.jailCapAt = Date.now();   // ผู้ถูกจับ: ยกเว้นโทษตอนล้ม (processDeath ใช้)
     if (r?.captured && r.by === state.uid) toast(`⛓️ คุณจับ ${state.players[other]?.name || "ผู้ก่อเหตุ"} ส่งเข้าคุกสำเร็จ${r.reward ? ` — ได้ ${ITEMS[r.reward.id]?.name || r.reward.id} ×${r.reward.qty}` : ""}`);
   } catch (e) { console.warn("jail capture", e?.code || e); }
+}
+
+// ช่วยแหกคุก: รายชื่อผู้ต้องขัง (jailpub — ทุกคนอ่านได้) • ผู้ช่วยต้องอยู่นอกเมือง • สำเร็จ = ผู้ต้องขังออก แต่ทั้งคู่เป็นส้ม • ล้มเหลว = ผู้ช่วยติดคุกไปด้วย โทษเท่ากับผู้ต้องขัง
+function jailPubListen() {
+  if (state.jailPubOn || !state.uid) return; state.jailPubOn = true;
+  onValue(ref(db, "jailpub"), (snap) => { state.jailpub = snap.val() || {}; try { worldRefresh(); } catch { /* ข้าม */ } }, (er) => console.warn("jailpub", er?.code || er));
+}
+async function jailRescue(uid, name, entry) {
+  if (state.jailBusy) return; state.jailBusy = true;
+  try {
+    const mins = entry ? Math.max(1, Math.round(((entry.u || 0) - serverNow()) / 60000)) : 0;
+    if (!confirm(`ช่วย ${name} แหกคุก? สำเร็จ ${T("jail_rescue", 40)}%: เขาออกทันที แต่คุณทั้งคู่กลายเป็นส้ม (เข้า Safe Zone ไม่ได้) • ล้มเหลว: คุณถูกขังไปด้วย โทษเท่ากับเขา (${entry?.t ? "ชั้นโทษ " + entry.t : ""}${entry?.red ? " • 🔴 ×2" : ""} ~${entry ? Math.round(mins) : "?"} นาทีที่เหลือของเขา แต่คุณติดเต็มโทษ)`)) return;
+    const r = await jailCall({ a: "rescue", target: uid });
+    if (r.rescued) { toast(`🔓 ช่วย ${r.target} แหกคุกสำเร็จ! แต่คุณกลายเป็นส้มแล้ว`); logLine(`🔓 คุณช่วย ${r.target} แหกคุกสำเร็จ — คุณทั้งคู่เป็นผู้ก่อเหตุ`, "system"); }
+    else { toast(`🚨 ช่วยแหกคุกล้มเหลว! คุณถูกขังไปด้วย (โทษเท่ากัน ~${Math.round((r.tm || 0))} นาที)`); }
+  } catch (e) { toast(hbMsg(e)); }
+  finally { state.jailBusy = false; jailRender(); jailSync(); try { worldRefresh(); } catch { /* ข้าม */ } }
+}
+function jailWorldRows(box) {
+  if (!jailOn()) return;
+  const now = serverNow(), list = Object.entries(state.jailpub || {}).filter(([uid, e]) => e && e.u > now && uid !== state.uid);
+  box.append(mk("div", "hub-day", "⛓️ ผู้ต้องขัง"));
+  if (!list.length) return box.append(mk("div", "muted", "ตอนนี้ไม่มีใครติดคุก"));
+  const can = !jailActive() && state.profile?.hp > 0 && !["safe", "casino", "jail"].includes(state.zone);
+  list.sort((a, b) => a[1].u - b[1].u).forEach(([uid, e]) => {
+    const row = mk("div", "world-row"), mins = Math.max(1, Math.ceil((e.u - now) / 60000));
+    row.append(mk("div", "", `⛓️ ${e.n}${e.red ? " 🔴" : ""} — เหลือ ~${mins} นาที (ชั้นโทษ ${e.t || 1})`));
+    const b = btn("🔓 ช่วยแหกคุก", () => jailRescue(uid, e.n, e), "btn ghost mini"); b.disabled = !can; if (!can) b.title = "ต้องอยู่นอกเมือง (ไม่ใช่ Safe Zone/คาสิโน) และไม่ได้ติดคุกอยู่";
+    row.append(b); box.append(row);
+  });
 }
 $("jail-work").addEventListener("click", () => jailAction("work")); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
 // ---- /คุก
@@ -3220,9 +3259,10 @@ async function resolveAttack(key, a) {
   // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
   u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
 
+  let jRes = null; if (landed && newHp === 0 && crimMe() && jailOn()) state.jailWait = new Promise((r) => { jRes = r; });   // ให้ processDeath รอผลการจับก่อนคิดโทษตอนล้ม
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
-  if (landed && newHp === 0 && crimMe()) jailCapture("victim", key);   // ⛓️ เราเป็นส้มและถูกล้ม → ให้เซิร์ฟเวอร์ตัดสินว่าถูกจับไหม
+  if (jRes) { jailCapture("victim", key).finally(jRes); }   // ⛓️ เราเป็นส้มและถูกล้ม → ให้เซิร์ฟเวอร์ตัดสินว่าถูกจับไหม
   if (landed && newHp === 0) bty2Claim("victim", key);   // 💰 ผู้ถูกฆ่าเรียกให้ ผลจ่ายให้ผู้ฆ่า
   if (landed && newHp === 0 && state.players[key]?.faction === p.faction) crimReport("victim", key);   // 🟠 ถูกฝ่ายเดียวกันฆ่า (เซิร์ฟเวอร์ตรวจเงื่อนไขเอง)
 }
@@ -7051,7 +7091,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } try { bty2Listen(); } catch (e) { console.warn("bty2Listen", e); } try { jailListen(); } catch (e) { console.warn("jailListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
+  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } try { bty2Listen(); } catch (e) { console.warn("bty2Listen", e); } try { jailListen(); jailPubListen(); } catch (e) { console.warn("jailListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -7079,7 +7119,7 @@ function worldRender(box) {
     else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
     box.append(row);
   });
-  try { wxWorldRows(box); evtWorldRows(box); (bty2On() ? bty2WorldRows : bountyWorldRows)(box); fxWorldRows(box); } catch (e) { console.warn("world rows", e); }
+  try { wxWorldRows(box); evtWorldRows(box); (bty2On() ? bty2WorldRows : bountyWorldRows)(box); jailWorldRows(box); fxWorldRows(box); } catch (e) { console.warn("world rows", e); }
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
@@ -11423,6 +11463,9 @@ function tuneDefs() {
   rows.push(["jail_pct", "โอกาสถูกจับเมื่อคนส้มถูกล้ม (% — 100 = จับทุกครั้ง)", 100, 0, 100, "⛓️ คุก"]);
   rows.push(["jail_bailpct", "ค่าประกันเพิ่มตามค่าหัวบนตัว (% ของค่าหัว — 0 = ไม่คิดตามค่าหัว)", 25, 0, 200, "⛓️ คุก"]);
   rows.push(["jail_escbty", "แหกคุกสำเร็จ: ทรัพย์สินตัวเองที่ถูกตั้งเป็นค่าหัวบนตัว (แต้ม — ต้องเปิด bty2_on, 0 = ไม่ตั้ง)", 20, 0, 200, "⛓️ คุก"]);
+  rows.push(["jail_rescue", "โอกาสช่วยแหกคุกสำเร็จ (% — ล้มเหลวผู้ช่วยติดคุกไปด้วยโทษเท่ากัน)", 40, 0, 100, "⛓️ คุก"]);
+  rows.push(["crim_red", "ก่อเหตุครั้งที่เท่าไรใน 24 ชม. กลายเป็นสีแดง 🔴 (ผู้ก่อเหตุซ้ำ)", 3, 2, 4, "🟠 สถานะส้ม"]);
+  rows.push(["crim_redh", "ระยะเวลาสถานะแดง (ชั่วโมง)", 6, 1, 72, "🟠 สถานะส้ม"]);
   rows.push(["jail_esc", "โอกาสแหกคุกสำเร็จ (%)", 25, 0, 100, "⛓️ คุก"]);
   rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);

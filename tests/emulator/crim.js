@@ -42,7 +42,9 @@ const T0 = Date.UTC(2026, 9, 7, 3), M = 60000;
   // ---- โทษสะสม: ครั้งที่ 2 = 90 นาที, 3 = 135, 4 = 180, 5 = ยังเพดาน 180 • ห่างเกิน 24 ชม. → เริ่มใหม่ที่ครั้งที่ 1
   let t = T0; const dur = [];
   for (let i = 0; i < 5; i++) { t += 5 * M; await db.ref("users/v").update({ hp: 0, lastAttack: null }); await db.ref("users/a/lastAttack").set(t - 1000); r = await cr.run("v", { a: "report", role: "victim", other: "a" }, t); assert.strictEqual(r.flagged, true); dur.push((r.until - t) / M); }
-  assert.deepStrictEqual(dur, [90, 135, 180, 180, 180]);   // ครั้งแรกของลูปคือครั้งที่ 2 (มีครั้งก่อนหน้าจากเทสต์ผู้ฆ่ารายงานเอง)
+  assert.deepStrictEqual(dur, [90, 360, 360, 360, 360]);   // ครั้งแรกของลูปคือครั้งที่ 2 (มีครั้งก่อนหน้าจากเทสต์ผู้ฆ่ารายงานเอง) • ครั้งที่ 3 ขึ้นไป = 🔴 แดง 6 ชม. (ต่ออายุเมื่อก่อเหตุซ้ำ)
+  r = await cr.run("a", { a: "state" }, t + M); assert.strictEqual(r.red, true); assert.strictEqual((await db.ref("crim/a/red").get()).val(), true);
+  await db.ref("inventory/a").set({ scrap: { id: "scrap", qty: 99 } }); await rej(cr.run("a", { a: "bail" }, t + M), "จ่ายค่าประกันไม่ได้"); assert.strictEqual((await db.ref("inventory/a/scrap/qty").get()).val(), 99);   // แดงจ่ายประกันไม่ได้
   t += 25 * 3600000; await db.ref("users/v").update({ hp: 0, lastAttack: null }); await db.ref("users/a/lastAttack").set(t - 1000); r = await cr.run("v", { a: "report", role: "victim", other: "a" }, t); assert.strictEqual(r.n, 1); assert.strictEqual((r.until - t) / M, 45);
   // ---- state
   r = await cr.run("a", { a: "state" }, t + M); assert.deepStrictEqual({ on: r.on, active: r.active, n: r.n, bailPts: r.bailPts }, { on: true, active: true, n: 1, bailPts: 20 });
@@ -61,5 +63,7 @@ const T0 = Date.UTC(2026, 9, 7, 3), M = 60000;
   await rej(cr.run("a", { a: "bail" }, t + 4 * M), "วัตถุดิบไม่พอ"); assert.strictEqual((await db.ref("inventory/a/scrap/qty").get()).val(), 10); assert((await db.ref("crim/a/until").get()).val() > t + 4 * M);
   await db.ref("tune/crim_bail").set(5); r = await cr.run("a", { a: "state" }, t + 4 * M); assert.strictEqual(r.bailPts, 10);   // tune ปรับค่าประกันได้
   await db.ref("tune/crim_min").set(10); await db.ref("crim").remove(); await set({ tune: { crim_on: 1, crim_min: 10 } }); r = await cr.run("v", { a: "report", role: "victim", other: "a" }, T0); assert.strictEqual((r.until - T0) / M, 10);
+  // tune: crim_red / crim_redh ปรับเกณฑ์แดงและระยะเวลา
+  await set({ tune: { crim_on: 1, crim_red: 2, crim_redh: 1 } }); await db.ref("crim/a").set({ until: T0 - 1, n: 1, ts: T0 - M }); r = await cr.run("v", { a: "report", role: "victim", other: "a" }, T0); assert.strictEqual(r.red, true); assert.strictEqual((r.until - T0) / M, 60);
   console.log("CRIM OK"); process.exit(0);
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

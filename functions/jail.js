@@ -7,13 +7,17 @@
 //   ล้มเหลว: เวลา +5 นาที เสียของทั่วไป 1 ชิ้น พักลองใหม่ 5 นาที • ทำงานในคุก: ลดโทษ 2 นาที/ครั้ง (พัก 20 วินาที) รวมได้ไม่เกินครึ่งของโทษ • ครบเวลา: เสียของทั่วไปอย่างน้อย 1 ชิ้นแบบสุ่ม (ไม่รวมอาวุธ/ของหายาก/ของที่สวม) • จ่ายประกันไม่เสียของ
 // // - ค่าหัว (ระบบ bounty.js): ครบเวลา = ค่าหัวบนตัวหาย • ค่าประกัน = jail_bail × ชั้น + jail_bailpct% (25) ของค่าหัวบนตัว (ค่าหัวสูง = ประกันแพง) และจ่ายประกันแล้วค่าหัวยังอยู่ (ยังถูกล่า) •
 //   แหกคุกสำเร็จ: เอาทรัพย์สินตัวเองสูงสุด jail_escbty (20) แต้มไปตั้งเป็นค่าหัวบนตัว (ผู้ล้มได้ไป — ไม่สร้างของใหม่) • ถ้าตั้ง jail_pct < 100 การถูกล้มตอนเป็นส้มมีโอกาสถูกจับแค่ jail_pct%
-// - ปิดอยู่จนกว่าตั้ง tune jail_on = 1 • ปรับได้: jail_min / jail_bail / jail_esc / jail_pct / jail_bailpct / jail_escbty
+// - 🔴 ผู้ก่อเหตุสีแดง (crim.js): ถูกจับ → โทษ ×2 + ของยึด ×2 + จ่ายประกันไม่ได้ (ทำงานลดโทษ/แหกคุก/ครบเวลาได้)
+// - ช่วยแหกคุก (`rescue`): ผู้เล่นอื่นที่อยู่นอกเมือง (ไม่ใช่ Safe/คาสิโน/คุก ไม่ได้ติดคุก) ช่วยผู้ต้องขังได้ (รายชื่อผู้ต้องขังที่ `jailpub/{uid}` อ่านได้ทุกคน) โอกาส jail_rescue% (40) พักต่อคน 10 นาที •
+//   สำเร็จ: ผู้ต้องขังออกทันที (เมืองร้าง) กลับเป็นส้ม และผู้ช่วยกลายเป็นส้มด้วย (ความผิดฐานช่วยแหกคุก) • ล้มเหลว: ผู้ช่วย **ติดคุกไปด้วย โทษเท่ากับผู้ต้องขัง** (ชั้นโทษ/ระยะโทษเต็ม) สถานะส้มของผู้ช่วยถูกล้างตามการถูกจับ
+// - ปิดอยู่จนกว่าตั้ง tune jail_on = 1 • ปรับได้: jail_min / jail_bail / jail_esc / jail_pct / jail_bailpct / jail_escbty / jail_rescue
 const crypto = require("crypto");
 const { fail, withLock, takeItem, grantAll } = require("./lib");
 const { payPts, payUpTo } = require("./paypts");
 const { effPts } = require("./bounty");
+const { nextCrim } = require("./crim");
 
-const ATK_WINDOW = 90000, DEDUPE_MS = 120000, WORK_MIN = 2, WORK_CD = 20000, ESC_CD = 300000, ESC_FAIL_MIN = 5, DECAY_MS = 86400000, MAX_T = 4;
+const RESCUE_CD = 600000, RED_MUL = 2, ATK_WINDOW = 90000, DEDUPE_MS = 120000, WORK_MIN = 2, WORK_CD = 20000, ESC_CD = 300000, ESC_FAIL_MIN = 5, DECAY_MS = 86400000, MAX_T = 4;
 // ของทั่วไปที่ยึด/ริบได้ (ทุกรหัสต้องอยู่ใน ITEMS ของเกมและ whitelist กระเป๋า) — ไม่รวมอาวุธ/เกราะ/ของหายาก
 const COMMON = ["scrap", "chem", "canned_food", "water", "bandage", "rusty_nails", "leather_scrap", "duct_tape", "bread", "fruit", "rotten_meat", "moss"];
 const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
@@ -21,7 +25,7 @@ const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
 function makeJail(db, rnd) {
   const rf = rnd || (() => crypto.randomInt(1000000) / 1000000);
   async function tune(k, d) { const v = (await db.ref(`tune/${k}`).get()).val(); return typeof v === "number" && Number.isFinite(v) ? v : d; }
-  async function cfg() { return { on: (await tune("jail_on", 0)) === 1, mins: Math.max(1, await tune("jail_min", 30)), bail: Math.max(1, await tune("jail_bail", 30)), esc: Math.min(100, Math.max(0, await tune("jail_esc", 25))), pct: Math.min(100, Math.max(0, await tune("jail_pct", 100))), bailPct: Math.max(0, await tune("jail_bailpct", 25)), escBty: Math.max(0, Math.floor(await tune("jail_escbty", 20))), bty2: (await tune("bty2_on", 0)) === 1, btyCap: Math.max(1, Math.floor(await tune("bty_cap", 200))), btyDecay: Math.max(0, await tune("bty_decay", 3)), crimMins: Math.max(1, await tune("crim_min", 45)) }; }
+  async function cfg() { return { on: (await tune("jail_on", 0)) === 1, mins: Math.max(1, await tune("jail_min", 30)), bail: Math.max(1, await tune("jail_bail", 30)), esc: Math.min(100, Math.max(0, await tune("jail_esc", 25))), pct: Math.min(100, Math.max(0, await tune("jail_pct", 100))), bailPct: Math.max(0, await tune("jail_bailpct", 25)), escBty: Math.max(0, Math.floor(await tune("jail_escbty", 20))), bty2: (await tune("bty2_on", 0)) === 1, btyCap: Math.max(1, Math.floor(await tune("bty_cap", 200))), btyDecay: Math.max(0, await tune("bty_decay", 3)), crimMins: Math.max(1, await tune("crim_min", 45)), redAt: Math.max(2, Math.floor(await tune("crim_red", 3))), redH: Math.max(1, await tune("crim_redh", 6)), rescue: Math.min(100, Math.max(0, await tune("jail_rescue", 40))) }; }
   const active = (j, now) => !!j && num(j.until) > now;
   const orange = (c, now) => !!c && num(c.until) > now;
   const escN = (jn, now) => (jn && now - num(jn.ts) <= DECAY_MS ? Math.max(0, num(jn.n)) : 0);
@@ -32,12 +36,12 @@ function makeJail(db, rnd) {
     if (!have.length) return null; const id = have[Math.floor(rf() * have.length)]; return [id, num(inv[id].qty)];
   }
   const bailFor = (C, t, b, now) => C.bail * t + Math.floor((effPts(b, now, C.btyDecay) * C.bailPct) / 100);
-  const view = (j, jn, C, now, b) => ({ active: active(j, now), until: j ? num(j.until) : 0, tier: j ? num(j.t) || 1 : tierOf(escN(jn, now)), tm: j ? num(j.tm) : 0, w: j ? num(j.w) : 0, bailPts: bailFor(C, j ? num(j.t) || 1 : tierOf(escN(jn, now)), b, now), esc: C.esc, workLeftAt: j ? num(j.wt) + WORK_CD : 0, escLeftAt: j ? num(j.et) + ESC_CD : 0 });
+  const view = (j, jn, C, now, b) => ({ active: active(j, now), until: j ? num(j.until) : 0, tier: j ? num(j.t) || 1 : tierOf(escN(jn, now)), tm: j ? num(j.tm) : 0, w: j ? num(j.w) : 0, bailPts: bailFor(C, j ? num(j.t) || 1 : tierOf(escN(jn, now)), b, now), red: !!(j && j.red), esc: C.esc, rescue: C.rescue, workLeftAt: j ? num(j.wt) + WORK_CD : 0, escLeftAt: j ? num(j.et) + ESC_CD : 0 });
 
   async function run(uid, data, now = Date.now()) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
-    if (!["state", "capture", "work", "escape", "bail", "release"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
+    if (!["state", "capture", "work", "escape", "bail", "release", "rescue"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
     const C = await cfg();
     if (a === "state") { const [jS, nS, bS] = await Promise.all([db.ref(`jail/${uid}`).get(), db.ref(`jailn/${uid}`).get(), db.ref(`bty/${uid}`).get()]); return { ok: true, on: C.on, ...view(jS.val(), nS.val(), C, now, bS.val()) }; }
     const jailed = async (id) => (await db.ref(`jail/${id}`).get()).val();
@@ -60,22 +64,46 @@ function makeJail(db, rnd) {
       await db.ref(`jailrep/${vid}`).transaction((cur) => { dup = false; if (cur === null) return { ts: now, by: kid }; if (now - num(cur.ts) < DEDUPE_MS) { dup = true; return undefined; } return { ts: now, by: kid }; });
       if (dup) return no("dup");
       if (C.pct < 100 && !(rf() * 100 < C.pct)) return no("lucky");   // โอกาสถูกจับ (ค่าเริ่มต้น 100% = จับทุกครั้ง)
-      const t = tierOf(escN(jnS.val(), now)), tm = C.mins * t;
-      await db.ref().update({ [`jail/${vid}`]: { until: now + tm * 60000, t, tm, w: 0, ts: now, by: k.username }, [`crim/${vid}`]: { until: now, n: num((vcS.val() || {}).n), ts: num((vcS.val() || {}).ts) } });
+      const red = (vcS.val() || {}).red === true, t = tierOf(escN(jnS.val(), now)), tm = C.mins * t * (red ? RED_MUL : 1);   // 🔴 แดง: โทษ ×2
+      await db.ref().update({ [`jail/${vid}`]: { until: now + tm * 60000, t, tm, w: 0, ts: now, by: k.username, ...(red ? { red: true } : {}) }, [`jailpub/${vid}`]: { n: v.username, u: now + tm * 60000, t, ...(red ? { red: true } : {}) }, [`crim/${vid}`]: { until: now, n: num((vcS.val() || {}).n), ts: num((vcS.val() || {}).ts) } });
       let reward = null;   // ของยึด: ของทั่วไป 1 ชนิดจากกระเป๋าผู้ต้องขัง จำนวนเท่าชั้นโทษ (ย้ายของจริง ไม่สร้างใหม่)
       const pick = await pickCommon(vid);
       if (pick) {
-        const [id, have] = pick, q = Math.min(have, t);
+        const [id, have] = pick, q = Math.min(have, t * (red ? RED_MUL : 1));
         if (await takeItem(db, vid, id, q)) { if (await grantAll(db, kid, [[id, q]])) reward = { id, qty: q }; else await grantAll(db, vid, [[id, q]]).catch(() => {}); }
       }
-      return { ok: true, on: true, captured: true, who: vid, by: kid, until: now + tm * 60000, tier: t, reward };
+      return { ok: true, on: true, captured: true, who: vid, by: kid, until: now + tm * 60000, tier: t, red, reward };
     }
 
     if (!C.on) return { ok: true, on: false };
     return withLock(db, uid, now, async () => {
       const [j, jnv, u] = await Promise.all([jailed(uid), db.ref(`jailn/${uid}`).get().then((s) => s.val()), db.ref(`users/${uid}`).get().then((s) => s.val())]);
       if (!u || u.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
-      const leave = async (zone, extra = {}) => { await db.ref().update({ [`jail/${uid}`]: null, [`users/${uid}/zone`]: zone, ...extra }); };
+      const leave = async (zone, extra = {}) => { await db.ref().update({ [`jail/${uid}`]: null, [`jailpub/${uid}`]: null, [`users/${uid}/zone`]: zone, ...extra }); };
+      if (a === "rescue") {
+        const target = String((data && data.target) || "");
+        if (!target || target === uid || !/^[A-Za-z0-9_-]{1,64}$/.test(target)) fail("invalid-argument", "ข้อมูลไม่ถูกต้อง");
+        if (!okRole(u)) fail("permission-denied", "บัญชีนี้ช่วยแหกคุกไม่ได้");
+        if (!(u.hp > 0)) fail("failed-precondition", "ต้องมีชีวิตอยู่");
+        if (["safe", "casino", "jail"].includes(u.zone)) fail("failed-precondition", "ต้องอยู่นอกเมือง (ไม่ใช่ Safe Zone/คาสิโน/คุก) ถึงจะช่วยแหกคุกได้");
+        if (active(j, now)) fail("failed-precondition", "คุณติดคุกอยู่เอง");
+        const [tjS, tuS, rsS, hcS, tcS, tnS] = await Promise.all([db.ref(`jail/${target}`).get(), db.ref(`users/${target}`).get(), db.ref(`jailrs/${uid}`).get(), db.ref(`crim/${uid}`).get(), db.ref(`crim/${target}`).get(), db.ref(`jailn/${target}`).get()]);
+        const tj = tjS.val(), tu = tuS.val();
+        if (!active(tj, now) || !okRole(tu)) fail("failed-precondition", "คนนี้ไม่ได้ติดคุกอยู่");
+        if (now - num((rsS.val() || {}).ts) < RESCUE_CD) fail("resource-exhausted", `เพิ่งลองช่วยแหกคุกไป รออีก ${Math.ceil((RESCUE_CD - (now - num((rsS.val() || {}).ts))) / 60000)} นาที`);
+        await db.ref(`jailrs/${uid}`).set({ ts: now, to: target });
+        const nc = { mins: C.crimMins, redAt: C.redAt, redH: C.redH };
+        if (rf() * 100 < C.rescue) {   // สำเร็จ: ผู้ต้องขังออกทันที กลับเป็นส้ม • ผู้ช่วยกลายเป็นส้มด้วย
+          let freed = false; await db.ref(`jail/${target}`).transaction((c) => { freed = false; if (c === null) return c; if (!active(c, now)) return undefined; freed = true; return null; });
+          if (!freed) fail("failed-precondition", "คนนี้ออกจากคุกไปแล้ว");
+          await db.ref().update({ [`jailpub/${target}`]: null, [`users/${target}/zone`]: "ruins", [`crim/${target}`]: nextCrim(tcS.val(), now, nc), [`jailn/${target}`]: { n: escN(tnS.val(), now) + 1, ts: now }, [`crim/${uid}`]: nextCrim(hcS.val(), now, nc) });
+          return { ok: true, on: true, rescued: true, target: tu.username, helperOrange: true };
+        }
+        // ล้มเหลว: ผู้ช่วยติดคุกไปด้วย โทษเท่ากับผู้ต้องขัง (ชั้นโทษ/ระยะโทษเต็ม)
+        const t2 = num(tj.t) || 1, tm = num(tj.tm) || C.mins * t2, red = tj.red === true;
+        await db.ref().update({ [`jail/${uid}`]: { until: now + tm * 60000, t: t2, tm, w: 0, ts: now, by: "ช่วยแหกคุกพลาด", ...(red ? { red: true } : {}) }, [`jailpub/${uid}`]: { n: u.username, u: now + tm * 60000, t: t2, ...(red ? { red: true } : {}) }, [`crim/${uid}`]: { until: now, n: num((hcS.val() || {}).n), ts: num((hcS.val() || {}).ts) } });
+        return { ok: true, on: true, rescued: false, jailed: true, until: now + tm * 60000, tier: t2, tm };
+      }
       if (a === "release") {
         if (!j) { const stuck = u.zone === "jail"; if (stuck) await db.ref(`users/${uid}/zone`).set("safe"); return { ok: true, on: true, released: stuck, zone: stuck ? "safe" : u.zone }; }   // ไม่มีบันทึกคุกแต่ยังค้างโซนคุก (ข้อมูลหลุด) → ปล่อยออก
         if (active(j, now)) fail("failed-precondition", "ยังไม่ครบโทษ");
@@ -90,31 +118,32 @@ function makeJail(db, rnd) {
         if (now - num(j.wt) < WORK_CD) fail("resource-exhausted", `พักก่อน อีก ${Math.ceil((WORK_CD - (now - num(j.wt))) / 1000)} วินาที`);
         const cap = Math.floor(num(j.tm) / 2);
         if (num(j.w) + WORK_MIN > cap) fail("failed-precondition", "ทำงานลดโทษได้ไม่เกินครึ่งหนึ่งของโทษแล้ว");
-        const nu = num(j.until) - WORK_MIN * 60000; await db.ref(`jail/${uid}`).update({ until: nu, w: num(j.w) + WORK_MIN, wt: now });
+        const nu = num(j.until) - WORK_MIN * 60000; await db.ref().update({ [`jail/${uid}/until`]: nu, [`jail/${uid}/w`]: num(j.w) + WORK_MIN, [`jail/${uid}/wt`]: now, [`jailpub/${uid}/u`]: nu });
         return { ok: true, on: true, until: nu, w: num(j.w) + WORK_MIN, ended: nu <= now };
       }
       if (a === "bail") {
+        if (j.red) fail("failed-precondition", "🔴 นักโทษผู้ก่อเหตุซ้ำจ่ายค่าประกันไม่ได้ (ทำงานลดโทษ แหกคุก หรือรอครบเวลา)");
         const need = bailFor(C, t, (await db.ref(`bty/${uid}`).get()).val(), now), paid = await payPts(db, uid, need, "จ่ายค่าประกัน");
         await leave("safe"); return { ok: true, on: true, released: true, zone: "safe", paid, pts: need };
       }
       // escape
       if (now - num(j.et) < ESC_CD) fail("resource-exhausted", `เพิ่งลองแหกคุกไป รออีก ${Math.ceil((ESC_CD - (now - num(j.et))) / 1000)} วินาที`);
       if (rf() * 100 < C.esc) {
-        const n = escN(jnv, now) + 1, cS = (await db.ref(`crim/${uid}`).get()).val(), cn = Math.min(4, (cS && now - num(cS.ts) <= DECAY_MS ? Math.min(4, num(cS.n)) : 0) + 1);
+        const n = escN(jnv, now) + 1, cS = (await db.ref(`crim/${uid}`).get()).val(), nc = nextCrim(cS, now, { mins: C.crimMins, redAt: C.redAt, redH: C.redH });
         let self = 0;   // เอาทรัพย์สินตัวเองตั้งเป็นค่าหัวบนตัว (เฉพาะเมื่อเปิดค่าหัวใหม่) — ผู้ที่ล้มได้ไปเอง
         if (C.bty2 && C.escBty > 0) {
           const bS = (await db.ref(`bty/${uid}`).get()).val(), room = Math.max(0, C.btyCap - effPts(bS, now, C.btyDecay)), got = room > 0 ? await payUpTo(db, uid, Math.min(C.escBty, room)) : { pts: 0 };
           if (got.pts > 0) { self = got.pts; await db.ref(`bty/${uid}`).transaction((c) => { const e = effPts(c, now, C.btyDecay), s = c && c.s && typeof c.s === "object" && !c.kb ? { ...c.s } : {}; s._jail = num(s._jail) + got.pts; return { pts: e + got.pts, ts: now, tn: u.username, bn: "แหกคุก", s }; }); }
         }
-        await leave("ruins", { [`crim/${uid}`]: { until: now + C.crimMins * 60000 * cn, n: cn, ts: now }, [`jailn/${uid}`]: { n, ts: now } });
-        return { ok: true, on: true, escaped: true, zone: "ruins", n, bounty: self };
+        await leave("ruins", { [`crim/${uid}`]: nc, [`jailn/${uid}`]: { n, ts: now } });
+        return { ok: true, on: true, escaped: true, zone: "ruins", n, bounty: self, red: nc.red === true };
       }
       let lost = null; const pick = await pickCommon(uid);
       if (pick && (await takeItem(db, uid, pick[0], 1))) lost = { id: pick[0], qty: 1 };
-      const nu = num(j.until) + ESC_FAIL_MIN * 60000; await db.ref(`jail/${uid}`).update({ until: nu, et: now });
+      const nu = num(j.until) + ESC_FAIL_MIN * 60000; await db.ref().update({ [`jail/${uid}/until`]: nu, [`jail/${uid}/et`]: now, [`jailpub/${uid}/u`]: nu });
       return { ok: true, on: true, escaped: false, until: nu, lost };
     });
   }
   return { run };
 }
-module.exports = { makeJail, COMMON, MAX_T, WORK_MIN, WORK_CD, ESC_CD, ESC_FAIL_MIN };
+module.exports = { makeJail, RESCUE_CD, RED_MUL, COMMON, MAX_T, WORK_MIN, WORK_CD, ESC_CD, ESC_FAIL_MIN };

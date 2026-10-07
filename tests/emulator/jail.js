@@ -79,6 +79,32 @@ const T0 = Date.UTC(2026, 9, 7, 3), M = 60000;
   r = await esc(null, { knife: { id: "knife", qty: 1, dur: 5 } }); assert.strictEqual(r.escaped, true); assert.strictEqual(r.bounty, 0); assert.strictEqual((await db.ref("bty/v").get()).val(), null);
   r = await esc({ jail_escbty: 0 }, { scrap: { id: "scrap", qty: 30 } }); assert.strictEqual(r.bounty, 0); assert.strictEqual((await db.ref("inventory/v/scrap/qty").get()).val() <= 30, true);
   r = await (async () => { await set({ tune: { jail_on: 1 }, inventory: { v: { scrap: { id: "scrap", qty: 30 } }, k: { scrap: { id: "scrap", qty: 1 } } } }); q(0); await jl.run("v", { a: "capture", role: "victim", other: "k" }, T0); await db.ref("users/v/zone").set("jail"); q(0.1); return jl.run("v", { a: "escape" }, T0 + M); })(); assert.strictEqual(r.bounty, 0); assert.strictEqual((await db.ref("inventory/v/scrap/qty").get()).val(), 29, "ปิดค่าหัวใหม่: ไม่หักทรัพย์สิน (เหลือ 30−1 ที่ถูกยึดตอนจับ)");
+  // ---- 🔴 แดง: โทษ ×2 + ของยึด ×2 + จ่ายประกันไม่ได้ • รายชื่อผู้ต้องขังสาธารณะ jailpub
+  const RED = { until: T0 + 30 * M, n: 3, ts: T0, red: true };
+  await set({ crim: { v: RED } }); q(0); r = await jl.run("v", { a: "capture", role: "victim", other: "k" }, T0); assert.strictEqual(r.red, true); assert.strictEqual(r.until, T0 + 60 * M); assert.deepStrictEqual(r.reward, { id: "scrap", qty: 2 });
+  const jr = (await db.ref("jail/v").get()).val(); assert.deepStrictEqual({ t: jr.t, tm: jr.tm, red: jr.red }, { t: 1, tm: 60, red: true }); assert.deepStrictEqual((await db.ref("jailpub/v").get()).val(), { n: "v", u: T0 + 60 * M, t: 1, red: true });
+  await db.ref("users/v/zone").set("jail"); await db.ref("inventory/v").set({ scrap: { id: "scrap", qty: 90 } }); r = await jl.run("v", { a: "state" }, T0 + M); assert.strictEqual(r.red, true); await rej(jl.run("v", { a: "bail" }, T0 + M), "จ่ายค่าประกันไม่ได้"); assert.strictEqual((await db.ref("inventory/v/scrap/qty").get()).val(), 90);
+  r = await jl.run("v", { a: "work" }, T0 + M); assert.strictEqual((await db.ref("jailpub/v/u").get()).val(), T0 + 58 * M, "jailpub ตามเวลาที่ลด");
+  // แหกคุกสำเร็จทำให้แดงต่อ (n 3→4 ยังแดง) / ออกจากคุกลบ jailpub
+  q(0.1); r = await jl.run("v", { a: "escape" }, T0 + 2 * M); assert.strictEqual(r.escaped, true); assert.strictEqual(r.red, true); assert.strictEqual((await db.ref("jailpub/v").get()).val(), null); assert.strictEqual((await db.ref("crim/v/red").get()).val(), true);
+  // ---- ช่วยแหกคุก
+  const jailed = async (x = {}) => { await set({ crim: { v: OR }, jailn: x.jailn || null, users: { ...base().users, ...(x.users || {}) }, tune: { jail_on: 1, ...(x.tune || {}) } }); q(0); await jl.run("v", { a: "capture", role: "victim", other: "k" }, T0); await db.ref("users/v/zone").set("jail"); };
+  await jailed(); q(0.1); r = await jl.run("z", { a: "rescue", target: "v" }, T0 + M); assert.strictEqual(r.rescued, true); assert.strictEqual(r.target, "v");
+  assert.strictEqual((await db.ref("jail/v").get()).val(), null); assert.strictEqual((await db.ref("jailpub/v").get()).val(), null); assert.strictEqual((await db.ref("users/v/zone").get()).val(), "ruins"); assert.strictEqual((await db.ref("crim/v/until").get()).val() > T0 + M, true, "ผู้ถูกช่วยกลับเป็นส้ม"); assert.strictEqual((await db.ref("jailn/v/n").get()).val(), 1);
+  const cz = (await db.ref("crim/z").get()).val(); assert.strictEqual(cz.n, 1); assert.strictEqual(cz.until, T0 + M + 45 * M, "ผู้ช่วยเป็นส้มด้วย");
+  await jailed(); q(0.9); r = await jl.run("z", { a: "rescue", target: "v" }, T0 + M); assert.strictEqual(r.rescued, false); assert.strictEqual(r.jailed, true); assert.strictEqual(r.until, T0 + M + 30 * M);
+  const jz = (await db.ref("jail/z").get()).val(); assert.deepStrictEqual({ t: jz.t, tm: jz.tm, by: jz.by }, { t: 1, tm: 30, by: "ช่วยแหกคุกพลาด" }); assert.deepStrictEqual((await db.ref("jailpub/z").get()).val(), { n: "z", u: T0 + M + 30 * M, t: 1 });
+  assert.strictEqual((await db.ref("jail/v/until").get()).val(), T0 + 30 * M, "ผู้ต้องขังเดิมยังติดอยู่ ไม่ถูกเพิ่มโทษ"); assert.strictEqual((await db.ref("crim/z/until").get()).val() <= T0 + M, true, "ผู้ช่วยที่ติดคุก: ส้มถูกล้าง");
+  await rej(jl.run("z", { a: "rescue", target: "v" }, T0 + 2 * M), "ติดคุกอยู่เอง");   // ผู้ช่วยติดคุกแล้วช่วยต่อไม่ได้
+  // โทษเท่ากัน: ผู้ต้องขังชั้น 3 → ผู้ช่วยได้ชั้น 3 ระยะโทษ 90 นาที (ครบ ไม่ใช่เวลาที่เหลือ)
+  await jailed({ jailn: { v: { n: 2, ts: T0 - M } } }); await db.ref("jail/v/until").set(T0 + 5 * M); q(0.9); r = await jl.run("z", { a: "rescue", target: "v" }, T0 + 2 * M); assert.strictEqual(r.tier, 3); assert.strictEqual(r.until, T0 + 2 * M + 90 * M);
+  // ผู้ต้องขังสีแดง → ผู้ช่วยที่พลาดติดโทษแดงเท่ากัน (×2)
+  await jailed({ users: {} }); await db.ref("jail/v").update({ red: true, tm: 60, until: T0 + 60 * M }); q(0.9); r = await jl.run("z", { a: "rescue", target: "v" }, T0 + M); assert.strictEqual(r.tm, 60); assert.strictEqual((await db.ref("jail/z/red").get()).val(), true);
+  // เงื่อนไข: พักต่อคน 10 นาที (ใช้ได้เมื่อไม่ติดคุก) • นอกเมือง • มีชีวิต • เป้าไม่ได้ติดคุก • ตัวเอง • ปิดระบบ
+  await jailed({ tune: { jail_rescue: 0 } }); await db.ref("jail/z").remove(); r = await jl.run("z", { a: "rescue", target: "v" }, T0 + M); assert.strictEqual(r.rescued, false); await db.ref("jail/z").remove(); await rej(jl.run("z", { a: "rescue", target: "v" }, T0 + 2 * M), "รออีก");
+  await jailed(); await rej(jl.run("z", { a: "rescue", target: "z" }, T0), "ข้อมูลไม่ถูกต้อง"); await rej(jl.run("z", { a: "rescue", target: "k" }, T0), "ไม่ได้ติดคุกอยู่"); await rej(jl.run("gm", { a: "rescue", target: "v" }, T0), "ช่วยแหกคุกไม่ได้");
+  await db.ref("users/z/zone").set("safe"); await rej(jl.run("z", { a: "rescue", target: "v" }, T0), "นอกเมือง"); await db.ref("users/z").update({ zone: "forest", hp: 0 }); await rej(jl.run("z", { a: "rescue", target: "v" }, T0), "ต้องมีชีวิต"); await db.ref("users/z/hp").set(100);
+  await db.ref("tune/jail_on").set(0); assert.deepStrictEqual(await jl.run("z", { a: "rescue", target: "v" }, T0), { ok: true, on: false });
   // tune ปรับโทษ/ประกัน/โอกาส
   await set({ tune: { jail_on: 1, jail_min: 10, jail_bail: 5, jail_esc: 100 } }); q(0); r = await jl.run("v", { a: "capture", role: "victim", other: "k" }, T0); assert.strictEqual(r.until, T0 + 10 * M); r = await jl.run("v", { a: "state" }, T0); assert.strictEqual(r.bailPts, 5); q(0.99); r = await jl.run("v", { a: "escape" }, T0 + M); assert.strictEqual(r.escaped, true, "esc 100%");
   console.log("JAIL OK"); process.exit(0);
