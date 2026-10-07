@@ -63,7 +63,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0404";
+const APP_VERSION = "2026-10-07.0410";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1573,7 +1573,7 @@ function renderPlayers(snap) {
       const grp = mk("div", "row-btns");
       grp.append(btn("ประวัติ", () => showBio(c.key, v.name, v.faction), "btn ghost mini"));
       grp.append(btn("กระซิบ", () => { $("chat-input").value = `/w ${v.name} `; setTab("chat"); $("chat-input").focus(); }, "btn ghost mini"));
-      if (v.role !== "gm" && v.role !== "owner") grp.append(btn(bountyOn(c.key) ? "💰 มีค่าหัว" : "💰", () => bountyPlace(c.key, v.name), "btn ghost mini bty-btn"));
+      if (v.role !== "gm" && v.role !== "owner") grp.append(bty2On() ? btn(bty2Pts(c.key) > 0 ? `💰 ${bty2Pts(c.key)}` : "💰", () => bty2Place(c.key, v.name), "btn ghost mini bty-btn") : btn(bountyOn(c.key) ? "💰 มีค่าหัว" : "💰", () => bountyPlace(c.key, v.name), "btn ghost mini bty-btn"));
       if (isStaff()) grp.append(btn("จัดการ", () => {
         ["adm-mute-id", "adm-pid", "adm-target-id", "adm-inf-id", "adm-se-id", "adm-gv-id", "adm-sk-id"].forEach((id) => { $(id).value = c.key; });
         $("adm-clear-zone").value = state.zone; watchMutes();
@@ -1998,7 +1998,7 @@ async function processDeath(attempt = 0) {
     const rz = crimMe() ? "ruins" : "safe";   // ส้มฟื้นที่ Safe Zone ไม่ได้ → เขตเมืองร้าง
     u[`users/${uid}/hp`] = 50; u[`users/${uid}/zone`] = rz; u[`users/${uid}/lastDeath`] = serverTimestamp();
     const deadZone = state.zone;
-    if (state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
+    if (!bty2On() && state.bounty?.[uid]) u[`bounty/${uid}`] = null;   // ค่าหัวบนตัวเราหมดสภาพเมื่อฟื้น
     await update(ref(db), u);
     // ตรวจหลังฟื้น: ถ้าฐานข้อมูลยังมีเชื้อค้าง (ไม่ควรเกิด) ให้บันทึกลง console + แจ้งผู้เล่นให้รักษา/แจ้งแอดมิน (ล้างเองตอน HP>0 ไม่ได้ตาม rules)
     if (p.infected) setTimeout(async () => { try { const hpS = (await get(ref(db, `users/${uid}`))).val(); if (hpS && hpS.infected && hpS.hp === 50) { console.warn("infection survived respawn", hpS.infected); logLine("🦠 เชื้อยังค้างหลังฟื้น — ใช้ชุดปฐมพยาบาลหรือมอสเพื่อรักษา (หรือแจ้งแอดมิน)", "system"); } } catch { /* ข้าม */ } }, 4000);
@@ -2523,6 +2523,53 @@ async function crimBail() {
 }
 $("crim-bail").addEventListener("click", crimBail);
 // ---- /สถานะส้ม
+
+// ---- 💰 ค่าหัวแบบใหม่ — functions/bounty.js • ตั้งด้วยวัตถุดิบ สะสมแต้ม ไม่หมดเวลา (ลดช้าๆ) จ่ายเป็นวัตถุดิบให้คนที่ล้มเป้าหมาย • ปิดอยู่จนกว่าเจ้าของตั้ง tune bty2_on = 1 (เปิดแล้วเกมใช้ระบบนี้แทนค่าหัวเดิม)
+const bountyCall = (data) => httpsCallable(fns, "bountyAct")(data).then((r) => r.data);
+const bty2On = () => T("bty2_on", 0) === 1;
+const bty2Eff = (b, now = serverNow()) => (b && b.pts > 0 ? Math.max(0, Math.round(b.pts * (1 - (T("bty_decay", 3) / 100) * Math.max(0, (now - b.ts) / 86400000)))) : 0);   // ต้องตรง effPts ใน functions/bounty.js
+const bty2Pts = (uid) => bty2Eff(state.bty?.[uid]);
+async function bty2Place(uid, name) {
+  const p = state.profile; if (!p || p.hp <= 0 || uid === state.uid) return;
+  const step = T("bty_step", 10), cur = bty2Pts(uid);
+  if (!confirm(`เพิ่มค่าหัว ${name} +${step} แต้ม? (หักวัตถุดิบ ${step} แต้ม: เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3) ตอนนี้ ${cur} แต้ม — ไม่หมดเวลา (ลด ${T("bty_decay", 3)}%/วัน) คนที่ล้มเขาได้รับวัตถุดิบ (หักค่าธรรมเนียม ${T("bty_fee", 20)}%) ผู้ตั้งเก็บเองไม่ได้ • ฆ่าผู้เล่นฝ่ายเดียวกันที่ไม่ใช่ส้มยังทำให้ตัวเองติดส้ม`)) return;
+  try { const r = await bountyCall({ a: "place", target: uid }); achBump("btyset", 1); toast(`💰 ค่าหัว ${name} ตอนนี้ ${r.pts} แต้ม`); } catch (e) { toast(hbMsg(e)); }
+}
+async function bty2Claim(role, other) {   // หลังเป้าหมายล้ม — เซิร์ฟเวอร์ตรวจเงื่อนไขและจ่ายให้ผู้ฆ่าเอง
+  try { if (!bty2On() || !other) return; const r = await bountyCall({ a: "claim", role, other }); if (r?.claimed && r.who === state.uid) { toast(`💰 เก็บค่าหัว ${r.target} ได้ ${r.pay} แต้ม (ได้ของเข้ากระเป๋า)`); } } catch (e) { if (role === "killer") toast(hbMsg(e)); }
+}
+function bty2Listen() {
+  if (state.bty2On || !state.uid) return; state.bty2On = true;
+  let first = true; const seen = {};
+  onValue(ref(db, "bty"), (snap) => {
+    const all = snap.val() || {}, now = serverNow(), fresh = []; state.bty = all;
+    Object.entries(all).forEach(([uid, b]) => {
+      if (!b || typeof b.ts !== "number") return;
+      const was = seen[uid] || {}, live = !first, sig = `${b.ts}:${b.pts}`;
+      if (!b.kb && b.pts > 0 && was.sig !== sig && !(first && now - b.ts > 1800000)) fresh.push({ ts: b.ts, live, t: uid === state.uid ? `💰 ค่าหัวบนตัวคุณตอนนี้ ${bty2Eff(b, now)} แต้ม (ล่าสุด: ${b.bn}) ระวังตัวไว้!` : `💰 ${b.bn} เพิ่มค่าหัว ${b.tn} — ตอนนี้ ${bty2Eff(b, now)} แต้ม` });
+      if (b.kb && was.kb !== b.kb + b.kts && !(first && now - b.kts > 1800000)) {
+        fresh.push({ ts: Math.max(b.kts || b.ts, now - 1), live, t: `🎯 ${b.kb} เก็บค่าหัวของ ${b.tn} ได้สำเร็จ (${b.paid} แต้ม)` });
+        const flag = lsKey("bty2kb_" + uid + "_" + b.kts);
+        if (!first && b.kb === state.profile?.username && !LS.get(flag, 0)) { LS.set(flag, 1); achBump("bty", 1); questBump("btyok"); }
+      }
+      seen[uid] = { sig, kb: b.kb ? b.kb + b.kts : "" };
+    });
+    fresh.sort((a, b) => a.ts - b.ts).forEach((f) => radioPush(`📻 [วิทยุ] ${f.t}`, f.ts, f.live));
+    first = false;
+    try { if (state.psnap) renderPlayers(state.psnap); worldRefresh(); } catch { /* ข้าม */ }
+  }, (er) => console.warn("bty", er?.code || er));
+}
+function bty2WorldRows(box) {
+  box.append(mk("div", "hub-day", "💰 ค่าหัวตอนนี้"));
+  const now = serverNow(), list = Object.entries(state.bty || {}).map(([uid, b]) => [uid, b, bty2Eff(b, now)]).filter(([, b, e]) => b && (e > 0 || (b.kb && now - b.kts < 3600000))).sort((x, y) => y[2] - x[2]);
+  if (!list.length) return box.append(mk("div", "muted", "ยังไม่มีใครถูกตั้งค่าหัว — กดปุ่ม 💰 ที่รายชื่อผู้เล่นเพื่อเพิ่ม (หักวัตถุดิบ)"));
+  list.forEach(([uid, b, e]) => {
+    const row = mk("div", "world-row");
+    row.append(mk("div", "", e > 0 ? `💰 ${b.tn}${uid === state.uid ? " (คุณ!)" : ""} — ${e} แต้ม` : `🎯 ${b.tn} ถูก ${b.kb} เก็บค่าหัวแล้ว`), mk("div", "muted", e > 0 ? `ล่าสุดโดย ${b.bn} • ไม่หมดเวลา (ลดช้าๆ)` : `ได้รับ ${b.paid} แต้ม`));
+    box.append(row);
+  });
+}
+// ---- /ค่าหัวใหม่
 
 /* =========================================================
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
@@ -3056,6 +3103,7 @@ async function freeHit(targetUid, targetName, w, sk = null) {
 
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
+  if (!dodged && left === 0) bty2Claim("killer", targetUid);   // 💰 ค่าหัวใหม่ (เซิร์ฟเวอร์ตรวจและจ่ายเอง)
   if (!dodged && left === 0 && state.players[targetUid]?.faction === p.faction) crimReport("attacker", targetUid);   // 🟠 ฆ่าฝ่ายเดียวกัน (เซิร์ฟเวอร์ตรวจเงื่อนไขเอง)
 }
 
@@ -3113,6 +3161,7 @@ async function resolveAttack(key, a) {
 
   await update(ref(db), u);
   trimList("chats/" + state.zone, CHAT_LIMIT).catch(() => {});
+  if (landed && newHp === 0) bty2Claim("victim", key);   // 💰 ผู้ถูกฆ่าเรียกให้ ผลจ่ายให้ผู้ฆ่า
   if (landed && newHp === 0 && state.players[key]?.faction === p.faction) crimReport("victim", key);   // 🟠 ถูกฝ่ายเดียวกันฆ่า (เซิร์ฟเวอร์ตรวจเงื่อนไขเอง)
 }
 
@@ -6940,7 +6989,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
+  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } try { bty2Listen(); } catch (e) { console.warn("bty2Listen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
@@ -6968,7 +7017,7 @@ function worldRender(box) {
     else { const nx = (m.slot + 1) * COOP_SLOT_MS - now; row.append(mk("div", "muted", `${label}: ยังไม่มีภารกิจ — ภารกิจถัดไปในอีก ~${Math.max(1, Math.ceil(nx / 60000))} นาที`)); }
     box.append(row);
   });
-  try { wxWorldRows(box); evtWorldRows(box); bountyWorldRows(box); fxWorldRows(box); } catch (e) { console.warn("world rows", e); }
+  try { wxWorldRows(box); evtWorldRows(box); (bty2On() ? bty2WorldRows : bountyWorldRows)(box); fxWorldRows(box); } catch (e) { console.warn("world rows", e); }
   box.append(mk("div", "hub-day", "🌟 ผู้รอดเด่นเมื่อวาน"));
   if (C.mvp?.lines?.length) C.mvp.lines.forEach((l) => box.append(mk("div", "", l))); else box.append(mk("div", "muted", C.mvp ? "เมื่อวานยังไม่มีใครโดดเด่นพอ" : "กำลังโหลด…"));
   box.append(mk("div", "muted", "รางวัลเป้าหมาย/ภารกิจกลุ่มไปรับที่ปุ่ม 📜 ภารกิจ (ถ้าเจ้าของยังไม่เติมเควส ให้ไปกด “เติมเควสเช็กอิน+ปิดล้อม” ที่แอดมิน)"));
@@ -7069,6 +7118,7 @@ async function bountyPlace(uid, name) {
 }
 // ใส่ลงในคำสั่งอัปเดตตอนฆ่า: บอกว่าใครเก็บค่าหัว (rules ตรวจว่าเป้าหมาย HP=0 จริง และชื่อผู้ฆ่ามีอยู่จริง)
 function bountyKillWrite(u, targetUid, killerName) {
+  if (bty2On()) return;   // ค่าหัวใหม่: ฟังก์ชันเซิร์ฟเวอร์จ่ายเอง (bty2Claim)
   const b = state.bounty?.[targetUid]; if (!bountyActive(b) || !killerName || b.bn === killerName) return;
   u[`bounty/${targetUid}/kb`] = String(killerName).slice(0, 16);
 }
@@ -11300,6 +11350,11 @@ function tuneDefs() {
   rows.push(["crim_on", "🟠 สถานะส้ม: ฆ่าผู้เล่นฝ่ายเดียวกัน → เข้า Safe Zone ไม่ได้ (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน crimAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "🟠 สถานะส้ม"]);
   rows.push(["crim_min", "ระยะเวลาส้มต่อครั้ง (นาที — คูณจำนวนครั้งใน 24 ชม. สูงสุด ×4)", 45, 1, 600, "🟠 สถานะส้ม"]);
   rows.push(["crim_bail", "ค่าประกันปลดส้ม (แต้มมูลค่าต่อครั้ง — เศษเหล็ก/ตะปู 1 • เคมี/เศษหนัง 2 • เทปกาว 3)", 20, 1, 500, "🟠 สถานะส้ม"]);
+  rows.push(["bty2_on", "💰 ค่าหัวแบบใหม่ (ตั้งด้วยวัตถุดิบ สะสมแต้ม ไม่หมดเวลา — 1 = เปิดแทนค่าหัวเดิม, 0 = ใช้ค่าหัวเดิม • ต้อง deploy ฟังก์ชัน bountyAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "💰 ค่าหัวใหม่"]);
+  rows.push(["bty_step", "แต้มค่าหัวที่เพิ่มต่อการกด 1 ครั้ง (= วัตถุดิบที่หัก)", 10, 1, 100, "💰 ค่าหัวใหม่"]);
+  rows.push(["bty_cap", "เพดานค่าหัวรวมต่อเป้าหมาย (แต้ม)", 200, 10, 2000, "💰 ค่าหัวใหม่"]);
+  rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
+  rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด ค่าเริ่มต้น, 0 = ปิด • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 1, 0, 1, "🏹 บอสเผ่ามนุษย์"]);

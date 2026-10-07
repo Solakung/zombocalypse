@@ -48,8 +48,9 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
     }
   }
   // อ่าน crim ได้ทุกคนที่ล็อกอิน (แสดงชื่อส้ม)
-  await setRules("nw"); await adb.ref().set({ crim: { X: ORANGE } });
+  await setRules("nw"); await adb.ref().set({ crim: { X: ORANGE }, bty: { X: { pts: 10, ts: now, tn: "x", bn: "y", s: { y: 10 } } } });
   let readOk = true; try { await env.authenticatedContext("U", { firebase: { sign_in_provider: "password" } }).database().ref("crim").get(); } catch { readOk = false; } assert(readOk, "read crim");
+  { let rb = true, wb = true; const dbU = env.authenticatedContext("U", { firebase: { sign_in_provider: "password" } }).database(); try { await dbU.ref("bty").get(); } catch { rb = false; } try { await dbU.ref("bty/U").set({ pts: 999 }); } catch { wb = false; } assert(rb, "read bty"); assert(!wb, "ผู้เล่นเขียน bty ไม่ได้"); }
   let bad = 0;
   for (const [name, , , eo, en] of C) { if (res.old[name] !== eo || res.nw[name] !== en) { bad++; console.error("MISMATCH", name, "old", res.old[name], "(want", eo + ")", "new", res.nw[name], "(want", en + ")"); } }
   assert.strictEqual(bad, 0);

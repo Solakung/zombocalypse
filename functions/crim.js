@@ -7,11 +7,10 @@
 // - ข้อจำกัดที่ทราบ: เซิร์ฟเวอร์ยืนยันไม่ได้ว่าใครเริ่มก่อน (ไม่มีบันทึกการโจมตีถาวร) และผู้ฆ่าที่ปิดการรายงานในไคลเอนต์ที่ดัดแปลงจะหลบได้ถ้าผู้ถูกฆ่าไม่รายงาน
 // - ระยะเวลา = crim_min (ค่าเริ่มต้น 45 นาที) × จำนวนครั้ง n (สูงสุด 4) • n ลดเหลือ 0 ถ้าไม่ก่อเหตุเกิน 24 ชม. • ค่าประกัน = crim_bail (ค่าเริ่มต้น 20) × n "แต้มมูลค่า" จ่ายเป็นวัตถุดิบ
 // - ปิดอยู่จนกว่าตั้ง tune crim_on = 1
-const { fail, withLock, takeItem, addCapped } = require("./lib");
+const { fail, withLock } = require("./lib");
+const { payPts, VAL: BAIL_VAL } = require("./paypts");
 
 const MAX_N = 4, DECAY_MS = 86400000, ATK_WINDOW = 90000, SELF_DEF_WINDOW = 180000, DEDUPE_MS = 120000;
-// วัตถุดิบที่ใช้จ่ายค่าประกัน: แต้มมูลค่าต่อชิ้น (เรียงจากถูกไปแพง) — ต้องเป็นรหัสที่มีใน ITEMS ของเกมและผ่าน whitelist กระเป๋า
-const BAIL_VAL = [["scrap", 1], ["rusty_nails", 1], ["chem", 2], ["leather_scrap", 2], ["duct_tape", 3]];
 const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
 
 function makeCrim(db) {
@@ -62,21 +61,9 @@ function makeCrim(db) {
     return withLock(db, uid, now, async () => {
       const c = (await db.ref(`crim/${uid}`).get()).val();
       if (!active(c, now)) fail("failed-precondition", "คุณไม่ได้เป็นส้มอยู่");
-      const need = C.bail * Math.max(1, nowN(c, now)), inv = (await db.ref(`inventory/${uid}`).get()).val() || {};
-      const plan = []; let left = need;
-      for (const [id, val] of BAIL_VAL) {
-        if (left <= 0) break;
-        const it = inv[id], have = it && it.id === id ? num(it.qty) : 0; if (have <= 0) continue;
-        const take = Math.min(have, Math.ceil(left / val)); plan.push([id, take]); left -= take * val;
-      }
-      if (left > 0) fail("failed-precondition", `วัตถุดิบไม่พอจ่ายค่าประกัน (ต้องการ ${need} แต้ม: เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3)`);
-      const taken = [];
-      for (const [id, q] of plan) {
-        if (!(await takeItem(db, uid, id, q))) { for (const [i, n] of taken) await addCapped(db, uid, i, n).catch(() => {}); fail("failed-precondition", "วัตถุดิบเปลี่ยนระหว่างจ่าย ลองใหม่อีกครั้ง"); }
-        taken.push([id, q]);
-      }
+      const need = C.bail * Math.max(1, nowN(c, now)), paid = await payPts(db, uid, need, "จ่ายค่าประกัน");
       await db.ref(`crim/${uid}`).set({ until: now, n: num(c.n), ts: num(c.ts) });
-      return { ok: true, on: true, paid: plan.map(([id, qty]) => ({ id, qty })), pts: need };
+      return { ok: true, on: true, paid, pts: need };
     });
   }
   return { run };
