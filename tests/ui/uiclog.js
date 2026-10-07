@@ -33,7 +33,7 @@ const logJson = fs.readFileSync(R + "changelog.json", "utf8");
     return res;
   }, { part, logJson });
   console.log(JSON.stringify(out, null, 1));
-  assert.strictEqual(out.first, true); assert(out.visible1); assert(out.text1.includes("ทดสอบ") && out.text1.includes("อัปเดตล่าสุด")); assert.strictEqual(out.xss, false, "html must not execute"); assert.strictEqual(out.saved, "9999-01-01");
+  assert.strictEqual(out.first, true); assert(out.visible1); assert(out.text1.includes("ทดสอบ") && out.text1.includes(JSON.parse(logJson).entries[0].title)); assert.strictEqual(out.xss, false, "html must not execute"); assert.strictEqual(out.saved, "9999-01-01");
   assert.strictEqual(out.hscroll1, false); assert(out.hidden); assert.strictEqual(out.second, false); assert(out.entriesAll >= 2); assert.strictEqual(out.newPlayerShown, false); assert.strictEqual(out.newPlayerSaved, "9999-01-01"); assert(out.blockedByOther);
   assert.strictEqual(out.offline, false); assert.strictEqual(out.badFile, false);
   // ภาพ 360px (รายการจริงจาก changelog.json)
