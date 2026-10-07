@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0416";
+const APP_VERSION = "2026-10-07.0419";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2584,7 +2584,7 @@ function jailRender() {
   const bar = $("jail-bar"); if (!bar) return;
   const on = jailActive() && state.zone === "jail"; bar.classList.toggle("hidden", !on); if (!on) return;
   const I = state.jailInfo || {}, t = state.jail.t || 1, busy = !!state.jailBusy, now = serverNow();
-  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}) • ครบเวลาแล้วเสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานลดโทษครั้งละ 2 นาที (รวมไม่เกินครึ่งหนึ่ง)`;
+  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานลดโทษครั้งละ 2 นาที (รวมไม่เกินครึ่งหนึ่ง)`;
   $("jail-work").disabled = busy || now < (state.jail.wt || 0) + 20000; $("jail-esc").disabled = busy || now < (state.jail.et || 0) + 300000;
   $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy;
 }
@@ -2611,12 +2611,12 @@ function jailListen() {
 async function jailAction(a) {
   if (state.jailBusy) return; state.jailBusy = true; jailRender();
   try {
-    if (a === "bail") { const st = await jailCall({ a: "state" }); state.jailInfo = st; if (!confirm(`จ่ายค่าประกัน ${st.bailPts} แต้ม? (เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3 — ระบบหักให้เอง) ออกทันทีที่ Safe Zone ไม่ถูกริบของ`)) return; }
-    if (a === "escape" && !confirm("แหกคุก? ถ้าสำเร็จคุณออกทันที แต่กลับเป็นส้มและโทษรอบหน้าหนักขึ้น • ถ้าล้มเหลวเวลา +5 นาทีและเสียของทั่วไป 1 ชิ้น")) return;
+    if (a === "bail") { const st = await jailCall({ a: "state" }); state.jailInfo = st; if (!confirm(`จ่ายค่าประกัน ${st.bailPts} แต้ม? (เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3 — ระบบหักให้เอง) ออกทันทีที่ Safe Zone ไม่ถูกริบของ (ค่าหัวบนตัวยังอยู่ — ยังถูกล่าได้)`)) return; }
+    if (a === "escape" && !confirm("แหกคุก? ถ้าสำเร็จคุณออกทันที แต่กลับเป็นส้ม โทษรอบหน้าหนักขึ้น และทรัพย์สินบางส่วนของคุณถูกตั้งเป็นค่าหัวบนตัว (ใครล้มคุณได้ไป) • ถ้าล้มเหลวเวลา +5 นาทีและเสียของทั่วไป 1 ชิ้น")) return;
     const r = await jailCall({ a });
     if (a === "work") toast(r.ended ? "⛏️ ทำงานจนครบโทษแล้ว" : "⛏️ ทำงานลดโทษ 2 นาที");
     else if (a === "bail") toast(`จ่ายค่าประกัน ${r.pts} แต้มแล้ว`);
-    else if (a === "escape") toast(r.escaped ? "🔓 แหกคุกสำเร็จ! แต่คุณกลับเป็นส้มแล้ว" : `🚨 แหกคุกล้มเหลว เวลาเพิ่ม 5 นาที${r.lost ? ` และเสีย ${ITEMS[r.lost.id]?.name || r.lost.id}` : ""}`);
+    else if (a === "escape") toast(r.escaped ? `🔓 แหกคุกสำเร็จ! แต่คุณกลับเป็นส้มแล้ว${r.bounty ? ` และมีค่าหัว ${r.bounty} แต้มบนตัว` : ""}` : `🚨 แหกคุกล้มเหลว เวลาเพิ่ม 5 นาที${r.lost ? ` และเสีย ${ITEMS[r.lost.id]?.name || r.lost.id}` : ""}`);
     if (r.until) state.jail = { ...(state.jail || {}), until: r.until, ...(a === "work" ? { wt: serverNow() } : { et: serverNow() }) };
   } catch (e) { toast(hbMsg(e)); }
   finally { state.jailBusy = false; jailRender(); jailSync(); }
@@ -11420,6 +11420,9 @@ function tuneDefs() {
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);
   rows.push(["jail_min", "ระยะโทษพื้นฐาน (นาที — คูณชั้นโทษ 1–4)", 30, 1, 600, "⛓️ คุก"]);
   rows.push(["jail_bail", "ค่าประกันออกจากคุก (แต้มมูลค่า × ชั้นโทษ)", 30, 1, 500, "⛓️ คุก"]);
+  rows.push(["jail_pct", "โอกาสถูกจับเมื่อคนส้มถูกล้ม (% — 100 = จับทุกครั้ง)", 100, 0, 100, "⛓️ คุก"]);
+  rows.push(["jail_bailpct", "ค่าประกันเพิ่มตามค่าหัวบนตัว (% ของค่าหัว — 0 = ไม่คิดตามค่าหัว)", 25, 0, 200, "⛓️ คุก"]);
+  rows.push(["jail_escbty", "แหกคุกสำเร็จ: ทรัพย์สินตัวเองที่ถูกตั้งเป็นค่าหัวบนตัว (แต้ม — ต้องเปิด bty2_on, 0 = ไม่ตั้ง)", 20, 0, 200, "⛓️ คุก"]);
   rows.push(["jail_esc", "โอกาสแหกคุกสำเร็จ (%)", 25, 0, 100, "⛓️ คุก"]);
   rows.push(["fxw_on", "⚔️ อาวุธติดสถานะของมนุษย์: คราฟต์ + ค้นเจอ (1 = เปิด, 0 = ปิด • แอดมินเสกได้เสมอ • ต้อง deploy ฟังก์ชัน fxwAct/forgeAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⚔️ อาวุธติดสถานะ"]);
   rows.push(["fxw_rate", "โอกาสค้นเจออาวุธติดสถานะ (% ของค่าตั้งต้น — 100 = ปกติ, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "⚔️ อาวุธติดสถานะ"]);

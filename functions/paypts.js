@@ -18,6 +18,17 @@ async function payPts(db, uid, need, what = "จ่าย") {
   }
   return plan.map(([id, qty]) => ({ id, qty }));
 }
+// จ่ายเท่าที่มี สูงสุด maxPts แต้ม (ไม่ล้มเหลวถ้าไม่พอ) → {pts แต้มที่หักจริง, paid} — ใช้กับค่าหัวที่ผู้ต้องขังหนีออกมา (ใช้ทรัพย์สินตัวเองตั้งเป็นค่าหัวบนตัว)
+async function payUpTo(db, uid, maxPts) {
+  const inv = (await db.ref(`inventory/${uid}`).get()).val() || {}, paid = []; let got = 0;
+  for (const [id, val] of VAL) {
+    if (got >= maxPts) break;
+    const it = inv[id], have = it && it.id === id ? num(it.qty) : 0; if (have <= 0) continue;
+    const q = Math.min(have, Math.ceil((maxPts - got) / val));
+    if (await takeItem(db, uid, id, q)) { paid.push({ id, qty: q }); got += q * val; }
+  }
+  return { pts: got, paid };
+}
 // แต้ม → รายการของที่จะให้ (ครึ่งหนึ่งเป็นสารเคมี ที่เหลือเป็นเศษเหล็ก)
 function ptsToItems(pts) { const chem = Math.floor(pts / 4), scrap = pts - chem * 2, out = []; if (scrap > 0) out.push(["scrap", scrap]); if (chem > 0) out.push(["chem", chem]); return out; }
-module.exports = { payPts, ptsToItems, VAL };
+module.exports = { payPts, payUpTo, ptsToItems, VAL };
