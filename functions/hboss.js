@@ -5,8 +5,10 @@
 // - กันสแปมทอยเจอ: ถังโทเค็น 12 ครั้ง เติม 1 ครั้งต่อ 15 วินาที + คูลดาวน์หลังเจอ/สู้จบ 2 นาที (เหมือนบอสฝั่งมนุษย์)
 // - ตัวเลขสถานะซอมบี้ (str/hp/agi/tough + วิวัฒนาการ + บัฟ) ต้องตรงกับ script.js / use.js
 const crypto = require("crypto");
-const { fail, withLock, grantAll } = require("./lib");
+const { fail, withLock, grantAll, takeItem } = require("./lib");
 
+// ไอเทมรักษาที่ใช้ระหว่างสู้ได้ (ค่าฟื้นต้องตรง CONSUMABLES ใน use.js) — ใช้แล้วเสียเทิร์น บอสโจมตีต่อ เหมือนบอสฝั่งมนุษย์
+const HEAL_ITEMS = { bandage: 20, medkit: 50, moss: 15 };
 const HP_BASE = 100, UNARMED_DMG = 5, DODGE_PER_POINT = 0.03, COOLDOWN = 120000, BURST = 12, REFILL_MS = 15000;
 // ★ น้ำหนักเจอ (≈ % ต่อการค้นหา) เท่า BOSS_W ฝั่งมนุษย์ของโซนเดียวกัน — โซนที่ไม่มีเผ่าไม่มีบอส
 const W = { forest: 2, police: 4, port: 3, factory: 3, hospital: 3, tunnel: 5 };
@@ -88,7 +90,7 @@ function makeHboss(db, rnd) {
   async function run(uid, data, now = Date.now()) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
-    if (!["state", "roll", "attack", "flee", "claim"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
+    if (!["state", "roll", "attack", "flee", "claim", "heal"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
     const on = (await tune("hb_on", 1)) === 1;
     if (a === "state") {
       const fS = await db.ref(`hboss/${uid}`).get(), f = fS.exists() ? col(fS.val()) : {};
@@ -136,11 +138,18 @@ function makeHboss(db, rnd) {
       if (!(p.hp > 0)) fail("failed-precondition", "คุณสลบอยู่");
       if (f.hp <= 0) fail("failed-precondition", "บอสล้มแล้ว กดรับรางวัล");
       const log = []; let hp = p.hp, bossHp = f.hp, ended = null; const nf = { ...f, round: num(f.round) + 1 };
+      if (a === "heal") {
+        const id = String((data && data.id) || ""), amt = HEAL_ITEMS[id];
+        if (!amt) fail("invalid-argument", "ใช้ไอเทมนี้ระหว่างสู้ไม่ได้");
+        if (hp >= c.maxHp) fail("failed-precondition", "เลือดเต็มอยู่แล้ว");
+        if (!(await takeItem(db, uid, id, 1))) fail("failed-precondition", "ไม่มีไอเทมนี้ในกระเป๋า");
+        const nh = Math.min(c.maxHp, hp + amt); log.push(`💊 ใช้ไอเทมฟื้น +${nh - hp} HP`); hp = nh;
+      }
 
       if (a === "flee") {
         if (rf() < b.flee) { await db.ref(`hboss/${uid}`).set({ last: now }); return { ok: true, on, fled: true, log: ["🏃 คุณวิ่งหนีออกมาได้!"], hp, maxHp: c.maxHp, fight: null }; }
         log.push("🏃 หนีไม่พ้น! เขาขวางทางไว้");
-      } else {   // attack
+      } else if (a === "attack") {
         if (c.stunned) fail("failed-precondition", "😵 คุณมึนงง โจมตีไม่ได้ (หนีได้)");
         const r = Math.max(1, d6() + c.diceMod), mult = r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5;
         let dmg = Math.round(Math.max(1, UNARMED_DMG + c.statOf("str")) * mult);
@@ -164,4 +173,4 @@ function makeHboss(db, rnd) {
   }
   return { run };
 }
-module.exports = { makeHboss, BOSSES, W, COOLDOWN, UNARMED_DMG, HP_BASE, DODGE_PER_POINT };
+module.exports = { makeHboss, BOSSES, HEAL_ITEMS, W, COOLDOWN, UNARMED_DMG, HP_BASE, DODGE_PER_POINT };

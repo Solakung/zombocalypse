@@ -12,11 +12,11 @@ assert(part.length > 500, "slice");
     const mk = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x !== undefined) e.textContent = x; return e; };
     const $ = (id) => document.getElementById(id); document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
     const logs = [], toasts = [], stats = [], calls = []; let script = [], tune = { hb_on: 1 }, stun = false;
-    const state = { profile: { faction: "zombie", hp: 120, zone: "forest" }, zone: "forest" };
+    const state = { profile: { faction: "zombie", hp: 120, zone: "forest" }, zone: "forest", inv: { bandage: { id: "bandage", qty: 2 }, moss: { id: "moss", qty: 1 } } };
     const T = (k, d) => (typeof tune[k] === "number" ? tune[k] : d), toast = (m) => toasts.push(m), errMsg = () => "ทำรายการไม่สำเร็จ", logLine = (t, k) => logs.push([k, t]), stat = (k) => stats.push(k);
     const ITEMS = { rotten_meat: { name: "เนื้อเน่า", icon: "🥩" }, mutant_gland: { name: "ต่อมมิวแทนต์", icon: "🫀" } };
     const imgProbe = (src, cb) => cb(false), maxHp = () => 150, effActive = () => stun;
-    const hbCall = async (d) => { calls.push(d.a); const r = script.shift(); if (r instanceof Error) throw r; return r; };
+    const hbCall = async (d) => { calls.push(d.a + (d.id ? ":" + d.id : "")); const r = script.shift(); if (r instanceof Error) throw r; return r; };
     const api = new Function("$", "mk", "state", "T", "toast", "errMsg", "logLine", "stat", "ITEMS", "imgProbe", "maxHp", "effActive", "hbCall", part + ";return { hbRender, hbRound, hbClaim, hbRestore, hbAfterSearch, HB_ZONES };")($, mk, state, T, toast, errMsg, logLine, stat, ITEMS, imgProbe, maxHp, effActive, hbCall);
     const res = {}, modal = $("hb-modal"), fight = (o = {}) => Object.assign({ boss: "forest", name: "หัวหน้าเผ่านายพราน", icon: "🏹", tag: "นักล่าวางกับดัก", hp: 70, max: 70, shield: 0, shieldMax: 0, pdot: null, weak: null, round: 0, art: "hb_forest" }, o);
     const wait = () => new Promise((r) => setTimeout(r, 30));
@@ -43,6 +43,10 @@ assert(part.length > 500, "slice");
     state.hb = fight(); state.profile.hp = 120; api.hbRender(); res.reopen = !modal.classList.contains("hidden"); state.profile.hp = 0; api.hbRender(); res.deadClosed = modal.classList.contains("hidden") && !state.hb; state.profile.hp = 120;
     // error ข้อความจากเซิร์ฟเวอร์ แสดงตามที่ส่งมา
     state.hb = fight(); api.hbRender(); script = [Object.assign(new Error("กระเป๋าเต็ม"), { code: "functions/failed-precondition" })]; await api.hbRound("attack"); res.errToast = toasts[toasts.length - 1]; state.hb = null;
+    // ไอเทมรักษา: แสดงเฉพาะที่มี (ชุดปฐมพยาบาลไม่มี → ซ่อน) / เลือดเต็ม → กดไม่ได้ / กด → ส่ง id ไปเซิร์ฟเวอร์
+    state.hb = fight(); state.profile.hp = 100; api.hbRender(); res.healVis = ["bandage", "medkit", "moss"].map((i) => !$("hb-" + i).classList.contains("hidden")).join(","); res.healTxt = $("hb-bandage").textContent; res.healDis = $("hb-bandage").disabled;
+    script = [{ ok: true, log: ["💊 ใช้ไอเทมฟื้น +20 HP"], hp: 120, fight: fight() }]; calls.length = 0; $("hb-bandage").click(); await wait(); res.healCall = calls.join(",");
+    state.profile.hp = 150; api.hbRender(); res.healFullDis = $("hb-bandage").disabled; state.hb = null; state.profile.hp = 120;
     // รีเฟรชกลางการสู้ → เปิดต่อ
     script = [{ ok: true, fight: fight({ hp: 33 }) }]; await api.hbRestore(); res.restored = !modal.classList.contains("hidden") && $("txt-hb").textContent;
     res.shot = 1; return res;
@@ -56,5 +60,6 @@ assert(part.length > 500, "slice");
   // ภาพ 360px
   await pg.evaluate(() => { const $ = (id) => document.getElementById(id); document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active")); const m = $("hb-modal"); m.classList.remove("hidden"); $("hb-title").textContent = "🛡️ หัวหน้าหน่วยปราบจลาจล"; $("hb-tag").textContent = "โล่ดูดดาเมจ — ต้องทุบโล่ให้แตกก่อน • 🛡️ โล่ 32/40 • 🩸 แผลติดตัว −3/รอบ (อีก 2 รอบ)"; $("bar-hb").style.width = "70%"; $("txt-hb").textContent = "เขา 77/110"; $("bar-hb-me").style.width = "60%"; $("txt-hb-me").textContent = "HP 90/150"; ["🎲 ทอย 4 — โจมตีโดน −8 (🛡️ โล่รับไป 8)", "กระบองฟาดเข้าอย่างจัง −10", "🩸 แผลเก่าทำให้เสีย −3 HP"].forEach((t) => { const li = document.createElement("li"); li.textContent = t; $("hb-log").append(li); }); });
   await new Promise((r) => setTimeout(r, 200)); await pg.screenshot({ path: "/tmp/fbt/hboss360.png" });
+  assert.strictEqual(out.healVis, "true,false,true"); assert.strictEqual(out.healCall, "heal:bandage"); assert(!out.healDis && out.healFullDis);
   console.log("UI HBOSS OK; errors:", errs); assert.deepStrictEqual(errs, []); await br.close();
 })().catch((e) => { console.error("FAIL", e); process.exit(1); });

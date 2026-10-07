@@ -62,7 +62,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0324";
+const APP_VERSION = "2026-10-07.0333";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2445,14 +2445,17 @@ function hbRender() {
   $("bar-hb-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-hb-me").textContent = `HP ${p.hp}/${maxHp()}`;
   $("hb-attack").classList.toggle("hidden", won); $("hb-attack").disabled = busy || stun; $("hb-attack").textContent = stun ? "😵 มึนงง" : "🦷 ขย้ำ";
   $("hb-flee").classList.toggle("hidden", won); $("hb-flee").disabled = busy;
+  for (const [id, ic, nm] of [["bandage", "🩹", "ผ้าพันแผล"], ["medkit", "🧰", "ชุดปฐมพยาบาล"], ["moss", "🌿", "มอส"]]) {   // ใช้ไอเทมรักษาระหว่างสู้ (เสียเทิร์น) — ตรง HEAL_ITEMS ใน hboss.js
+    const q = state.inv[id]?.qty || 0, b = $("hb-" + id); b.classList.toggle("hidden", won || !q); b.disabled = busy || p.hp >= maxHp(); b.textContent = `${ic} ${nm} ×${q}`;
+  }
   $("hb-claim").classList.toggle("hidden", !won); $("hb-claim").disabled = busy;
 }
-async function hbDo(a) { try { return await hbCall({ a }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((r) => setTimeout(r, 800)); return await hbCall({ a }); } }   // ติดล็อกลองใหม่ 1 ครั้ง
-async function hbRound(action) {
+async function hbDo(a, id) { const d = id ? { a, id } : { a }; try { return await hbCall(d); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((r) => setTimeout(r, 800)); return await hbCall(d); } }   // ติดล็อกลองใหม่ 1 ครั้ง
+async function hbRound(action, id) {
   if (state.hbBusy || !state.hb || state.hb.hp <= 0) return;
   state.hbBusy = true; hbRender();
   try {
-    const f0 = state.hb, r = await hbDo(action);
+    const f0 = state.hb, r = await hbDo(action, id);
     (r.log || []).forEach(hbLog); state.hb = r.fight || null;
     if (r.won) { hbLog(`🏆 ${f0.name}ล้มลงแล้ว!`); logLine(`${f0.icon} คุณล้ม${f0.name}ได้สำเร็จ!`, "combat"); try { stat("boss"); } catch { /* ข้าม */ } }
     else if (r.dead) logLine(`${f0.icon} ${f0.name}สู้คุณจนล้มลง…`, "system");
@@ -2485,6 +2488,7 @@ async function hbAfterSearch(found) {   // ค้นหาเสร็จ → �
 }
 $("hb-attack").addEventListener("click", () => hbRound("attack"));
 $("hb-flee").addEventListener("click", () => hbRound("flee"));
+for (const id of ["bandage", "medkit", "moss"]) $("hb-" + id).addEventListener("click", () => hbRound("heal", id));
 $("hb-claim").addEventListener("click", hbClaim);
 // ---- /บอสเผ่ามนุษย์
 
@@ -3051,7 +3055,7 @@ async function resolveAttack(key, a) {
   const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
-  try { const af = state.players[key]?.faction; if (af === "zombie" || af === "human") { const sf = af === "zombie" ? "z" : "h"; achBump("patk" + sf); if (landed) { achBump("phit" + sf); achBump("pdmg" + sf, dmg); } } if (landed && newHp === 0) achBump("pdie"); } catch { /* สถิติพลาดไม่กระทบเกม */ }   // 📉 สถิติ PvP (แดชบอร์ดเจ้าของ): ผู้ถูกโจมตีเป็นคนบันทึก แยกตามฝ่ายผู้โจมตี
+  try { const af = state.players[key]?.faction; if (af === "zombie" || af === "human") { const sf = af === "zombie" ? "z" : "h"; achBump("patk" + sf); if (landed) { achBump("phit" + sf); achBump("pdmg" + sf, dmg); } } if (landed && newHp === 0) achBump("pdie"); if (p.faction === "zombie") { const L = pvpLineKey(); achBump("qa" + L); if (landed) { achBump("qh" + L); achBump("qd" + L, dmg); if (newHp === 0) achBump("qx" + L); } } } catch { /* สถิติพลาดไม่กระทบเกม */ }   // 📉 สถิติ PvP (แดชบอร์ดเจ้าของ): ผู้ถูกโจมตีเป็นคนบันทึก แยกตามฝ่ายผู้โจมตี
   let text = `⚔ ${a.fromName}${skTxt} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
   if (landed) {
@@ -11348,6 +11352,12 @@ function retCompute(people, now) {   // "หายไป" = ไม่เห็�
   const fac = (f) => { const all = rows.filter((p) => (p.u.faction === "zombie" ? "zombie" : "human") === f); return { n: all.length, gone: all.filter(isGone).length }; };
   return { n: rows.length, gone: gone.length, active: rows.length - gone.length, buckets, medSrch: medianOf(srch), never: srch.filter((x) => x < 1).length, dead: gone.filter((p) => p.u.hp === 0).length, zones: Object.entries(zones).sort((x, y) => y[1] - x[1]).slice(0, 3), human: fac("human"), zombie: fac("zombie") };
 }
+const pvpLineKey = () => { const e = state.evo || {}, t = [["h", e.h || 0], ["g", e.g || 0], ["s", e.s || 0]].sort((a, b) => b[1] - a[1])[0]; return t[1] >= 1 ? t[0] : "n"; };   // สายวิวัฒนาการหลักของผู้ถูกโจมตี (ขั้นสูงสุด; ยังไม่วิวัฒนาการ = n)
+function pvpLinesCompute(people) {   // ซอมบี้ถูกโจมตีแยกตามสาย (บันทึกโดยผู้ถูกโจมตีเอง): qa รับโจมตี / qh โดน / qd ดาเมจรวม / qx ล้ม
+  const R = {}; ["h", "g", "s", "n"].forEach((l) => { R[l] = { atk: 0, hit: 0, dmg: 0, died: 0 }; });
+  people.forEach((p) => { const c = p.a?.c; if (!c) return; for (const l in R) { R[l].atk += c["qa" + l] || 0; R[l].hit += c["qh" + l] || 0; R[l].dmg += c["qd" + l] || 0; R[l].died += c["qx" + l] || 0; } });
+  return R;
+}
 function pvpCompute(people) {   // ตัวนับบันทึกโดยผู้ถูกโจมตี: matrix[ฝ่ายผู้โจมตี][ฝ่ายผู้ถูกโจมตี]
   const M = { z: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } }, h: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } } }, died = { human: 0, zombie: 0 };
   people.forEach((p) => { const c = p.a?.c; if (!c || !p.u) return; const df = p.u.faction === "zombie" ? "zombie" : "human"; ["z", "h"].forEach((af) => { const m = M[af][df]; m.atk += c["patk" + af] || 0; m.hit += c["phit" + af] || 0; m.dmg += c["pdmg" + af] || 0; }); died[df] += c.pdie || 0; });
@@ -11382,6 +11392,7 @@ async function econRender(box) {
       box.append(mk("div", "hub-day", "🥊 PvP (นับเมื่อผู้ถูกโจมตีเล่นเวอร์ชันนี้ • ผู้โจมตี→ผู้ถูกโจมตี)"));
       const F = { z: "🧟", h: "🧑" }, DF = { human: "🧑", zombie: "🧟" }; let any = false;
       ["z", "h"].forEach((af) => ["human", "zombie"].forEach((df) => { const m = V.M[af][df]; if (!m.atk) return; any = true; box.append(mk("div", "", `${F[af]}→${DF[df]}: โจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจเฉลี่ย ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"}`)); }));
+      { const LN = { h: "🩸 ตะกละ", g: "🗿 ซากหนา", s: "🕷️ เลื้อยคลาน", n: "ยังไม่วิวัฒน์" }, PL = pvpLinesCompute(D.people); Object.entries(PL).forEach(([l, m]) => { if (m.atk) box.append(mk("div", "", `🧟 ${LN[l]} ถูกโจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจที่รับ/ครั้งที่โดน ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"} • ล้ม ${m.died}`)); }); }
       box.append(mk("div", any ? "" : "muted", any ? `ล้มจาก PvP: 🧑 ${V.died.human} • 🧟 ${V.died.zombie}` : "ยังไม่มีข้อมูล PvP (เริ่มนับเมื่อผู้ถูกโจมตีอัปเดตเวอร์ชันนี้)"));
     } catch (e) { console.warn("telemetry", e); }
     const hrs = base ? Math.max(1, Math.round((Date.now() - base.t) / 3600000)) : 0;

@@ -26,6 +26,7 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   const rules = JSON.parse(fs.readFileSync(F + "database_rules.json", "utf8")).rules, rx = new RegExp(rules.inventory.$uid.$slot[".validate"].match(/matches\(\/(\^\([^/]+\)\$)\//)[1]);
   const ids = new Set(); for (const [z, b] of Object.entries(H.BOSSES)) { assert(H.W[z], "W " + z); for (const [id] of [...b.loot, ...b.bonus]) if (id) ids.add(id); }
   for (const id of ids) { assert(new RegExp("^  " + id + ": \\{", "m").test(sc), "ITEMS " + id); assert(rx.test(id), "rules regex " + id); }
+  { const U = require(F + "functions/use"); for (const [id, v] of Object.entries(H.HEAL_ITEMS)) assert.strictEqual(U.CONSUMABLES[id].heal, v, "heal " + id); }   // ค่าฟื้นตรง use.js
   // ---- ข้อมูล
   const u = (n, f, zone, x = {}) => ({ username: n, faction: f, hp: 150, zone, ...x });
   const mk = async (extra = {}) => { await db.ref().set({ users: { z: u("z", "zombie", "forest"), h: u("h", "human", "forest"), l: u("l", "zombie", "lab"), b: u("b", "zombie", "forest", { banned: true }), d: u("d", "zombie", "forest", { hp: 0 }) }, stats: { z: { str: 3, hp: 5, agi: 0, tough: 0 } }, tune: { hb_on: 1 }, ...extra }); };
@@ -63,6 +64,13 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   // ---- คูลดาวน์ 2 นาทีหลังจบ
   q(0); r = await hb.run("z", { a: "roll" }, T0 + 60000); assert.strictEqual(r.cooling, true); assert.strictEqual(queue.length, 1); queue.length = 0;
   q(0.0); r = await hb.run("z", { a: "roll" }, T0 + 10000 + 120000); assert.strictEqual(r.hit, true); left();
+  // ---- ใช้ไอเทมรักษาระหว่างสู้: ฟื้น (ไม่เกินเลือดสูงสุด) + เสียไอเทม 1 + บอสตอบโต้ (พลาด 0.99) • ไอเทมนอกรายการ/ไม่มี/เลือดเต็มถูกปฏิเสธ
+  await db.ref("users/z/hp").set(100); await db.ref("inventory/z").set({ bandage: { id: "bandage", qty: 2 }, medkit: { id: "medkit", qty: 1 }, canned_food: { id: "canned_food", qty: 3 } });
+  q(0.99); r = await hb.run("z", { a: "heal", id: "bandage" }, T0 + 150000); left(); assert.strictEqual(r.hp, 120); assert((await db.ref("inventory/z/bandage/qty").get()).val() === 1); assert(r.fight && r.log[0].includes("+20"));
+  q(0.99); r = await hb.run("z", { a: "heal", id: "medkit" }, T0 + 151000); left(); assert.strictEqual(r.hp, 150, "ไม่เกิน max"); assert.strictEqual((await db.ref("inventory/z/medkit").get()).val(), null); assert(r.log[0].includes("+30"));
+  await rej(hb.run("z", { a: "heal", id: "bandage" }, T0 + 152000), "เต็มอยู่แล้ว"); await db.ref("users/z/hp").set(100);
+  await rej(hb.run("z", { a: "heal", id: "canned_food" }, T0 + 153000), "ใช้ไอเทมนี้"); await rej(hb.run("z", { a: "heal", id: "moss" }, T0 + 153000), "ไม่มีไอเทม");
+  assert.strictEqual((await db.ref("users/z/hp").get()).val(), 100); await db.ref("users/z/hp").set(150); await db.ref("inventory/z").remove();
   // ---- ตาย: hp 5, บอสตี 7 → 0, สถานะเหลือแค่ last
   await db.ref("users/z/hp").set(5); q(D(4), 0, 0.99, 0); r = await hb.run("z", { a: "attack" }, T0 + 200000); left(); assert.strictEqual(r.dead, true); assert.strictEqual((await db.ref("users/z/hp").get()).val(), 0); assert.deepStrictEqual((await db.ref("hboss/z").get()).val(), { last: T0 + 200000 }); assert.strictEqual(r.fight, null);
   // ---- ชนะ + รางวัล: บอสเหลือ 5, ทอย 4 → 8 ≥ 5 ล้ม (ไม่ตอบโต้)
