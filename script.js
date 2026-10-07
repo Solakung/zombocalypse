@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0730";
+const APP_VERSION = "2026-10-07.0759";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1243,6 +1243,7 @@ function startGame() {
   state.sessionStart = serverNow() - 30000;
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
   setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);
+  setTimeout(() => { try { tutBoot(); } catch { /* ข้าม */ } }, 2500);   // 🎓 บทสอนผู้เล่นใหม่
   setTimeout(() => { try { if (state.profile?.faction === "zombie") mutSync(); } catch { /* ข้าม */ } }, 6000);   // โหลดขั้นมิวเตชัน (ฮีลตอนกัดขั้น 8)   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
@@ -1414,7 +1415,8 @@ const HELP_LINES = [
   "/w ชื่อ ข้อความ — กระซิบกับคนในโซนเดียวกัน (หรือกดปุ่ม กระซิบ ในรายชื่อ)",
   "/s ข้อความ — ตะโกนให้ทุกโซนได้ยิน (พัก 30 วินาที)",
   "/roll [6|20|100] — ทอยลูกเต๋าให้คนในโซนเห็น",
-  "/guide — เปิดคู่มือวิธีเล่น (หิว เดินทาง โทษตาย)"
+  "/guide — เปิดคู่มือวิธีเล่น (หิว เดินทาง โทษตาย)",
+  "/tutorial — ดูบทสอนผู้เล่นใหม่ซ้ำ"
 ];
 
 function findZonePlayer(rest) {
@@ -1454,6 +1456,7 @@ async function sendChat(raw) {
     case "help": case "?": case "ช่วยเหลือ":
       HELP_LINES.forEach((l) => logLine(l, "info")); return;
     case "guide": case "วิธีเล่น": openGuide(); return;
+    case "tutorial": case "บทสอน": tutEnd(false); tutStart(0, true); return;
     case "me": case "ท่าทาง":
       if (!rest) return toast("ใช้: /me ท่าทางของตัวละคร");
       return postZone(rest, "emote");
@@ -9925,6 +9928,104 @@ function coachRender() {
   if (D.allGot) { const f = mk("div", "world-row evt-live"); f.append(mk("div", "", D.finalGot ? "✅ รับรางวัลปิดท้ายแล้ว" : `🎉 รางวัลปิดท้าย: ${mRew(D.final)}`)); if (!D.finalGot) f.append(btn("🎁 รับรางวัลปิดท้าย", async () => { try { const r = await coachSync("claim", { id: "final" }); toast(`🎁 ได้ ${mRew(r.rewarded)}`); logLine(`🧭 จบบทเรียน: ${mRew(r.rewarded)}`, "system"); } catch (e) { toast(fnErr(e)); } coachBar(); coachRender(); }, "btn primary mini")); body.append(f); }
 }
 
+// ---- 🎓 บทสอนผู้เล่นใหม่ (จับมือทำ ข้ามได้) — เฉพาะบัญชีที่สร้างใหม่หลัง TUT_SINCE และอายุไม่เกิน 24 ชม. • ไม่แตะ rules/functions
+// ไฟสปอตไลต์ + NPC (มนุษย์ = มิรา • ซอมบี้ = ธารา) พาทำจริงทีละขั้น: ดูแถบสถานะ → เปิดแท็บกระเป๋า → กดค้นหา → ใช้ของ → ดูโซน/ผู้เล่น → แชท → คู่มือ • เล่นซ้ำได้ด้วย /tutorial
+// สถานะ: ach counter `tutdone` (ข้ามเครื่องได้) + LS (ขั้นล่าสุด/จบ) • ปิดทั้งระบบด้วย tune tut_on = 0 • แก้วันตัดบัญชีด้วย tut_since (มิลลิวินาทีแบบ epoch)
+const TUT_SINCE = Date.UTC(2026, 9, 7, 1, 0);
+const tutDone = () => ((state.ach?.c?.tutdone || 0) >= 1) || !!LS.get(lsKey("tutdone"), 0);
+function tutEligible() {
+  const p = state.profile; if (!p || p.banned || T("tut_on", 1) !== 1 || p.role === "owner" || p.role === "gm") return false;
+  if (typeof p.createdAt !== "number" || p.createdAt < T("tut_since", TUT_SINCE) || serverNow() - p.createdAt > 86400000) return false;
+  return !tutDone();
+}
+const tutTabsOn = () => { const tb = document.querySelector(".tabbar"); return !!tb && getComputedStyle(tb).display !== "none"; };
+const tutTab = (t) => document.querySelector(`.tabbar [data-tab="${t}"]`), tutPanel = (t) => document.querySelector(`.layout .panel[data-panel="${t}"]`);
+function tutSteps(fac) {
+  const Z = fac === "zombie", who = Z ? "tara" : "mira", nm = Z ? "ธารา" : "มิรา", mood = Z ? "😐" : "😊";
+  const tab = (t, label, emo) => ({ t: `ลองแตะแท็บ “${emo} ${label}” ด้านล่างดูสิ`, target: () => (tutTabsOn() ? tutTab(t) : tutPanel(t)), act: tutTabsOn() ? "click" : "next", pre: () => { if (!tutTabsOn()) setTab(t); } });
+  return [
+    { t: Z ? `...ตื่นแล้วสินะ ฉัน${nm} นักวิจัยของค่ายนี้ ร่างกายคุณไม่เหมือนคนทั่วไป กฎของคุณต่างออกไป ฉันจะพาดูให้ทีละอย่าง ไม่นานหรอก` : `ยินดีต้อนรับสู่ Safe Zone ค่ะ ฉัน${nm} หมอประจำค่ายนี้ ข้างนอกกำแพงมีทั้งซอมบี้และคนเอาแต่ได้ ก่อนออกไป ฉันจะพาดูของที่ต้องรู้ก่อน แป๊บเดียวเท่านั้นค่ะ`, target: null, act: "next" },
+    { t: Z ? "นี่คือสภาพร่างกายคุณ ❤️ HP ถ้าถึง 0 จะล้มลง • ⚡ พลังงานใช้ตอนค้นหากับเดินทาง • 🍖 อาหารของคุณลดเร็วกว่ามนุษย์ และกินอาหารคนทั่วไปไม่ได้ ต้องกัดคนให้โดน หรือหา 🥩 เนื้อเน่านอกกำแพง • 💧 น้ำก็ลดเรื่อยๆ" : "นี่คือสภาพร่างกายคุณค่ะ ❤️ HP ถ้าถึง 0 จะล้มลง • ⚡ พลังงานใช้ตอนค้นหากับเดินทาง • 🍖 อาหารกับ 💧 น้ำลดลงเรื่อยๆ ตามเวลา ถ้าหมด ค้นหาข้างนอกไม่ไหว หมั่นกินหมั่นดื่มนะคะ", target: () => document.querySelector(".topbar .bars"), act: "next" },
+    { ...tab("bag", "กระเป๋า / ค้นหา", "🎒"), t: "ต่อไปไปที่กระเป๋ากันค่ะ — ลองแตะแท็บ “🎒 กระเป๋า / ค้นหา” ด้านล่างดูสิ" },
+    { t: "นี่คือปุ่มค้นหา ใน Safe Zone ปลอดภัยดี ลองกดดู 1 ครั้งนะ จะเจอวัสดุหรือเสบียงเล็กน้อย (ใช้พลังงานนิดหน่อย)", target: () => $("btn-scavenge"), act: "search", pre: () => setTab("bag") },
+    { t: Z ? "ของที่เจอจะเข้ากระเป๋าตรงนี้ ซอมบี้ใช้ยา ผ้าพันแผล มอส และวัสดุคราฟต์ได้ แต่กินอาหารคนทั่วไปไม่ได้ — อย่าลืมหา 🥩 เนื้อเน่านอกกำแพง" : "ของที่เจอจะเข้ากระเป๋าตรงนี้ค่ะ มีทั้งอาหาร น้ำ ยา และวัสดุคราฟต์ ยิ่งออกไปไกล ของยิ่งดี แต่ก็อันตรายขึ้นตามไปด้วย", target: () => $("inv-list"), act: "next", pre: () => setTab("bag") },
+    { t: "แตะไอเทมที่กินหรือใช้ได้ (อาหาร น้ำ ผ้าพันแผล) เพื่อใช้ ลองใช้ 1 ชิ้นดูนะ", target: () => $("inv-list"), act: "use", pre: () => setTab("bag"), skipIf: () => Z || !invList().some(([, it]) => { const d = defOf(it); return !!d && (d.food > 0 || d.water > 0 || d.heal > 0); }) },
+    { ...tab("map", "โซน / ผู้เล่น", "🗺️"), t: "ถัดไปคือแผนที่ค่ะ — ลองแตะแท็บ “🗺️ โซน / ผู้เล่น” ด้านล่างดูสิ" },
+    { t: Z ? "นี่คือโซนทั้งหมด ⚠ คือระดับอันตราย ⚡ คือพลังงานที่ใช้เดินทาง ซอมบี้ป่าจะเมินคุณ แต่ 🥩 เนื้อเน่าเจอได้เฉพาะนอก Safe Zone — ลองเริ่มที่ 🌲 ป่าลึกหรือ 🏚️ เขตเมืองร้างก่อน" : "นี่คือโซนทั้งหมดค่ะ ⚠ คือระดับอันตราย (ยิ่งสูง ยิ่งเจอซอมบี้ แต่ของก็ดีขึ้น) ⚡ คือพลังงานที่ใช้เดินทาง แนะนำเริ่มที่ 🌲 ป่าลึก (อันตราย 2) หรือ 🏚️ เขตเมืองร้างก่อนนะคะ", target: () => $("zone-list"), act: "next", pre: () => setTab("map") },
+    { t: Z ? "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกัน ที่ Safe Zone ต่อสู้ไม่ได้ แต่นอกกำแพง กัดมนุษย์โดนจะเติมอาหาร +25 และฟื้น HP ส่วนเหยื่อจะติดเชื้อ — แต่มนุษย์ก็สู้กลับได้ ระวังตัว" : "ใต้โซนคือรายชื่อผู้เล่นในโซนเดียวกันค่ะ ที่ Safe Zone ต่อสู้กันไม่ได้ แต่นอกกำแพง ซอมบี้ผู้เล่นโจมตีคุณได้ และคุณก็สู้กลับได้ — ถ้าถูกกัดจะติดเชื้อ ต้องรักษาด้วยชุดปฐมพยาบาลหรือมอส", target: () => $("player-list"), act: "next", pre: () => setTab("map") },
+    { ...tab("chat", "แชท", "💬"), t: "แท็บ “💬 แชท” ใช้คุยกับคนในโซนเดียวกัน ลองแตะดูค่ะ ถ้ามีอะไรสงสัยถามเพื่อนๆ ได้" },
+    { t: "เสร็จแล้วค่ะ! ถ้าลืมอะไร กด “วิธีเล่น” ได้ตลอด และแถบ 🧭 ด้านบนจะบอกภารกิจถัดไปพร้อมของรางวัล ขอให้รอดนะ", target: () => $("btn-guide"), act: "next", pre: () => setTab("chat") }
+  ].map((x) => ({ who, nm, mood, ...x }));
+}
+const tutLayer = () => {
+  let L = $("tut-layer"); if (L) return L;
+  L = mk("div"); L.id = "tut-layer";
+  ["t", "b", "l", "r", "c"].forEach((k) => { const d = mk("div", "tut-blk"); d.dataset.k = k; L.append(d); });
+  const ring = mk("div", "tut-ring"); const card = mk("div", "tut-card"); const por = mk("div", "tut-por"); por.id = "tut-por";
+  const body = mk("div", "tut-body"), name = mk("b", "tut-name"), txt = mk("div", "tut-txt"), row = mk("div", "tut-row");
+  const nxt = btn("ต่อไป ▶", () => tutNext(), "btn primary mini"); nxt.id = "tut-next"; const skipStep = btn("ข้ามขั้นนี้", () => tutNext(true), "btn ghost mini"); skipStep.id = "tut-skipstep"; const prog = mk("span", "tut-prog"); prog.id = "tut-prog";
+  row.append(prog, skipStep, nxt); body.append(name, txt, row); card.append(por, body);
+  const skip = btn("ข้ามบทสอน ✕", () => tutSkipAll(), "btn ghost mini"); skip.id = "tut-skip";
+  L.append(ring, card, skip); document.body.append(L); return L;
+};
+function tutPlace() {
+  const T0 = state.tut; if (!T0 || !T0.on) return; const L = $("tut-layer"); if (!L) return;
+  const s = T0.steps[T0.i], tg = s && s.target ? s.target() : null, W = innerWidth, H = innerHeight, ring = L.querySelector(".tut-ring"), card = L.querySelector(".tut-card");
+  const r = tg && tg.offsetParent !== null ? tg.getBoundingClientRect() : null, pad = 6, inter = s.act !== "next";
+  const set = (k, x, y, w, h) => { const e = L.querySelector(`.tut-blk[data-k="${k}"]`); e.style.cssText = `left:${x}px;top:${y}px;width:${Math.max(0, w)}px;height:${Math.max(0, h)}px`; };
+  if (r && r.width > 0) {
+    const x = Math.max(0, r.left - pad), y = Math.max(0, r.top - pad), w = Math.min(W - x, r.width + pad * 2), h = Math.min(H - y, r.height + pad * 2);
+    set("t", 0, 0, W, y); set("b", 0, y + h, W, H - y - h); set("l", 0, y, x, h); set("r", x + w, y, W - x - w, h);
+    set("c", x, y, w, inter ? 0 : h); ring.style.cssText = `display:block;left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+    card.classList.toggle("tut-top", y + h / 2 > H * 0.5);
+  } else { set("t", 0, 0, W, H); set("b", 0, 0, 0, 0); set("l", 0, 0, 0, 0); set("r", 0, 0, 0, 0); set("c", 0, 0, 0, 0); ring.style.display = "none"; card.classList.remove("tut-top"); }
+}
+function tutShow() {
+  const T0 = state.tut; if (!T0) return; const L = tutLayer(), s = T0.steps[T0.i];
+  if (s.skipIf && s.skipIf()) { T0.i++; if (T0.i >= T0.steps.length) return tutEnd(true); return tutShow(); }
+  try { s.pre && s.pre(); } catch { /* ข้าม */ }
+  L.classList.remove("hidden"); L.querySelector(".tut-name").textContent = `${s.nm}`; L.querySelector(".tut-txt").textContent = s.t;
+  npcPortrait($("tut-por"), s.who, s.mood);
+  $("tut-prog").textContent = `${T0.i + 1}/${T0.steps.length}`;
+  $("tut-next").classList.toggle("hidden", s.act !== "next"); $("tut-skipstep").classList.toggle("hidden", s.act === "next");
+  $("tut-next").textContent = T0.i === T0.steps.length - 1 ? "เริ่มเล่น ▶" : "ต่อไป ▶";
+  LS.set(lsKey("tutstep"), T0.i);
+  const tg = s.target ? s.target() : null; if (tg && tg.scrollIntoView) { try { tg.scrollIntoView({ block: "center", behavior: "instant" }); } catch { /* ข้าม */ } }
+  // รอการกระทำจริงของผู้เล่น
+  T0.off && T0.off(); T0.off = null; const idx = T0.i;
+  if (s.act === "click" && tg) { const h = () => setTimeout(() => { if (state.tut && state.tut.i === idx) tutNext(); }, 350); tg.addEventListener("click", h, { once: true, capture: true }); T0.off = () => tg.removeEventListener("click", h, true); }
+  else if (s.act === "search" || s.act === "use") {
+    const key = s.act === "search" ? "srch" : "use", base = state.ach?.c?.[key] || 0;
+    const iv = setInterval(() => { if (!state.tut || state.tut.i !== idx) return clearInterval(iv); if ((state.ach?.c?.[key] || 0) > base) { clearInterval(iv); setTimeout(() => { if (state.tut && state.tut.i === idx) tutNext(); }, 900); } }, 400);
+    T0.off = () => clearInterval(iv);
+  }
+  tutPlace();
+}
+function tutNext(skipped) {
+  const T0 = state.tut; if (!T0) return; T0.off && T0.off(); T0.off = null; T0.i++;
+  if (T0.i >= T0.steps.length) return tutEnd(true); tutShow();
+}
+function tutEnd(done) {
+  const T0 = state.tut; if (T0) { T0.on = false; T0.off && T0.off(); cancelAnimationFrame(T0.raf); } state.tut = null;
+  $("tut-layer")?.classList.add("hidden");
+  if (done) { LS.set(lsKey("tutdone"), 1); try { achSet("tutdone", 1); } catch { /* ข้าม */ } toast("🎓 จบบทสอนแล้ว — ดูซ้ำได้ด้วยคำสั่ง /tutorial"); }
+}
+function tutSkipAll() { if (confirm("ข้ามบทสอนทั้งหมด? (ดูใหม่ได้ภายหลังด้วยคำสั่ง /tutorial ในช่องแชท)")) tutEnd(true); }
+function tutStart(from = 0, force = false) {
+  const p = state.profile; if (state.tut || !p || p.hp <= 0 || (!force && !tutEligible())) return;
+  const steps = tutSteps(p.faction === "zombie" ? "zombie" : "human"); state.tut = { on: true, i: Math.min(Math.max(0, from), steps.length - 1), steps, force };
+  const loop = () => { if (!state.tut || !state.tut.on) return; tutPlace(); state.tut.raf = requestAnimationFrame(loop); }; state.tut.raf = requestAnimationFrame(loop);
+  window.addEventListener("resize", tutPlace); tutShow();
+}
+function tutBoot(n = 0) {   // รอโปรไฟล์/ตัวนับพร้อมแล้วค่อยเริ่ม (กันเปิดตอนข้อมูลยังไม่ครบ)
+  try {
+    if (state.tut) return;
+    if (!state.profile || !state.ach?.loaded || !state.zone) { if (n < 25) setTimeout(() => tutBoot(n + 1), 1000); return; }
+    if (tutEligible() && !state.boss && !state.hb) { const st = Number(LS.get(lsKey("tutstep"), 0)) || 0; tutStart(st); }
+  } catch (e) { console.warn("tutBoot", e); }
+}
+// ---- /บทสอน
+
 /* =========================================================
    49.3) 🌱 แปลงปลูกในที่พัก (functions/garden.js — gardenAct) • ไม่แตะ rules
    - ลงเมล็ด → รดน้ำ (เวลาเหลือ −25%) / ใส่ปุ๋ย (+1 ผลผลิต กันศัตรูพืช) → เก็บเกี่ยว • ฤดูกาลมีผลกับเวลาโต • มีเหตุการณ์เล็กตอนเก็บ (ศัตรูพืช/กลายพันธุ์)
@@ -11557,6 +11658,7 @@ function tuneDefs() {
   rows.push(["bty_cap", "เพดานค่าหัวรวมต่อเป้าหมาย (แต้ม)", 200, 10, 2000, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
+  rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);
   rows.push(["jail_min", "ระยะโทษพื้นฐาน (นาที — คูณชั้นโทษ 1–4)", 30, 1, 600, "⛓️ คุก"]);
   rows.push(["jail_bail", "ค่าประกันออกจากคุก (แต้มมูลค่า × ชั้นโทษ)", 30, 1, 500, "⛓️ คุก"]);
