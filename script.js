@@ -2740,8 +2740,8 @@ function jailWorldRows(box) {
 }
 $("jail-work").addEventListener("click", jailWorkOpen); $("jail-dig").addEventListener("click", jailDig); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
 
-// ---- 🍳 พ่อครัว + มินิเกมทำอาหาร — functions/cook.js • ทำที่ Safe Zone (มนุษย์) • ปิดอยู่จนกว่าเจ้าของตั้ง tune cook_on = 1
-const cookOn = () => T("cook_on", 0) === 1;
+// ---- 🍳 พ่อครัว + มินิเกมทำอาหาร — functions/cook.js • ทำที่ Safe Zone (มนุษย์) • เปิดเป็นค่าเริ่มต้น (ปิดได้ด้วย tune cook_on = 0)
+const cookOn = () => T("cook_on", 1) === 1;
 const cookCall = (data) => httpsCallable(fns, "cookAct")(data).then((r) => r.data);
 const COOK_TIER_ICON = ["🥣", "👍", "😋", "🌟"];
 function cookEl() {
@@ -11786,7 +11786,7 @@ function tuneDefs() {
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
-  rows.push(["cook_on", "🍳 พ่อครัว: มินิเกมทำอาหารที่ Safe Zone (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน cookAct ก่อน)", 0, 0, 1, "🍳 พ่อครัว"]);
+  rows.push(["cook_on", "🍳 พ่อครัว: มินิเกมทำอาหารที่ Safe Zone (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน cookAct ก่อน)", 1, 0, 1, "🍳 พ่อครัว"]);
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);
   rows.push(["jail_min", "ระยะโทษพื้นฐาน (นาที — คูณชั้นโทษ 1–4)", 30, 1, 600, "⛓️ คุก"]);
   rows.push(["jail_bail", "ค่าประกันออกจากคุก (แต้มมูลค่า × ชั้นโทษ)", 30, 1, 500, "⛓️ คุก"]);

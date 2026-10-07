@@ -22,7 +22,7 @@ assert(sc.includes("cookEntry(sec);") && sc.includes('"cook_on"'), "wired");
     const dishes = [{ id: "bbq_fish", n: "ปลาเผาสมุนไพร", i: "🍢", need: [["fish", 1], ["herb_bundle", 1]], pool: ["chop", "grill"], main: "str", sec: "st", rank: 0, locked: false }, { id: "hot_stew", n: "สตูว์", i: "🍲", need: [["canned_food", 1], ["water", 1]], pool: ["stir"], main: "hp", sec: "regen", rank: 0, locked: false }, { id: "chef_special", n: "เมนูพิเศษ", i: "🍱", need: [["fish", 1]], pool: ["chop"], main: "str", sec: "hp", rank: 3, locked: true, sp: true }];
     const S = (x = {}) => ({ ok: true, on: true, n: 5, p: 1, rank: 1, title: "พ่อครัวฝึกหัด", next: 12, win: 1.07, dishes, ...x });
     // ปุ่มเข้าครัว: ปิดอยู่ซ่อน / เปิดแล้วโชว์ (มนุษย์เท่านั้น)
-    res.off = api.cookOn(); api.cookEntry(sec); res.btnOff = $("cook-open").classList.contains("hidden"); tune = { cook_on: 1 }; api.cookEntry(sec); res.btnOn = !$("cook-open").classList.contains("hidden");
+    res.off = api.cookOn(); tune = { cook_on: 0 }; api.cookEntry(sec); res.btnOff = $("cook-open").classList.contains("hidden"); tune = {}; api.cookEntry(sec); res.btnOn = !$("cook-open").classList.contains("hidden");
     state.profile.faction = "zombie"; api.cookEntry(sec); res.btnZombie = $("cook-open").classList.contains("hidden"); state.profile.faction = "human";
     // เมนู: ปุ่มทำ (ทำได้/ขาดวัตถุดิบ/ล็อก)
     script = [S()]; await api.cookOpen(); await wait(); res.menuTxt = $("cook-body").innerText.replace(/\n+/g, " | "); res.dis = [...$("cook-body").querySelectorAll("button")].map((b) => b.disabled).join(",");
@@ -41,7 +41,7 @@ assert(sc.includes("cookEntry(sec);") && sc.includes('"cook_on"'), "wired");
     return res;
   }, { part });
   console.log(JSON.stringify(out, null, 1));
-  assert.strictEqual(out.off, false); assert.strictEqual(out.btnOff, true); assert.strictEqual(out.btnOn, true); assert.strictEqual(out.btnZombie, true);
+  assert.strictEqual(out.off, true); assert.strictEqual(out.btnOff, true); assert.strictEqual(out.btnOn, true); assert.strictEqual(out.btnZombie, true);
   assert(/พ่อครัวฝึกหัด/.test(out.menuTxt) && /ปลาเผาสมุนไพร/.test(out.menuTxt) && /🔒 ขั้น 3/.test(out.menuTxt), "menu"); 
   const dis = out.dis.split(","); assert.strictEqual(dis[0], "false", "ทำ bbq_fish ได้"); assert.strictEqual(dis[1], "true", "สตูว์ขาดวัตถุดิบ"); assert.strictEqual(dis[2], "true", "ล็อกขั้น");
   assert.strictEqual(out.outSafe, "true,true,true / true", "นอก Safe กดทำไม่ได้");

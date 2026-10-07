@@ -5,7 +5,7 @@
 // - คุณภาพ q = ค่าเฉลี่ยคะแนนทุกจังหวะ (เป๊ะ 1.0 / ดี .7 / พอใช้ .4 / พลาด 0) → ระดับ 0 พอกินได้ (อาหาร/น้ำอย่างเดียว) 1 รสมือดี 2 เลิศรส 3 เพอร์เฟกต์ — พลาดหมดก็ยังได้จาน (ไม่ลงโทษหนักเกิน)
 // - ไม่ฟื้น HP (กันของฟื้นล้นเกม) — ให้บัฟสเตตัสชั่วคราว (buffs/{uid} ตัวเดียว ใช้ผ่าน use.js เดิมที่ถามก่อนทับบัฟ) + อาหาร/น้ำเล็กน้อย
 // - ฝีมือพ่อครัว: ตัวนับ `cook/{uid}` = {n จานที่ทำสำเร็จ, p จานเพอร์เฟกต์, ch โจทย์ที่ค้าง} (โหนดฝั่งเซิร์ฟเวอร์ ไม่มีกฎเขียนใน rules) → ขั้น 0–5 ตาม n: ช่วงเวลาให้อภัยกว้างขึ้น 7%/ขั้น, บัฟนานขึ้น 2 นาที/ขั้น, ขั้น ≥1 มีโอกาสได้ 2 จาน (8%/ขั้น เมื่อระดับ ≥2) • เมนูพิเศษต้องขั้น ≥3
-// - ทำที่ Safe Zone เท่านั้น (เหมือนประกอบของ) • มนุษย์เท่านั้น • ปิดอยู่จนกว่าตั้ง tune cook_on = 1
+// - ทำที่ Safe Zone เท่านั้น (เหมือนประกอบของ) • มนุษย์เท่านั้น • เปิดอยู่เป็นค่าเริ่มต้น (ปิดได้ด้วย tune cook_on = 0)
 const crypto = require("crypto");
 const { fail, withLock, takeItem, grantAll } = require("./lib");
 
@@ -74,7 +74,7 @@ function makeCook(db, rnd) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
     if (!["state", "start", "done"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
-    const on = (await tune("cook_on", 0)) === 1;
+    const on = (await tune("cook_on", 1)) === 1;
     if (a === "state") return view((await db.ref(`cook/${uid}`).get()).val(), on);
     if (!on) return { ok: true, on: false };
     return withLock(db, uid, now, async () => {
