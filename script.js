@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0508";
+const APP_VERSION = "2026-10-07.0722";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -6134,7 +6134,7 @@ function npcPortrait(el, id, e) {
   });
   el.dataset.want = want;
 }
-function zoneBanner(z) { const h = $("zone-title")?.closest(".chat-head"); if (!h) return; const src = `img/zone/${z}.webp`; h.classList.remove("has-banner"); h.style.removeProperty("--banner"); imgProbe(src, (ok) => { if (ok && $("screen-game")?.dataset.zone === z) { h.style.setProperty("--banner", `url(${src})`); h.classList.add("has-banner"); } }); }
+function zoneBanner(z) { const h = $("zone-title")?.closest(".chat-head"); if (!h) return; const src = `img/zone/${z}.webp?v=${APP_VERSION}`; h.classList.remove("has-banner");   // ?v= กันเบราว์เซอร์ใช้ภาพเก่าที่แคชไว้ (ไฟล์เคยถูกสลับชื่อ) h.style.removeProperty("--banner"); imgProbe(src, (ok) => { if (ok && $("screen-game")?.dataset.zone === z) { h.style.setProperty("--banner", `url(${src})`); h.classList.add("has-banner"); } }); }
 function npcFace(e) { const f = $("npc-face"); if (!f) return; if (!f.classList.contains("has-img")) f.textContent = e; npcPortrait(f, npcRun.id, e); if (f.dataset.want && IMG_OK[f.dataset.want] === false && !f.classList.contains("has-img")) f.textContent = e; }
 function npcScroll() { const l = $("npc-log"); if (l) l.scrollTop = l.scrollHeight; }
 function npcSetCtl(...els) { const c = $("npc-ctl"); c.textContent = ""; els.forEach((e) => e && c.append(e)); }
