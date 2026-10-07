@@ -40,6 +40,9 @@ const play = (st, off) => ({ presses: st.steps.map((s) => s.at.map((b) => st.t0 
   await rej(ck.run("a", { a: "start", dish: "chef_special" }, T0), "ฝีมือขั้น 3"); await rej(ck.run("a", { a: "start", dish: "herb_soup" }, T0), "ฝีมือขั้น 1");
   await set({ inv: { herb_bundle: null } }); await rej(ck.run("a", { a: "start", dish: "bbq_fish" }, T0), "วัตถุดิบไม่พอ"); assert.strictEqual((await db.ref("inventory/a/fish/qty").get()).val(), 5, "คืนวัตถุดิบที่หักไปแล้ว");
   await rej(ck.run("a", { a: "done", presses: [] }, T0), "ไม่มีจาน");
+  // ทีมงาน/เจ้าของทำอาหารได้ • บัญชีโดนแบนทำไม่ได้
+  await set({ u: { role: "owner" } }); r = await ck.run("a", { a: "start", dish: "bbq_fish" }, T0); assert.strictEqual(r.ok, true);
+  await set({ u: { banned: true } }); await rej(ck.run("a", { a: "start", dish: "bbq_fish" }, T0), "ทำอาหารไม่ได้");
   // ---- เริ่ม: หักวัตถุดิบ + ออกโจทย์ 2–3 ขั้น จังหวะเรียงตามเวลา อยู่ในชุดเทคนิคของเมนู
   await set(); r = await ck.run("a", { a: "start", dish: "bbq_fish" }, T0);
   assert.strictEqual((await db.ref("inventory/a/fish/qty").get()).val(), 4); assert.strictEqual((await db.ref("inventory/a/herb_bundle/qty").get()).val(), 4);

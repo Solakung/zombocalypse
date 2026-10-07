@@ -79,7 +79,7 @@ function makeCook(db, rnd) {
     if (!on) return { ok: true, on: false };
     return withLock(db, uid, now, async () => {
       const [pS, cS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`cook/${uid}`).get()]), p = pS.val(), c = cS.val() || {}, rank = rankOf(c.n);
-      if (!p || p.banned === true || p.role !== "player") fail("permission-denied", "บัญชีนี้ทำอาหารไม่ได้");
+      if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ทำอาหารไม่ได้");
       if (p.faction !== "human") fail("failed-precondition", "ซอมบี้ทำอาหารไม่เป็น…");
       if (!(p.hp > 0)) fail("failed-precondition", "ต้องมีชีวิตอยู่");
       if (p.zone !== "safe") fail("failed-precondition", "ทำอาหารได้เฉพาะที่ Safe Zone");
