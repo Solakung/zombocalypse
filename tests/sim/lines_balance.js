@@ -14,7 +14,7 @@ const HEAL = {
 };
 function duel(z, hu, healFn, o = {}) {
   const st = (k) => z.s[k] + evoB(z.e, k), zMax = 100 + 10 * st("hp"), hMax = 100 + 10 * hu.hp;
-  let zh = zMax, hh = hMax, bleed = 0, band = hu.band, med = hu.med, step = 0;
+  let zh = zMax, hh = hMax, bleed = 0, band = hu.band, med = hu.med, step = 0, dur = o.dur === undefined ? 1e9 : o.dur;
   const cut = 1 - (o.extraCut || 0);   // มิวเตชันซากหนา/ความสามารถ
   while (step++ < 60) {
     // ซอมบี้โจมตี
@@ -29,7 +29,7 @@ function duel(z, hu, healFn, o = {}) {
     // มนุษย์: ฮีลเมื่อ HP < 40% (ใช้เวลาแทนการโจมตี) ไม่งั้นโจมตี
     if (hh < 0.4 * hMax && (band > 0 || med > 0)) { if (med > 0 && hh < 0.3 * hMax) { med--; hh = Math.min(hMax, hh + 50); } else if (band > 0) { band--; hh = Math.min(hMax, hh + 20); } else { med--; hh = Math.min(hMax, hh + 50); } bleed = 0; }
     else if (d6() > d6() && !(Math.random() < 0.03 * st("agi"))) {
-      let dmg = Math.max(1, hu.w + hu.str - st("tough")); if (z.e.g >= 2) dmg = Math.max(1, Math.floor(dmg * CFG.evoCut)); dmg = Math.max(1, Math.round(dmg * cut)); zh -= dmg;
+      const w = dur > 0 ? hu.w : 5; dur--; let dmg = Math.max(1, w + hu.str - st("tough")); if (z.e.g >= 2) dmg = Math.max(1, Math.floor(dmg * CFG.evoCut)); dmg = Math.max(1, Math.round(dmg * cut)); zh -= dmg;
     }
     if (zh <= 0) return { win: 0, hp: 0 };
   }
@@ -75,3 +75,13 @@ function surv(name, zs, hu, e, m = 0, ec = 0) {
 }
 console.log("\n=== อยู่รอด% ในการดวลกับมนุษย์ปลายสุด (ตารางฮีลปัจจุบัน) ===");
 for (const [zn, zs] of Object.entries(ZB)) { let line = zn.padEnd(13) + "|"; for (const [ln, e, m, ec] of LINES) line += ` ${ln.slice(0, 2)}${ln.includes("8") ? "8" : "4"}:${pct(surv(ln, zs, HU["มนุษย์ปลาย (ซามูไร 28, เกราะ 20%)"], e, m, ec))}`; console.log(line); }
+
+// ---- ทดสอบความไว: ใส่เกราะ/อวัยวะซอมบี้ลดดาเมจ 12% + อาวุธมนุษย์พังหลังตี 16 ครั้ง (ใกล้ขวาน/ซามูไร)
+console.log("\n=== สมมาตรขึ้น: ซอมบี้ลดดาเมจ 12% (อวัยวะ) + อาวุธมนุษย์ทนตี 16 ครั้ง ===");
+for (const [tag, o] of [["เดิม", {}], ["สมมาตรขึ้น", { extraCut: 0.12, dur: 16 }]]) {
+  for (const [zn, zs] of Object.entries(ZB)) for (const [hun, hu] of Object.entries(HU)) {
+    let line = `${tag.padEnd(10)} ${zn.slice(0, 5).padEnd(6)} vs ${hun.includes("ปลาย") ? "มปลาย" : "มกลาง"} |`;
+    for (const [ln, e] of [["ไม่มี", {}], ["🩸", { h: 4 }], ["🗿", { g: 4 }], ["🕷", { s: 4 }]]) line += ` ${ln} ${pct(run({ s: zs, e, m: 0 }, hu, HEAL["ปัจจุบัน 2/3/5"], o).win)}`;
+    console.log(line);
+  }
+}
