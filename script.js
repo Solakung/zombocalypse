@@ -61,7 +61,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0149";
+const APP_VERSION = "2026-10-07.0157";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2992,6 +2992,7 @@ async function resolveAttack(key, a) {
   const skTxt = a.sk ? (SKILLS[a.sk] ? ` (${SKILLS[a.sk].icon}${SKILLS[a.sk].name})` : a.skn ? ` (${a.ski || ""}${a.skn})` : "") : "";
 
   const newHp = Math.max(0, p.hp - dmg);
+  try { const af = state.players[key]?.faction; if (af === "zombie" || af === "human") { const sf = af === "zombie" ? "z" : "h"; achBump("patk" + sf); if (landed) { achBump("phit" + sf); achBump("pdmg" + sf, dmg); } } if (landed && newHp === 0) achBump("pdie"); } catch { /* สถิติพลาดไม่กระทบเกม */ }   // 📉 สถิติ PvP (แดชบอร์ดเจ้าของ): ผู้ถูกโจมตีเป็นคนบันทึก แยกตามฝ่ายผู้โจมตี
   let text = `⚔ ${a.fromName}${skTxt} ทอย ${a.roll} vs ${p.username} ทอยป้องกันได้ ${defRoll} → `;
   
   if (landed) {
@@ -11242,6 +11243,25 @@ function econSnapshot(tot) {
   if (!L.length || now - L[L.length - 1].t > 3600000) { L.push({ t: now, tot }); LS.set(key, L.slice(-30)); }
   return base;
 }
+// ---- 📉 สถิติผู้เล่น (แดชบอร์ดเจ้าของ) — ฟังก์ชันล้วน ทดสอบที่ tests/sim/telemetry.js • ไม่เขียนข้อมูลเพิ่มนอกจากตัวนับ ach (patk/phit/pdmg z|h, pdie)
+const RET_B = [[600000, "ไม่ถึง 10 นาที"], [3600000, "10 นาที–1 ชม."], [86400000, "1–24 ชม."], [259200000, "1–3 วัน"], [Infinity, "เกิน 3 วัน"]];
+const medianOf = (arr) => { if (!arr.length) return null; const s = [...arr].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+function retCompute(people, now) {   // "หายไป" = ไม่เห็นในเกมเกิน 24 ชม. • ระยะที่เล่น = seenAt − createdAt
+  const rows = people.filter((p) => p.u && typeof p.u.createdAt === "number" && p.u.role !== "owner" && p.u.role !== "gm");
+  const isGone = (p) => now - (typeof p.u.seenAt === "number" ? p.u.seenAt : p.u.createdAt) > 86400000;
+  const gone = rows.filter(isGone), buckets = RET_B.map(([, label]) => ({ label, n: 0 }));
+  gone.forEach((p) => { const life = Math.max(0, (typeof p.u.seenAt === "number" ? p.u.seenAt : p.u.createdAt) - p.u.createdAt); buckets[RET_B.findIndex(([lim]) => life < lim)].n++; });
+  const srch = gone.map((p) => p.a?.c?.srch || 0), zones = {};
+  gone.forEach((p) => { const z = p.u.zone || "?"; zones[z] = (zones[z] || 0) + 1; });
+  const fac = (f) => { const all = rows.filter((p) => (p.u.faction === "zombie" ? "zombie" : "human") === f); return { n: all.length, gone: all.filter(isGone).length }; };
+  return { n: rows.length, gone: gone.length, active: rows.length - gone.length, buckets, medSrch: medianOf(srch), never: srch.filter((x) => x < 1).length, dead: gone.filter((p) => p.u.hp === 0).length, zones: Object.entries(zones).sort((x, y) => y[1] - x[1]).slice(0, 3), human: fac("human"), zombie: fac("zombie") };
+}
+function pvpCompute(people) {   // ตัวนับบันทึกโดยผู้ถูกโจมตี: matrix[ฝ่ายผู้โจมตี][ฝ่ายผู้ถูกโจมตี]
+  const M = { z: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } }, h: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } } }, died = { human: 0, zombie: 0 };
+  people.forEach((p) => { const c = p.a?.c; if (!c || !p.u) return; const df = p.u.faction === "zombie" ? "zombie" : "human"; ["z", "h"].forEach((af) => { const m = M[af][df]; m.atk += c["patk" + af] || 0; m.hit += c["phit" + af] || 0; m.dmg += c["pdmg" + af] || 0; }); died[df] += c.pdie || 0; });
+  return { M, died };
+}
+// ---- /สถิติผู้เล่น
 async function econRender(box) {
   box.append(mk("p", "muted", "กำลังรวบรวมข้อมูล…"));
   try {
@@ -11259,6 +11279,19 @@ async function econRender(box) {
     if (flags.length) flags.forEach((f) => box.append(mk("div", "", f))); else box.append(mk("div", "muted", "ยังไม่พบสัญญาณผิดปกติ"));
     box.append(mk("div", "hub-day", "👥 ผู้เล่น"));
     box.append(mk("div", "", `ทั้งหมด ${X.n} • 🧑 ${X.human} • 🧟 ${X.zombie} • ออนใน 24 ชม. ${X.active} • ล้มอยู่ ${X.dead}`));
+    try {   // 📉 ผู้เล่นใหม่หายตรงไหน + 🥊 PvP
+      const R = retCompute(D.people, D.at), V = pvpCompute(D.people), pc = (a, b) => (b ? Math.round((100 * a) / b) + "%" : "–");
+      box.append(mk("div", "hub-day", "📉 ผู้เล่นหายตรงไหน (ไม่เห็นเกิน 24 ชม. = หาย • ไม่นับ GM/เจ้าของ)"));
+      box.append(mk("div", "", `สมัครแล้ว ${R.n} • ยังเล่นอยู่ ${R.active} • หายไป ${R.gone} • 🧑 หาย ${R.human.gone}/${R.human.n} • 🧟 หาย ${R.zombie.gone}/${R.zombie.n}`));
+      if (R.gone) {
+        box.append(mk("div", "", "ระยะที่เล่นก่อนหาย: " + R.buckets.map((x) => `${x.label} ${x.n}`).join(" • ")));
+        box.append(mk("div", "", `คนที่หาย: ค้นหามัธยฐาน ${R.medSrch === null ? "–" : Math.round(R.medSrch)} ครั้ง • ไม่เคยค้นหาเลย ${R.never} • หายตอนล้มอยู่ ${R.dead}${R.zones.length ? " • โซนล่าสุด " + R.zones.map(([z, n]) => `${ZONES[z]?.name || z} ${n}`).join(", ") : ""}`));
+      }
+      box.append(mk("div", "hub-day", "🥊 PvP (นับเมื่อผู้ถูกโจมตีเล่นเวอร์ชันนี้ • ผู้โจมตี→ผู้ถูกโจมตี)"));
+      const F = { z: "🧟", h: "🧑" }, DF = { human: "🧑", zombie: "🧟" }; let any = false;
+      ["z", "h"].forEach((af) => ["human", "zombie"].forEach((df) => { const m = V.M[af][df]; if (!m.atk) return; any = true; box.append(mk("div", "", `${F[af]}→${DF[df]}: โจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจเฉลี่ย ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"}`)); }));
+      box.append(mk("div", any ? "" : "muted", any ? `ล้มจาก PvP: 🧑 ${V.died.human} • 🧟 ${V.died.zombie}` : "ยังไม่มีข้อมูล PvP (เริ่มนับเมื่อผู้ถูกโจมตีอัปเดตเวอร์ชันนี้)"));
+    } catch (e) { console.warn("telemetry", e); }
     const hrs = base ? Math.max(1, Math.round((Date.now() - base.t) / 3600000)) : 0;
     box.append(mk("div", "hub-day", `📊 กิจกรรมรวม (ตลอดชีพ${base ? ` • เทียบ ${hrs} ชม.ก่อน` : " • ยังไม่มีสแนปช็อตเก่าให้เทียบ — เปิดซ้ำภายหลัง"})`));
     ECON_KEYS.forEach(([k, label]) => { const d = base ? X.tot[k] - (base.tot[k] || 0) : null; box.append(mk("div", "", `${label}: ${fmt(X.tot[k])}${d ? `  (+${fmt(d)})` : ""}`)); });
