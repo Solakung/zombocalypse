@@ -17,7 +17,9 @@ const { payPts, payUpTo } = require("./paypts");
 const { effPts } = require("./bounty");
 const { nextCrim } = require("./crim");
 
-const RESCUE_CD = 600000, RED_MUL = 2, ATK_WINDOW = 90000, DEDUPE_MS = 120000, WORK_MIN = 2, WORK_CD = 20000, ESC_CD = 300000, ESC_FAIL_MIN = 5, DECAY_MS = 86400000, MAX_T = 4;
+// งานในคุก (มินิเกมจำลำดับ — เซิร์ฟเวอร์ออกโจทย์และตรวจคำตอบเอง): งานเบา จำ 4 ตัว ลด 2 นาที / งานหนัก จำ 6 ตัว ลด 5 นาที แต่ถ้าพลาดเสีย 10 HP (ไม่ตาย เหลืออย่างน้อย 1) • พักหลังทำเสร็จหรือพลาด • รวมลดไม่เกินครึ่งโทษ
+const JOBS = { light: { len: 4, mins: 2, cd: 20000, hp: 0 }, heavy: { len: 6, mins: 5, cd: 45000, hp: 10 } };
+const RESCUE_CD = 600000, RED_MUL = 2, ATK_WINDOW = 90000, DEDUPE_MS = 120000, WORK_TTL = 90000, WORK_SYMS = 5, ESC_CD = 300000, ESC_FAIL_MIN = 5, DECAY_MS = 86400000, MAX_T = 4;
 // ของทั่วไปที่ยึด/ริบได้ (ทุกรหัสต้องอยู่ใน ITEMS ของเกมและ whitelist กระเป๋า) — ไม่รวมอาวุธ/เกราะ/ของหายาก
 const COMMON = ["scrap", "chem", "canned_food", "water", "bandage", "rusty_nails", "leather_scrap", "duct_tape", "bread", "fruit", "rotten_meat", "moss"];
 const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : 0);
@@ -36,12 +38,12 @@ function makeJail(db, rnd) {
     if (!have.length) return null; const id = have[Math.floor(rf() * have.length)]; return [id, num(inv[id].qty)];
   }
   const bailFor = (C, t, b, now) => C.bail * t + Math.floor((effPts(b, now, C.btyDecay) * C.bailPct) / 100);
-  const view = (j, jn, C, now, b) => ({ active: active(j, now), until: j ? num(j.until) : 0, tier: j ? num(j.t) || 1 : tierOf(escN(jn, now)), tm: j ? num(j.tm) : 0, w: j ? num(j.w) : 0, bailPts: bailFor(C, j ? num(j.t) || 1 : tierOf(escN(jn, now)), b, now), red: !!(j && j.red), esc: C.esc, rescue: C.rescue, workLeftAt: j ? num(j.wt) + WORK_CD : 0, escLeftAt: j ? num(j.et) + ESC_CD : 0 });
+  const view = (j, jn, C, now, b) => ({ active: active(j, now), until: j ? num(j.until) : 0, tier: j ? num(j.t) || 1 : tierOf(escN(jn, now)), tm: j ? num(j.tm) : 0, w: j ? num(j.w) : 0, bailPts: bailFor(C, j ? num(j.t) || 1 : tierOf(escN(jn, now)), b, now), red: !!(j && j.red), esc: C.esc, rescue: C.rescue, workLeftAt: j ? num(j.wcd) : 0, escLeftAt: j ? num(j.et) + ESC_CD : 0 });
 
   async function run(uid, data, now = Date.now()) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
-    if (!["state", "capture", "work", "escape", "bail", "release", "rescue"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
+    if (!["state", "capture", "workStart", "workDone", "escape", "bail", "release", "rescue"].includes(a)) fail("invalid-argument", "ไม่รู้จักคำสั่ง");
     const C = await cfg();
     if (a === "state") { const [jS, nS, bS] = await Promise.all([db.ref(`jail/${uid}`).get(), db.ref(`jailn/${uid}`).get(), db.ref(`bty/${uid}`).get()]); return { ok: true, on: C.on, ...view(jS.val(), nS.val(), C, now, bS.val()) }; }
     const jailed = async (id) => (await db.ref(`jail/${id}`).get()).val();
@@ -114,12 +116,32 @@ function makeJail(db, rnd) {
       }
       if (!active(j, now)) fail("failed-precondition", "คุณไม่ได้ติดคุกอยู่");
       const t = num(j.t) || 1;
-      if (a === "work") {
-        if (now - num(j.wt) < WORK_CD) fail("resource-exhausted", `พักก่อน อีก ${Math.ceil((WORK_CD - (now - num(j.wt))) / 1000)} วินาที`);
-        const cap = Math.floor(num(j.tm) / 2);
-        if (num(j.w) + WORK_MIN > cap) fail("failed-precondition", "ทำงานลดโทษได้ไม่เกินครึ่งหนึ่งของโทษแล้ว");
-        const nu = num(j.until) - WORK_MIN * 60000; await db.ref().update({ [`jail/${uid}/until`]: nu, [`jail/${uid}/w`]: num(j.w) + WORK_MIN, [`jail/${uid}/wt`]: now, [`jailpub/${uid}/u`]: nu });
-        return { ok: true, on: true, until: nu, w: num(j.w) + WORK_MIN, ended: nu <= now };
+      if (a === "workStart") {
+        const key = String((data && data.job) || ""), job = JOBS[key]; if (!job) fail("invalid-argument", "ไม่รู้จักงานนี้");
+        if (now < num(j.wcd)) fail("resource-exhausted", `พักก่อน อีก ${Math.ceil((num(j.wcd) - now) / 1000)} วินาที`);
+        if (num(j.w) + job.mins > Math.floor(num(j.tm) / 2)) fail("failed-precondition", "ทำงานลดโทษได้ไม่เกินครึ่งหนึ่งของโทษแล้ว (งานนี้ลดเกิน)");
+        const seq = Array.from({ length: job.len }, () => Math.floor(rf() * WORK_SYMS));
+        await db.ref(`jailwk/${uid}`).set({ job: key, seq, ts: now });
+        return { ok: true, on: true, job: key, seq, len: job.len, syms: WORK_SYMS, mins: job.mins, hpRisk: job.hp };
+      }
+      if (a === "workDone") {
+        const wkS = await db.ref(`jailwk/${uid}`).get(), wk = wkS.val();
+        if (!wk || !JOBS[wk.job] || !Array.isArray(wk.seq)) fail("failed-precondition", "ยังไม่ได้เริ่มงาน");
+        await db.ref(`jailwk/${uid}`).remove();   // ตอบได้ครั้งเดียวต่อโจทย์
+        const job = JOBS[wk.job];
+        if (now - num(wk.ts) > WORK_TTL) fail("deadline-exceeded", "หมดเวลาทำงานนี้ เริ่มงานใหม่");
+        if (now - num(wk.ts) < job.len * 600) fail("failed-precondition", "ตอบเร็วผิดปกติ — ลองใหม่");
+        const ans = data && Array.isArray(data.answer) ? data.answer : [];
+        const ok = ans.length === wk.seq.length && ans.every((x, i) => x === wk.seq[i]);
+        if (!ok) {   // ตอบผิด: ไม่ลดโทษ พักตามงาน • งานหนักเสีย HP (เหลืออย่างน้อย 1)
+          const upd = { [`jail/${uid}/wcd`]: now + job.cd }; let hpLost = 0;
+          if (job.hp > 0 && num(u.hp) > 1) { hpLost = Math.min(job.hp, num(u.hp) - 1); upd[`users/${uid}/hp`] = num(u.hp) - hpLost; }
+          await db.ref().update(upd); return { ok: true, on: true, success: false, hpLost };
+        }
+        if (num(j.w) + job.mins > Math.floor(num(j.tm) / 2)) fail("failed-precondition", "ทำงานลดโทษได้ไม่เกินครึ่งหนึ่งของโทษแล้ว");
+        const nu = num(j.until) - job.mins * 60000;
+        await db.ref().update({ [`jail/${uid}/until`]: nu, [`jail/${uid}/w`]: num(j.w) + job.mins, [`jail/${uid}/wt`]: now, [`jail/${uid}/wcd`]: now + job.cd, [`jailpub/${uid}/u`]: nu });
+        return { ok: true, on: true, success: true, mins: job.mins, until: nu, w: num(j.w) + job.mins, ended: nu <= now };
       }
       if (a === "bail") {
         if (j.red) fail("failed-precondition", "🔴 นักโทษผู้ก่อเหตุซ้ำจ่ายค่าประกันไม่ได้ (ทำงานลดโทษ แหกคุก หรือรอครบเวลา)");
@@ -146,4 +168,4 @@ function makeJail(db, rnd) {
   }
   return { run };
 }
-module.exports = { makeJail, RESCUE_CD, RED_MUL, COMMON, MAX_T, WORK_MIN, WORK_CD, ESC_CD, ESC_FAIL_MIN };
+module.exports = { makeJail, RESCUE_CD, RED_MUL, COMMON, MAX_T, JOBS, WORK_SYMS, ESC_CD, ESC_FAIL_MIN };

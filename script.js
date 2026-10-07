@@ -64,7 +64,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0425";
+const APP_VERSION = "2026-10-07.0431";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2591,8 +2591,8 @@ function jailRender() {
   const bar = $("jail-bar"); if (!bar) return;
   const on = jailActive() && state.zone === "jail"; bar.classList.toggle("hidden", !on); if (!on) return;
   const I = state.jailInfo || {}, t = state.jail.t || 1, busy = !!state.jailBusy, now = serverNow();
-  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}${state.jail.red ? " • 🔴 ผู้ก่อเหตุซ้ำ โทษ ×2 จ่ายประกันไม่ได้" : ""}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานลดโทษครั้งละ 2 นาที (รวมไม่เกินครึ่งหนึ่ง)`;
-  $("jail-work").disabled = busy || now < (state.jail.wt || 0) + 20000; $("jail-esc").disabled = busy || now < (state.jail.et || 0) + 300000;
+  $("jail-txt").textContent = `⛓️ คุณติดคุก — เหลือ ~${jailMinsLeft()} นาที (ชั้นโทษ ${t}${state.jail.red ? " • 🔴 ผู้ก่อเหตุซ้ำ โทษ ×2 จ่ายประกันไม่ได้" : ""}) • ครบเวลา: ค่าหัวบนตัวหาย แต่เสียของทั่วไปอย่างน้อย 1 ชิ้น • ทำงานในคุก (มินิเกมจำลำดับ) ลดโทษได้ 2–5 นาที/ครั้ง รวมไม่เกินครึ่งหนึ่ง`;
+  $("jail-work").disabled = busy || now < (state.jail.wcd || 0); $("jail-esc").disabled = busy || now < (state.jail.et || 0) + 300000;
   $("jail-esc").textContent = `🔓 แหกคุก ${I.esc ?? 25}%`; $("jail-bail").textContent = `💰 จ่ายประกัน ${I.bailPts ?? 30 * t} แต้ม`; $("jail-bail").disabled = busy; $("jail-bail").classList.toggle("hidden", !!state.jail.red);
 }
 async function jailSync() {   // ให้โซนของเกมตรงกับสถานะคุก: ติดคุก → เข้าโซนคุก • หมดโทษ/ประกัน/แหกคุก → ย้ายออกตามที่เซิร์ฟเวอร์กำหนด
@@ -2622,10 +2622,9 @@ async function jailAction(a) {
     if (a === "bail") { const st = await jailCall({ a: "state" }); state.jailInfo = st; if (!confirm(`จ่ายค่าประกัน ${st.bailPts} แต้ม? (เศษเหล็ก/ตะปูสนิม 1 • สารเคมี/เศษหนัง 2 • เทปกาว 3 — ระบบหักให้เอง) ออกทันทีที่ Safe Zone ไม่ถูกริบของ (ค่าหัวบนตัวยังอยู่ — ยังถูกล่าได้)`)) return; }
     if (a === "escape" && !confirm("แหกคุก? ถ้าสำเร็จคุณออกทันที แต่กลับเป็นส้ม โทษรอบหน้าหนักขึ้น และทรัพย์สินบางส่วนของคุณถูกตั้งเป็นค่าหัวบนตัว (ใครล้มคุณได้ไป) • ถ้าล้มเหลวเวลา +5 นาทีและเสียของทั่วไป 1 ชิ้น")) return;
     const r = await jailCall({ a });
-    if (a === "work") toast(r.ended ? "⛏️ ทำงานจนครบโทษแล้ว" : "⛏️ ทำงานลดโทษ 2 นาที");
-    else if (a === "bail") toast(`จ่ายค่าประกัน ${r.pts} แต้มแล้ว`);
+    if (a === "bail") toast(`จ่ายค่าประกัน ${r.pts} แต้มแล้ว`);
     else if (a === "escape") toast(r.escaped ? `🔓 แหกคุกสำเร็จ! แต่คุณกลับเป็นส้มแล้ว${r.bounty ? ` และมีค่าหัว ${r.bounty} แต้มบนตัว` : ""}` : `🚨 แหกคุกล้มเหลว เวลาเพิ่ม 5 นาที${r.lost ? ` และเสีย ${ITEMS[r.lost.id]?.name || r.lost.id}` : ""}`);
-    if (r.until) state.jail = { ...(state.jail || {}), until: r.until, ...(a === "work" ? { wt: serverNow() } : { et: serverNow() }) };
+    if (r.until) state.jail = { ...(state.jail || {}), until: r.until, et: serverNow() };
   } catch (e) { toast(hbMsg(e)); }
   finally { state.jailBusy = false; jailRender(); jailSync(); }
 }
@@ -2636,6 +2635,46 @@ async function jailCapture(role, other) {   // ฆ่าคนส้มแล้
     if (r?.captured && r.by === state.uid) toast(`⛓️ คุณจับ ${state.players[other]?.name || "ผู้ก่อเหตุ"} ส่งเข้าคุกสำเร็จ${r.reward ? ` — ได้ ${ITEMS[r.reward.id]?.name || r.reward.id} ×${r.reward.qty}` : ""}`);
   } catch (e) { console.warn("jail capture", e?.code || e); }
 }
+
+// ---- ⛏️ งานในคุก (มินิเกมจำลำดับ) — เซิร์ฟเวอร์ออกโจทย์และตรวจคำตอบ (jailAct workStart/workDone)
+// งานเบา: จำ 4 ตัว −2 นาที • งานหนัก: จำ 6 ตัว −5 นาที แต่พลาดเสีย 10 HP • ดูลำดับสัญลักษณ์ที่โผล่ทีละตัว แล้วแตะตามลำดับเดิม
+const JW_SYMS = ["🔨", "🪚", "🔩", "🧱", "⛏️"], JW_JOBS = [["light", "🔨 งานเบา", "จำ 4 ตัว • ลดโทษ 2 นาที • พัก 20 วินาที"], ["heavy", "🏗️ งานหนัก", "จำ 6 ตัว • ลดโทษ 5 นาที • ⚠️ พลาดเสีย 10 HP • พัก 45 วินาที"]];
+function jwEl() {
+  if (!$("jail-work-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "jail-work-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "งานในคุก");
+    m.addEventListener("click", (e) => { if (e.target === m && !state.jwBusy) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), head = mk("div", "modal-head"); head.append(mk("h2", "", "⛏️ งานในคุก"), btn("ปิด", () => { if (!state.jwBusy) m.classList.add("hidden"); }, "btn ghost mini"));
+    const body = mk("div", "hub2-body"); body.id = "jw-body"; body.style.marginTop = "10px"; box.append(head, body); m.append(box); document.body.append(m);
+  }
+  return $("jw-body");
+}
+function jwMenu(msg) {
+  const body = jwEl(), now = serverNow(), left = Math.max(0, Math.ceil(((state.jail?.wcd || 0) - now) / 1000)); body.innerHTML = "";
+  if (msg) body.append(mk("div", "", msg));
+  body.append(mk("div", "muted", `เหลือโทษ ~${jailActive() ? jailMinsLeft() : 0} นาที • ทำงานลดโทษได้รวมไม่เกินครึ่งหนึ่งของโทษ${left ? ` • พักอีก ${left} วินาที` : ""}`));
+  JW_JOBS.forEach(([job, name, desc]) => { const b = btn(`${name} — ${desc}`, () => jwStart(job), "btn primary"); b.style.cssText = "display:block;width:100%;margin-top:8px;min-height:48px;text-align:left"; b.disabled = !!state.jwBusy || left > 0 || !jailActive(); body.append(b); });
+}
+function jailWorkOpen() { if (!jailActive()) return; $("jail-work-modal") || jwEl(); jwMenu(); $("jail-work-modal").classList.remove("hidden"); }
+async function jwStart(job) {
+  if (state.jwBusy) return; state.jwBusy = true; const body = jwEl();
+  try {
+    const st = await jailCall({ a: "workStart", job }), ms = state.jwShowMs ?? 700; body.innerHTML = ""; body.append(mk("div", "", "จำลำดับที่เห็นให้ดี…"));
+    const shown = mk("div", "", " "); shown.style.cssText = "font-size:56px;text-align:center;min-height:80px;margin:12px 0"; body.append(shown);
+    await new Promise((r) => setTimeout(r, Math.min(ms, 600)));
+    for (const x of st.seq) { shown.textContent = JW_SYMS[x] || "?"; await new Promise((r) => setTimeout(r, ms)); shown.textContent = " "; await new Promise((r) => setTimeout(r, Math.round(ms / 3))); }
+    const ans = []; body.innerHTML = ""; body.append(mk("div", "", `แตะตามลำดับ (${st.len} ตัว)`));
+    const prog = mk("div", "", "·".repeat(st.len)); prog.style.cssText = "font-size:28px;text-align:center;margin:10px 0;letter-spacing:6px"; const pad = mk("div"); pad.style.cssText = "display:grid;grid-template-columns:repeat(5,1fr);gap:8px"; body.append(prog, pad);
+    const done = new Promise((resolve) => JW_SYMS.slice(0, st.syms || 5).forEach((sym, i) => { const b = btn(sym, () => { ans.push(i); prog.textContent = ans.map((a) => JW_SYMS[a]).join(" ") + " ·".repeat(st.len - ans.length); if (ans.length >= st.len) resolve(); }, "btn ghost"); b.style.cssText = "font-size:30px;min-height:56px"; pad.append(b); }));
+    await done; pad.querySelectorAll("button").forEach((b) => { b.disabled = true; });
+    const r = await jailCall({ a: "workDone", answer: ans });
+    let msg;
+    if (r.success) { state.jail = { ...(state.jail || {}), until: r.until, w: r.w }; toast(r.ended ? "⛏️ ทำงานจนครบโทษแล้ว" : `⛏️ ทำงานสำเร็จ ลดโทษ ${r.mins} นาที`); msg = `✅ สำเร็จ ลดโทษ ${r.mins} นาที`; }
+    else { toast(r.hpLost ? `❌ พลาด! เสีย ${r.hpLost} HP` : "❌ พลาด! ไม่ลดโทษ"); msg = r.hpLost ? `❌ พลาด เสีย ${r.hpLost} HP` : "❌ พลาด ลองใหม่ได้เมื่อพักเสร็จ"; }
+    state.jail = { ...(state.jail || {}), wcd: serverNow() + (job === "heavy" ? 45000 : 20000) }; state.jwBusy = false; jwMenu(msg); jailRender();
+  } catch (e) { toast(hbMsg(e)); state.jwBusy = false; jwMenu(); }
+  finally { state.jwBusy = false; jailRender(); }
+}
+// ---- /งานในคุก
 
 // ช่วยแหกคุก: รายชื่อผู้ต้องขัง (jailpub — ทุกคนอ่านได้) • ผู้ช่วยต้องอยู่นอกเมือง • สำเร็จ = ผู้ต้องขังออก แต่ทั้งคู่เป็นส้ม • ล้มเหลว = ผู้ช่วยติดคุกไปด้วย โทษเท่ากับผู้ต้องขัง
 function jailPubListen() {
@@ -2666,7 +2705,7 @@ function jailWorldRows(box) {
     row.append(b); box.append(row);
   });
 }
-$("jail-work").addEventListener("click", () => jailAction("work")); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
+$("jail-work").addEventListener("click", jailWorkOpen); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
 // ---- /คุก
 
 /* =========================================================
