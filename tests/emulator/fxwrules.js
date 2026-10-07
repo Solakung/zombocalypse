@@ -1,4 +1,4 @@
-// ⚔️ rules ของอาวุธติดสถานะ: เทียบ rules เก่า (main ที่ bbef150) กับใหม่ — wfx ใน attacks ต้องผ่านเฉพาะ มนุษย์→ซอมบี้ + ตรงกับช่อง fx ของอาวุธที่ถือ • กิ่ง effects เดิมของผู้ถูกโจมตี • ทิ้ง/เก็บอาวุธที่มี fx ต้องยังทำได้
+// ⚔️ rules ของอาวุธติดสถานะ: เทียบ rules เก่า (main ที่ bbef150) กับใหม่ — wfx ใน attacks ต้องผ่านเฉพาะผู้โจมตีที่เป็นมนุษย์ + ตรงกับช่อง fx ของอาวุธที่ถือ • กิ่ง effects เดิมของผู้ถูกโจมตี • ทิ้ง/เก็บอาวุธที่มี fx ต้องยังทำได้
 // ใช้: node tests/emulator/fxwrules.js (OLD_RULES=ไฟล์ เพื่อกำหนด rules เก่าเอง)
 process.env.FIREBASE_DATABASE_EMULATOR_HOST = "127.0.0.1:9000";
 const fs = require("fs"), assert = require("assert"), { execSync } = require("child_process");
@@ -36,7 +36,7 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
     ["ทอย −1 นาที 3 โอกาส 20", seed({ item: wpn({ t: "dice", v: -1, m: 3, p: 20 }) }), atk({ t: "dice", v: -1, m: 3, p: 20 }), true, true],
     ["พิษแรง 3", seed({ item: wpn({ t: "poison", v: 3, m: 3, p: 25 }) }), atk({ t: "poison", v: 3, m: 3, p: 25 }), true, true],
     ["ผู้โจมตีเป็นซอมบี้ แนบ wfx", seed({ uf: "zombie" }), atk(BL), true, false],
-    ["เป้าหมายเป็นมนุษย์ แนบ wfx (ไม่ให้ติดกับมนุษย์)", seed({ tf: "human" }), atk(BL), true, false],
+    ["มนุษย์→มนุษย์ แนบ wfx (ติดได้เหมือนกัน)", seed({ tf: "human" }), atk(BL), true, true],
     ["อาวุธที่ถือไม่มี fx แต่แนบ wfx", seed({ item: wpn(null) }), atk(BL), true, false],
     ["ถืออาวุธธรรมดา (knife) แนบ wfx", seed({ ux: { equipped: "w2" }, extra: { config: { weaponDmg: { knife: 12 } } } }), () => ({ "attacks/T/U": { from: "U", fromName: "tester", roll: 4, zone: "ruins", ts: SV, wpn: "knife", wdmg: 13, wfx: BL }, "users/U/lastAttack": SV }), true, false],
     ["โจมตีด้วย knife ปกติ (ไม่มี wfx)", seed({ ux: { equipped: "w2" }, extra: { config: { weaponDmg: { knife: 12 } } } }), () => ({ "attacks/T/U": { from: "U", fromName: "tester", roll: 4, zone: "ruins", ts: SV, wpn: "knife", wdmg: 13 }, "users/U/lastAttack": SV }), true, true],
@@ -44,6 +44,7 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
     // ---- ผู้ถูกโจมตี: รับสถานะ (กิ่ง effects เดิม ต้องไม่เปลี่ยน)
     ["รับเลือดไหล v1 3 นาที", defSeed(), take("bleed", 1, 3), true, true],
     ["รับเลือดไหล v3 3 นาที", defSeed(), take("bleed", 3, 3), true, true],
+    ["รับเลือดไหล (ผู้ถูกโจมตีเป็นมนุษย์)", { ...defSeed(), users: { U: user("human"), T: user("human", { username: "target", hp: 80 }) } }, take("bleed", 2, 3), true, true],
     ["รับเลือดไหล v3 5 นาที", defSeed(), take("bleed", 3, 5), true, true],
     ["รับเลือดไหล v3 6 นาที (เกิน)", defSeed(), take("bleed", 3, 6), false, false],
     ["รับเลือดไหล v4 (เกิน)", defSeed(), take("bleed", 4, 3), false, false],

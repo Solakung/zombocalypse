@@ -62,7 +62,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-07.0315";
+const APP_VERSION = "2026-10-07.0319";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1618,7 +1618,7 @@ function renderInv() {
     if (def.type === "weapon") {
       const eq = state.profile?.equipped === slot;
       if (eq) li.classList.add("equipped");
-      { const wf = wfxOf(it), sp = mk("span", "", `${it.id === "custom" && it.icon ? String(it.icon).slice(0, 4) : "🗡️"} ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})${wf ? " • " + wfxLabel(wf) : ""}`); sp.style.color = durColor(durFrac(it, def)); if (wf) sp.title = `ติดสถานะ ${FX_TYPES[wf.t].name} ${wf.p}% ต่อการโจมตีที่โดน (มนุษย์ใช้กับซอมบี้)`; li.append(sp); }
+      { const wf = wfxOf(it), sp = mk("span", "", `${it.id === "custom" && it.icon ? String(it.icon).slice(0, 4) : "🗡️"} ${def.name} (${it.dur}/${it.maxDur ?? def.maxDur})${wf ? " • " + wfxLabel(wf) : ""}`); sp.style.color = durColor(durFrac(it, def)); if (wf) sp.title = `ติดสถานะ ${FX_TYPES[wf.t].name} ${wf.p}% ต่อการโจมตีที่โดน (มนุษย์ใช้ได้เท่านั้น)`; li.append(sp); }
       
       const btnGrp = mk("div", "row-btns");
       btnGrp.append(btn(eq ? "ถอด" : "ถือ", () => equip(slot, eq), "btn ghost mini"));
@@ -1678,7 +1678,7 @@ function renderCraft() {
     ul.append(li);
   });
   if (T("fxw_on", 0) === 1) {   // ⚔️ อาวุธติดสถานะ (ชั้น 1–2 คราฟต์ได้ • ชั้น 3 ค้นเจอเท่านั้น)
-    ul.append(mk("li", "hub-day", "⚔️ อาวุธติดสถานะ (ใช้กับซอมบี้)"));
+    ul.append(mk("li", "hub-day", "⚔️ อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น)"));
     Object.entries(FXW).filter(([, d]) => d.need).forEach(([k, d]) => {
       const can = state.zone === "safe" && Object.entries(d.need).every(([m, n]) => (state.inv[m]?.qty || 0) >= n), li = mk("li");
       const nm = mk("span", "", `${d.icon} ${d.name} (ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)}) ← ` + Object.entries(d.need).map(([m, n]) => `${ITEMS[m].icon} ${state.inv[m]?.qty || 0}/${n}`).join(" "));
@@ -2848,7 +2848,7 @@ function updateAttackButtons() {
 }
 
 // ---- ⚔️ อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น) — functions/fxw.js (ตัวเลขต้องตรงกัน: tests/emulator/fxw.js) • ปิดอยู่จนกว่า tune fxw_on = 1 (คราฟต์/ค้นเจอ; แอดมินเสกได้เสมอ)
-// ช่องอาวุธ = id "custom" + icon + fx {t ชนิด, v ความแรง, m นาที, p โอกาสติด % ต่อการโจมตีที่โดน} • ใช้ได้เมื่อมนุษย์โจมตีซอมบี้เท่านั้น: เกมแนบ wfx ในบันทึกโจมตี (rules ตรวจว่าตรงกับช่อง fx ของอาวุธที่ถือ) ผู้ถูกโจมตีทอยโอกาสแล้วเขียนสถานะลงตัวเอง (กิ่ง effects เดิมของมอนสเตอร์)
+// ช่องอาวุธ = id "custom" + icon + fx {t ชนิด, v ความแรง, m นาที, p โอกาสติด % ต่อการโจมตีที่โดน} • ผู้ใช้ต้องเป็นมนุษย์ ได้ผลกับเป้าทั้งสองฝ่าย: เกมแนบ wfx ในบันทึกโจมตี (rules ตรวจว่าตรงกับช่อง fx ของอาวุธที่ถือ) ผู้ถูกโจมตีทอยโอกาสแล้วเขียนสถานะลงตัวเอง (กิ่ง effects เดิมของมอนสเตอร์)
 const FXW = {
   fxw_cleaver: { name: "มีดสับกระดูก", icon: "🔪", dmg: 11, dur: 24, tier: 1, fx: { t: "bleed", v: 2, m: 3, p: 30 }, need: { scrap: 8, leather_scrap: 1, rusty_nails: 2 } },
   fxw_venom: { name: "มีดอาบพิษ", icon: "🗡️", dmg: 9, dur: 22, tier: 1, fx: { t: "poison", v: 1, m: 5, p: 35 }, need: { scrap: 6, chem: 3, leather_scrap: 1 } },
@@ -2872,11 +2872,12 @@ const wfxOf = (it) => {
 const wfxLabel = (f) => `${FX_TYPES[f.t].icon} ${f.t === "poison" && f.v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[f.t].name} ${f.p}%`;
 const fxwSlot = (k) => { const d = FXW[k]; return { id: "custom", qty: 1, dur: d.dur, maxDur: d.dur, name: d.name, dmg: d.dmg, type: "weapon", icon: d.icon, fx: { ...d.fx } }; };   // ต้องตรงกับ slotOf ใน functions/fxw.js
 const stunImmLeft = () => Math.max(0, (LS.get(lsKey("simm"), 0) || 0) - serverNow());   // กันมึนซ้ำ: 3 นาทีหลังโดนมึน
-// ผู้ถูกโจมตี (ซอมบี้) รับสถานะจากอาวุธของมนุษย์ที่โจมตีโดน (เรียกใน resolveAttack เมื่อ landed) — ทอยโอกาสที่นี่ แล้วเขียนลง u (rules: เขียนได้เมื่อ HP ลดในคำสั่งเดียวกัน)
+// ผู้ถูกโจมตี (ซอมบี้หรือมนุษย์) รับสถานะจากอาวุธของมนุษย์ที่โจมตีโดน (เรียกใน resolveAttack เมื่อ landed) — ทอยโอกาสที่นี่ แล้วเขียนลง u (rules: เขียนได้เมื่อ HP ลดในคำสั่งเดียวกัน)
 function wfxHit(u, a) {
-  const f = a.wfx; if (!f || !WFX_TYPES.includes(f.t) || state.profile?.faction !== "zombie" || state.players[a.from]?.faction !== "human") return "";
+  const f = a.wfx; if (!f || !WFX_TYPES.includes(f.t) || state.players[a.from]?.faction !== "human") return "";
   const v = Number(f.v), m = Number(f.m), pr = Number(f.p); if (!(m >= 1 && m <= 5) || !(pr >= 1 && pr <= 100) || !v) return "";
-  if (Math.random() * 100 >= pr || effActive(f.t) || (f.t === "poison" && poisonImmLeft() > 0) || (f.t === "stun" && stunImmLeft() > 0)) return "";
+  const pg = f.t === "poison" && (gearHas("chem_gloves") || gearHas("mut_fang3") || gearFxFlag("poisonHalf"));   // ถุงมือ/ต่อมพิษ: โอกาสติดพิษครึ่งเดียว (เหมือน monFx)
+  if (Math.random() * 100 >= (pg ? pr * 0.5 : pr) || effActive(f.t) || (f.t === "poison" && poisonImmLeft() > 0) || (f.t === "stun" && stunImmLeft() > 0)) return "";
   u[`effects/${state.uid}/${f.t}`] = { bstart: serverTimestamp(), mins: f.t === "stun" ? 1 : m, v: f.t === "stun" ? 1 : v, tick: serverTimestamp() }; stat("fx");
   if (f.t === "stun") LS.set(lsKey("simm"), serverNow() + 60000 + 180000);
   return ` ⚠️ ติด${FX_TYPES[f.t].icon}${f.t === "poison" && v >= POISON_STRONG ? "พิษแรง" : FX_TYPES[f.t].name}`;
@@ -2937,7 +2938,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
     wdmg: wd,
     ...(am > 1 ? { amb: true } : {}),
     ...(evoT("h") >= 3 ? { bl: true } : {}),
-    ...(w && p.faction === "human" && state.players[targetUid]?.faction === "zombie" && wfxOf(w.it) ? { wfx: wfxOf(w.it) } : {}),   // อาวุธติดสถานะ (มนุษย์ → ซอมบี้)
+    ...(w && p.faction === "human" && wfxOf(w.it) ? { wfx: wfxOf(w.it) } : {}),   // อาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น — ได้ผลกับทั้งซอมบี้และมนุษย์)
     ...(skId ? { sk: skId, ...(skd.basic ? {} : { skt: skd.type, skn: skd.name, ski: skd.icon }) } : {})
   };
   if (skId) skillUseWrites(selfUpdate, skId);
@@ -3109,13 +3110,13 @@ function buildStatInputs(P) {
 function buildWfxAdmin(P) {
   const box = $(P + "custom-fields"); if (!box || $(P + "wfx-t")) return;
   const num = (id, ph, min, max) => { const i = document.createElement("input"); i.type = "number"; i.min = min; i.max = max; i.id = id; i.placeholder = ph; return i; };
-  const preset = document.createElement("select"); preset.id = P + "wfx-preset"; preset.append(new Option("— พรีเซ็ตอาวุธติดสถานะ (มนุษย์ใช้กับซอมบี้) —", ""));
+  const preset = document.createElement("select"); preset.id = P + "wfx-preset"; preset.append(new Option("— พรีเซ็ตอาวุธติดสถานะ (มนุษย์ใช้ได้เท่านั้น) —", ""));
   Object.entries(FXW).forEach(([k, d]) => preset.append(new Option(`${d.icon} ${d.name} • ดาเมจ ${d.dmg} • ทน ${d.dur} • ${wfxLabel(d.fx)}${d.need ? "" : " • ชั้นสูง"}`, k)));
   const icon = document.createElement("input"); icon.id = P + "custom-icon"; icon.placeholder = "ไอคอน (อีโมจิ — ไม่ใส่ก็ได้)"; icon.maxLength = 4;
   const sel = document.createElement("select"); sel.id = P + "wfx-t"; sel.append(new Option("ไม่พ่วงสถานะ", "")); WFX_TYPES.forEach((t) => sel.append(new Option(`${FX_TYPES[t].icon} ${FX_TYPES[t].name}`, t)));
   const v = num(P + "wfx-v", "ความแรง (เลือดไหล/พิษ 1–3 • ทอย 1–2 = ลดค่าทอย)", 1, 3), m = num(P + "wfx-m", "ระยะเวลา นาที (1–5 • มึนงง = 1 นาที)", 1, 5), pr = num(P + "wfx-p", "โอกาสติด % ต่อการโจมตีที่โดน (1–100)", 1, 100);
   preset.addEventListener("change", () => { const d = FXW[preset.value]; if (!d) return; $(P + "custom-name").value = d.name; $(P + "custom-dmg").value = d.dmg; $(P + "custom-dur").value = d.dur; icon.value = d.icon; sel.value = d.fx.t; v.value = Math.abs(d.fx.v); m.value = d.fx.m; pr.value = d.fx.p; });
-  box.append(preset, icon, sel, v, m, pr, mk("p", "muted", "อาวุธติดสถานะ: มนุษย์ใช้ได้เท่านั้น ได้ผลเฉพาะตอนโจมตีซอมบี้ (ผู้ถูกโจมตีทอยโอกาสเอง) • เลือกพรีเซ็ตเพื่อกรอกช่องด้านบนให้อัตโนมัติ แล้วแก้เองได้"));
+  box.append(preset, icon, sel, v, m, pr, mk("p", "muted", "อาวุธติดสถานะ: มนุษย์ใช้ได้เท่านั้น ได้ผลกับทั้งซอมบี้และมนุษย์ที่ถูกโจมตี (ผู้ถูกโจมตีทอยโอกาสเอง) • เลือกพรีเซ็ตเพื่อกรอกช่องด้านบนให้อัตโนมัติ แล้วแก้เองได้"));
 }
 function wfxAdminRead(P) {
   const out = {}, icon = [...(($(P + "custom-icon") || {}).value || "").trim()].slice(0, 2).join(""), t = ($(P + "wfx-t") || {}).value || "";
