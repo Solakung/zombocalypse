@@ -3,7 +3,7 @@ const { chromium } = require("/opt/node-tools/node_modules/playwright"); const f
 const R = "/home/user/zombocalypse/"; const sc = fs.readFileSync(R + "script.js", "utf8");
 const part = sc.slice(sc.indexOf("// ---- 🟠 สถานะส้ม"), sc.indexOf("// ---- /สถานะส้ม")); assert(part.length > 500, "slice");
 // จุดที่ต้องมีในโค้ดส่วนอื่น (ตรวจแบบข้อความ — กันเผลอลบ)
-for (const needle of ['z === "safe" && crimMe()', 'const rz = crimMe() ? "ruins" : "safe"', 'crimReport("victim", key)', 'crimReport("attacker", targetUid)', 'crimActive(c.key) ? " 🟠"', "!crimMe()) return toast"]) assert(sc.includes(needle), "missing: " + needle);
+for (const needle of ['z === "safe" && crimMe()', 'crimMe() ? "ruins" : "safe"', 'crimReport("victim", key)', 'crimReport("attacker", targetUid)', 'crimActive(c.key) ? " 🟠"', "!crimMe()) return toast"]) assert(sc.includes(needle), "missing: " + needle);
 (async () => {
   const br = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium", args: ["--no-sandbox"] }); const errs = [];
   const pg = await (await br.newContext({ viewport: { width: 360, height: 780 }, isMobile: true })).newPage(); pg.on("pageerror", (e) => errs.push(String(e)));

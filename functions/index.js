@@ -31,6 +31,7 @@ const { makeForge } = require("./forge");
 const { makeHboss } = require("./hboss");
 const { makeCrim } = require("./crim");
 const { makeBounty } = require("./bounty");
+const { makeJail } = require("./jail");
 const { makeFxw } = require("./fxw");
 const { makeUse } = require("./use");
 
@@ -238,6 +239,13 @@ const btySys = makeBounty(admin.database());
 exports.bountyAct = onCall(async (req) => {
   try { return await btySys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("bountyAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// ⛓️ คุก (คนส้มที่ถูกล้ม → ติดคุก: ครบเวลา/จ่ายประกัน/แหกคุก) — ปิดอยู่จนกว่าตั้ง tune jail_on = 1 (functions/jail.js)
+const jailSys = makeJail(admin.database());
+exports.jailAct = onCall(async (req) => {
+  try { return await jailSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("jailAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
 
 // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ/สเตตัส (ผลคำนวณและเขียนที่ฝั่งเซิร์ฟเวอร์ — rules ไม่มีกิ่ง eatSlot ของการกินแล้ว ยกเว้นยาในการสู้บอส)
