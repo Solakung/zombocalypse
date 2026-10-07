@@ -1,0 +1,77 @@
+// ⚖️ จำลองสมดุลสายวิวัฒนาการซอมบี้ (ตะกละ/ซากหนา/เลื้อยคลาน) ใน PvP เทียบกับมนุษย์ — `node tests/sim/lines_balance.js`
+// สมมติ: สเตตัส/อาวุธ/นโยบายผู้เล่น (ไม่ใช่ข้อมูลจริงจากเกม) • สูตรหลักตรงกับ script.js (resolveAttack/attack/evoBonusAt/evoCutDmg/bleedRec/evoClaimWrites)
+// ผลแต่ละแถว: ชนะ% ของซอมบี้ (ดวลตัวต่อตัว ทั้งสองฝั่งโจมตีทุก 10 วิ จนมีฝ่ายล้ม) • เลือดซอมบี้ที่เหลือเฉลี่ยเมื่อชนะ
+const N = 8000;
+const d6 = () => 1 + Math.floor(Math.random() * 6);
+const CFG0 = { agiPen: [0, 1, 2, 3, 3], shadeHp: (s) => (s >= 3 ? 2 : s >= 2 ? 1 : 0), shadeAgi: [0, 2, 2, 2, 3], gHp: [0, 2, 2, 2, 4], evoCut: 0.9, bleed: true, bleedSteps: 18 };
+let CFG = { ...CFG0 };
+const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 4, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = CFG.gHp[g] - CFG.shadeHp(s); else if (k === "agi") v = CFG.shadeAgi[s] - CFG.agiPen[g]; else if (k === "tough") v = g >= 1 ? 1 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
+// ตารางฮีลตอนกัดโดน (ตาม evo h และขั้นมิวเตชัน m 0–4)
+const HEAL = {
+  "ปัจจุบัน 2/3/5": (h) => (h >= 4 ? 5 : h >= 2 ? 3 : 2),
+  "ข้อเสนอแรก 4/6/8/10": (h, m) => (m >= 4 ? 10 : h >= 4 ? 8 : h >= 2 ? 6 : 4),
+  "ข้อเสนอสอง 3/4/5/6": (h, m) => (m >= 4 ? 6 : h >= 4 ? 5 : h >= 2 ? 4 : 3)
+};
+function duel(z, hu, healFn, o = {}) {
+  const st = (k) => z.s[k] + evoB(z.e, k), zMax = 100 + 10 * st("hp"), hMax = 100 + 10 * hu.hp;
+  let zh = zMax, hh = hMax, bleed = 0, band = hu.band, med = hu.med, step = 0;
+  const cut = 1 - (o.extraCut || 0);   // มิวเตชันซากหนา/ความสามารถ
+  while (step++ < 60) {
+    // ซอมบี้โจมตี
+    if (d6() > d6()) {
+      let raw = 5 + st("str"); if (o.ambush && step === 1) raw *= o.ambush;
+      hh -= Math.max(1, Math.round(Math.floor(raw) * (1 - hu.red / 100)));
+      zh = Math.min(zMax, zh + healFn(z.e.h || 0, z.m || 0));
+      if (CFG.bleed && (z.e.h || 0) >= 3 && bleed <= 0) bleed = CFG.bleedSteps;   // เลือดไหล 3 นาที = 18 สเต็ป (10 วิ) — 2 HP ต่อ 15 วิ ≈ 1.33 ต่อสเต็ป
+    }
+    if (bleed > 0) { hh -= 1.33; bleed--; }
+    if (hh <= 0) return { win: 1, hp: zh / zMax };
+    // มนุษย์: ฮีลเมื่อ HP < 40% (ใช้เวลาแทนการโจมตี) ไม่งั้นโจมตี
+    if (hh < 0.4 * hMax && (band > 0 || med > 0)) { if (med > 0 && hh < 0.3 * hMax) { med--; hh = Math.min(hMax, hh + 50); } else if (band > 0) { band--; hh = Math.min(hMax, hh + 20); } else { med--; hh = Math.min(hMax, hh + 50); } bleed = 0; }
+    else if (d6() > d6() && !(Math.random() < 0.03 * st("agi"))) {
+      let dmg = Math.max(1, hu.w + hu.str - st("tough")); if (z.e.g >= 2) dmg = Math.max(1, Math.floor(dmg * CFG.evoCut)); dmg = Math.max(1, Math.round(dmg * cut)); zh -= dmg;
+    }
+    if (zh <= 0) return { win: 0, hp: 0 };
+  }
+  return { win: 0.5, hp: zh / zMax, timeout: 1 };   // หมดเวลา = เสมอ
+}
+const run = (z, hu, hf, o) => { let w = 0, hp = 0, k = 0; for (let i = 0; i < N; i++) { const r = duel(z, hu, hf, o); w += r.win; if (r.win === 1) { hp += r.hp; k++; } } return { win: w / N, hp: k ? hp / k : 0 }; };
+const pct = (x) => (100 * x).toFixed(0).padStart(3) + "%";
+const ZB = { "กลาง 26 แต้ม": { str: 8, hp: 8, agi: 6, tough: 4 }, "ปลาย 50 แต้ม": { str: 14, hp: 14, agi: 12, tough: 10 } };
+const HU = { "มนุษย์กลาง (ขวาน 18, เกราะ 15%)": { str: 9, hp: 9, w: 18, red: 15, band: 3, med: 1 }, "มนุษย์ปลาย (ซามูไร 28, เกราะ 20%)": { str: 14, hp: 14, w: 28, red: 20, band: 5, med: 2 } };
+const LINES = [["ไม่มีสาย", {}, 0, 0], ["🩸 ตะกละ ขั้น 4", { h: 4 }, 0, 0], ["🗿 ซากหนา ขั้น 4", { g: 4 }, 0, 0], ["🕷️ เลื้อยคลาน ขั้น 4", { s: 4 }, 0, 0], ["🩸 ตะกละ ขั้น 8", { h: 4 }, 4, 0], ["🗿 ซากหนา ขั้น 8 (ลดดาเมจ +4%)", { g: 4 }, 4, 0.04], ["🕷️ เลื้อยคลาน ขั้น 8", { s: 4 }, 4, 0]];
+for (const [hn, hf] of Object.entries(HEAL)) {
+  console.log(`\n=== ตารางฮีล: ${hn} === (ชนะ% ของซอมบี้ / เลือดเหลือเมื่อชนะ)`);
+  for (const [zn, zs] of Object.entries(ZB)) for (const [hun, hu] of Object.entries(HU)) {
+    let line = `${zn.padEnd(13)} vs ${hun.slice(0, 20).padEnd(20)} |`;
+    for (const [ln, e, m, ec] of LINES) { const r = run({ s: zs, e, m }, hu, hf, { extraCut: ec }); line += ` ${ln.split(" ")[1] ? ln.slice(0, 2) + ln.slice(-6) : ln.slice(0, 5)} ${pct(r.win)}`; }
+    console.log(line);
+  }
+}
+
+// ---- ลองปรับสาย (ตารางฮีลปัจจุบัน) — ชนะ% ของซอมบี้ ขั้น 4 vs มนุษย์ปลายสุด/กลาง
+function tweak(name, cfg, heal = HEAL["ปัจจุบัน 2/3/5"]) {
+  CFG = { ...CFG0, ...cfg }; let line = name.padEnd(46) + "|";
+  for (const [zn, zs] of Object.entries(ZB)) for (const [hun, hu] of Object.entries(HU)) { const r = ["h", "g", "s"].map((k) => run({ s: zs, e: { [k]: 4 }, m: 0 }, hu, heal, {}).win); line += ` ${zn.slice(0, 3)}/${hun.includes("ปลาย") ? "มปลาย" : "มกลาง"}: 🩸${pct(r[0])} 🗿${pct(r[1])} 🕷${pct(r[2])} •`; }
+  console.log(line); CFG = { ...CFG0 };
+}
+console.log("\n=== ลองปรับ (ซอมบี้ขั้น 4 ของแต่ละสาย • ตารางฮีลปัจจุบัน) ===");
+tweak("ปัจจุบัน", {});
+tweak("ตะกละ: ไม่มีเลือดไหล", { bleed: false });
+tweak("ตะกละ: เลือดไหลสั้นลง (1.5 นาที)", { bleedSteps: 9 });
+tweak("ซากหนา: เลิกลดว่องไว (−1 ที่ขั้น 3-4)", { agiPen: [0, 0, 0, 1, 1] });
+tweak("ซากหนา: ลดดาเมจ 15% (แทน 10%)", { evoCut: 0.85 });
+tweak("ซากหนา: ทั้งสองข้อ", { agiPen: [0, 0, 0, 1, 1], evoCut: 0.85 });
+tweak("เลื้อยคลาน: ไม่หัก HP", { shadeHp: () => 0 });
+tweak("เลื้อยคลาน: หัก HP ครึ่งหนึ่ง (−5/−10)", { shadeHp: (s) => (s >= 3 ? 1 : 0) });
+tweak("เลื้อยคลาน: ว่องไว +4 รวม", { shadeAgi: [0, 2, 2, 3, 4] });
+tweak("เลื้อยคลาน: ไม่หัก HP + ว่องไว +4", { shadeHp: () => 0, shadeAgi: [0, 2, 2, 3, 4] });
+
+// ---- อยู่รอด% (ไม่ตายภายใน 10 นาที = ชนะหรือหมดเวลา) และเวลาที่อยู่รอดเฉลี่ย (สเต็ป 10 วิ) — วัดบทบาทแทงค์ของซากหนา
+function surv(name, zs, hu, e, m = 0, ec = 0) {
+  let alive = 0, steps = 0; const z = { s: zs, e, m };
+  for (let i = 0; i < N; i++) { const st = (k) => z.s[k] + evoB(z.e, k); const zMax = 100 + 10 * st("hp"); const r = duel(z, hu, HEAL["ปัจจุบัน 2/3/5"], { extraCut: ec }); alive += r.win === 0 ? 0 : 1; }
+  return alive / N;
+}
+console.log("\n=== อยู่รอด% ในการดวลกับมนุษย์ปลายสุด (ตารางฮีลปัจจุบัน) ===");
+for (const [zn, zs] of Object.entries(ZB)) { let line = zn.padEnd(13) + "|"; for (const [ln, e, m, ec] of LINES) line += ` ${ln.slice(0, 2)}${ln.includes("8") ? "8" : "4"}:${pct(surv(ln, zs, HU["มนุษย์ปลาย (ซามูไร 28, เกราะ 20%)"], e, m, ec))}`; console.log(line); }

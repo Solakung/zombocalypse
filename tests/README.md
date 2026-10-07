@@ -23,6 +23,7 @@ curl -X PUT -H "Authorization: Bearer owner" --data-binary @database_rules.json 
 | `hboss.js` | บอสเผ่ามนุษย์สำหรับซอมบี้ (`functions/hboss.js`): เปิด/ปิด tune, ทอยเจอ+คูลดาวน์+ถังโทเค็น, สู้เป็นรอบ (โล่/เลือดไหล/ยาอ่อนแรง/ฉมวก/ซุ่มตีก่อน), หนี/ตาย/รับรางวัล, สูตรตรง `script.js` (BOSS_W, วิวัฒนาการ, regex กระเป๋า) |
 | `tests/sim/hboss_balance.js` | จำลองสมดุลบอสเผ่ามนุษย์ (ซอมบี้ 4 ลายสเตตัส × 4 ขั้นแต้ม) เทียบบอสฝั่งมนุษย์ — ไม่ต้องใช้ emulator `node tests/sim/hboss_balance.js` (ตัวเลขเป็นการสมมติ) |
 | `tests/sim/telemetry.js` | แดชบอร์ดสถิติผู้เล่น (ผู้เล่นหายตรงไหน/PvP ตามฝ่าย): ฟังก์ชันล้วน + คีย์ตัวนับผ่าน rules (ไม่ต้องใช้ emulator) |
+| `tests/sim/lines_balance.js` | จำลองดวล PvP ซอมบี้ตัวต่อตัวเทียบสาย 3 สาย (ตะกละ/ซากหนา/เลื้อยคลาน) × ตารางฮีลตอนกัด + ทดลองปรับค่า — สมมติสเตตัส/อาวุธ (ไม่ใช่ข้อมูลจริง) |
 | `mut.js` `career56.js` `abil.js` | มิวเตชันซอมบี้ / อาชีพขั้น 5–6 / ความสามารถ+ศึกใหญ่ |
 | `prof.js` `learn.js` `home.js` `garden.js` `col.js` `passevt.js` `sys3.js` `sys4.js` `themetest.js` | โปรไฟล์/รูป webp, โค้ช, ห้อง, สวน, สมุดสะสม, Pass+อีเวนต์, ระบบอื่นๆ |
 | `ruleparity.js` `diff.js` `basediff.js` `marketdiff.js` `e2e*.js` `walltest.js` `batch1test.js` | เทียบ rules เก่า/ใหม่ของระบบที่ย้ายมาเป็นฟังก์ชันในช่วงแรก |
