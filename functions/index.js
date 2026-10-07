@@ -22,6 +22,7 @@ const { makeProfile } = require("./profile");
 const { makeLearn } = require("./learn");
 const { makeAbility } = require("./ability");
 const { makeCook } = require("./cook");
+const { makePack } = require("./pack");
 const { makeWar } = require("./war");
 const { makeCasino } = require("./casino");
 const { makeSlave } = require("./slave");
@@ -254,6 +255,13 @@ const cookSys = makeCook(admin.database());
 exports.cookAct = onCall(async (req) => {
   try { return await cookSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("cookAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🦖 สายแรปเตอร์ (สายวิวัฒนาการที่ 4 ของซอมบี้: เลือดน้อย หลบเก่ง ลูกฝูงช่วยสู้) — ซื้อ/รีเซ็ตขั้นด้วย DNA + สรุปจำนวนต่อสาย (owner/gm) (functions/pack.js)
+const packSys = makePack(admin.database());
+exports.packAct = onCall(async (req) => {
+  try { return await packSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("packAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
 
 // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ/สเตตัส (ผลคำนวณและเขียนที่ฝั่งเซิร์ฟเวอร์ — rules ไม่มีกิ่ง eatSlot ของการกินแล้ว ยกเว้นยาในการสู้บอส)

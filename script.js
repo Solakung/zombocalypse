@@ -48,6 +48,7 @@ const learnCall = (data) => httpsCallable(fns, "learnAct")(data).then((r) => r.d
 const abilCall = (data) => httpsCallable(fns, "abilAct")(data).then((r) => r.data);   // ⚡ ความสามารถประจำสาย (functions/ability.js)
 const slaveCall = (data) => httpsCallable(fns, "slaveAct")(data).then((r) => r.data);   // 🃏 โต๊ะสลาฟหลายผู้เล่น (functions/slave.js)
 const casinoCall = (data) => httpsCallable(fns, "casinoAct")(data).then((r) => r.data);   // 🎰 คาสิโนเถื่อน (functions/casino.js)
+const packCall = (data) => httpsCallable(fns, "packAct")(data).then((r) => r.data);   // 🦖 สายแรปเตอร์ (functions/pack.js)
 const mutCall = (data) => httpsCallable(fns, "mutAct")(data).then((r) => r.data);   // 🧬 มิวเตชันซอมบี้ขั้น 5–8 (functions/mutate.js)
 const hcCall = (data) => httpsCallable(fns, "hcAct")(data).then((r) => r.data);   // 📡 ภารกิจ HC: ค้นพบธารา/ส่ง DNA (functions/hc.js)
 const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data);   // ⚔️ แต้มศึกชิงโซนรายสัปดาห์ (functions/zwar.js)
@@ -608,7 +609,7 @@ const effV = (t) => (effActive(t) ? state.effects[t].v || 0 : 0);
 const maxHp = () => HP_BASE + 10 * statOf("hp");
 const maxStamina = () => STAMINA_BASE + 10 * statOf("st");
 const regenPerTick = () => Math.max(0, 1 + 0.5 * statOf("regen"));
-const dodgeChance = () => Math.max(0, DODGE_PER_POINT * statOf("agi"));
+const dodgeChance = () => { const d = Math.max(0, DODGE_PER_POINT * statOf("agi")); return packT() ? Math.min(packTable().dodgeCap, d + packDodgeBonus()) : d; };   // สายแรปเตอร์: หลบเพิ่มตามขั้น เพดาน 65%
 
 // ---- หิว/กระหายตามเวลา: เก็บ food/water + foodTs/waterTs → ค่าจริง = ค่าที่เก็บ − จำนวนรอบที่ผ่านไป ----
 const hungerMs = (k) => (k === "food" ? FOOD_DECAY_MS[state.profile?.faction] || FOOD_DECAY_MS.human : WATER_DECAY_MS);
@@ -2456,7 +2457,7 @@ function hbRender() {
   const won = f.hp <= 0, busy = !!state.hbBusy, stun = effActive("stun");
   $("hb-title").textContent = `${f.icon} ${f.name}`;
   { const art = $("hb-art"); if (art) { const src = `img/boss/${f.art}.webp`; art.classList.add("hidden"); imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } }
-  $("hb-tag").textContent = f.tag + (f.shieldMax ? ` • 🛡️ โล่ ${f.shield}/${f.shieldMax}` : "") + (f.pdot ? ` • 🩸 แผลติดตัว −${f.pdot.per}/รอบ (อีก ${f.pdot.n} รอบ)` : "") + (f.weak ? ` • 💉 อ่อนแรง (โจมตีอีก ${f.weak.n} ครั้งเหลือ ${100 - f.weak.pct}%)` : "");
+  $("hb-tag").textContent = f.tag + (f.shieldMax ? ` • 🛡️ โล่ ${f.shield}/${f.shieldMax}` : "") + (f.pdot ? ` • 🩸 แผลติดตัว −${f.pdot.per}/รอบ (อีก ${f.pdot.n} รอบ)` : "") + (f.weak ? ` • 💉 อ่อนแรง (โจมตีอีก ${f.weak.n} ครั้งเหลือ ${100 - f.weak.pct}%)` : "") + (f.pack ? " • 🦖 ลูกฝูงช่วยสู้" : "");
   $("bar-hb").style.width = Math.max(0, (f.hp / f.max) * 100) + "%"; $("txt-hb").textContent = `เขา ${Math.max(0, f.hp)}/${f.max}`;
   $("bar-hb-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-hb-me").textContent = `HP ${p.hp}/${maxHp()}`;
   $("hb-attack").classList.toggle("hidden", won); $("hb-attack").disabled = busy || stun; $("hb-attack").textContent = stun ? "😵 มึนงง" : "🦷 ขย้ำ";
@@ -3374,7 +3375,9 @@ async function resolveAttack(key, a) {
 
   const hit = a.roll > defRoll;
   const dodged = hit && p.faction === "zombie" && Math.random() < dodgeChance();
-  const landed = hit && !dodged;
+  const packTxt = packFightTouch();   // 🦖 สายแรปเตอร์: ลูกฝูงปรากฏตอนเริ่มสู้
+  const blocked = hit && !dodged && packT() > 0 && Math.random() < packIntercept();   // ลูกฝูงรับดาเมจแทน (ไม่ตาย)
+  const landed = hit && !dodged && !blocked;
   const rawDmg = a.wdmg ?? attackDmg(a.wpn, { dmg: a.wdmg });
   const tough = a.sk === "pierce" || a.skt === "pierce" ? 0 : statOf("tough");   // ทะลวงเกราะ: ไม่หักค่า tough
   const bi = braceInfo(), braced = landed && bi.left > 0;                        // ท่าตั้งรับ: ดาเมจที่โดนลดตาม %
@@ -3398,12 +3401,15 @@ async function resolveAttack(key, a) {
     try { text += wfxHit(u, a); } catch { /* ข้าม */ }   // อาวุธติดสถานะของมนุษย์ที่โจมตีซอมบี้
     u[`users/${state.uid}/hp`] = newHp;
     if (newHp === 0) { text += ` — ${p.username} ล้มลง!`; try { bountyKillWrite(u, state.uid, a.fromName); } catch { /* ข้าม */ } }
+  } else if (blocked) {
+    text += `${a.fromName} ฟาดโดน แต่ 🦖 ลูกฝูงกระโจนมารับแทน! ${p.username} ไม่เป็นไร`;
   } else if (dodged) {
     text += `${p.username} หลบได้ในจังหวะสุดท้าย! 💨`; achBump("pdodge");
   } else {
     text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`; achBump("pdef");
   }
 
+  if (packTxt) text += packTxt;
   const chatRef = push(ref(db, "chats/" + state.zone));
   // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
   u[`chats/${state.zone}/${chatRef.key}`] = { uid: state.uid, name: p.username, faction: p.faction, text, type: "combat", ts: serverTimestamp() };
@@ -4375,9 +4381,54 @@ function evoBonusAt(k, e) {
   else if (k === "tough") v = g >= 1 ? 2 : 0;
   else if (k === "st") v = g >= 3 ? -2 : 0;
   else if (k === "regen") v = g >= 3 ? -1 : 0;
+  v += packBonusAt(k, (h || g || s) ? 0 : e?.p);   // สายแรปเตอร์ (เฉพาะเมื่อไม่มีสายอื่น) — ต้องตรง functions/pack.js
   return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
 }
-function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, state.evo) : 0; }
+function evoBonus(k) { return state.profile?.faction === "zombie" ? evoBonusAt(k, { ...state.evo, p: state.pack?.t || 0 }) : 0; }
+
+/* ---------- 🦖 สายแรปเตอร์ (สายที่ 4) — functions/pack.js • เลือดน้อย หลบเก่ง ลูกฝูงปรากฏตอนเริ่มสู้ (หายเมื่อจบ) • ขั้นเก็บที่ pack/{uid} ผ่านฟังก์ชัน ---------- */
+function packTable() {   // ต้องตรง functions/pack.js (มีเทสต์ตรวจ) — เป็นฟังก์ชันเพื่อเลี่ยง TDZ (statOf เรียก evoBonus ก่อนบล็อกนี้ถูกรัน)
+  return { cost: [3, 6, 10, 15], hp: [0, -2, -3, -4, -5], agi: [0, 1, 2, 3, 4], dodge: [0, 0.04, 0.08, 0.13, 0.18], icpt: [0, 0.10, 0.15, 0.22, 0.30], bite: [null, [1, 1], [1, 2], [1, 3], [2, 4]], dodgeCap: 0.65, fightMs: 120000 };
+}
+function packBonusAt(k, t) { const T = Math.max(0, Math.min(4, Math.floor(Number(t) || 0))), P = packTable(); return k === "hp" ? P.hp[T] : k === "agi" ? P.agi[T] : 0; }
+function packT() { const e = state.evo || {}; return state.profile?.faction === "zombie" && !(e.h || e.g || e.s) ? Math.max(0, Math.min(4, Math.floor(state.pack?.t || 0))) : 0; }
+const PACK_TIERS = [["เรียกฝูง", "ลูกฝูง 1 ตัวโผล่ตอนเริ่มสู้ รับดาเมจแทน 10% • หลบ +4% • ว่องไว +1 • HP −20 • ลูกฝูงกัดบอส 1"], ["ล่าเป็นหมู่", "รับแทน 15% • หลบ +8% • ว่องไว +2 • HP −30 • ลูกฝูงกัดบอส 1–2"], ["หมาหมู่", "รับแทน 22% • หลบ +13% • ว่องไว +3 • HP −40 • ลูกฝูงกัดบอส 1–3"], ["ราชาแรปเตอร์", "รับแทน 30% • หลบ +18% • ว่องไว +4 • HP −50 • ลูกฝูงกัดบอส 2–4"]];
+function packDodgeBonus() { return packTable().dodge[packT()] || 0; }
+// ลูกฝูงในการต่อสู้ PvP: ปรากฏเมื่อถูกโจมตีแล้วยังไม่อยู่ในการต่อสู้ (หน้าต่าง 2 นาที ต่อเวลาทุกครั้งที่โดนโจมตี) → คืนข้อความเมื่อเพิ่งปรากฏ / หายไปเองเมื่อพ้นหน้าต่าง
+function packFightTouch() {
+  if (!packT()) return ""; const now = serverNow(), P = packTable(), fresh = !(state.packFight && state.packFight > now);
+  state.packFight = now + P.fightMs; clearTimeout(state.packTm);
+  state.packTm = setTimeout(() => { state.packFight = null; try { logLine("🦖 ลูกฝูงหายไปแล้ว (จบการต่อสู้)", "system"); } catch { /* ข้าม */ } }, P.fightMs + 500);
+  return fresh ? " 🦖 ลูกฝูงปรากฏ!" : "";
+}
+const packIntercept = () => packTable().icpt[packT()] || 0;
+async function packSync(a = "state") {
+  if (state.packBusy || state.profile?.faction !== "zombie") return;
+  state.packBusy = true;
+  try {
+    const r = await packCall({ a }); state.pack = { t: r.t || 0, sp: r.sp || 0, rs: r.rs || 0 };
+    const u = {}; evoClampHp(u, { h: state.evo?.h || 0, g: state.evo?.g || 0, s: state.evo?.s || 0, p: state.pack.t }); if (Object.keys(u).length) await update(ref(db), u).catch(() => {});
+    renderBars(); if (!$("evo-modal")?.classList.contains("hidden")) renderEvo();
+    if (a === "buy" && r.bought) { toast(`🦖 ${PACK_TIERS[r.bought - 1][0]} สำเร็จ`); achBump("evo"); }
+    if (a === "reset") toast(`รีเซ็ตแรปเตอร์แล้ว ได้ DNA คืน ${r.refund || 0}`);
+  } catch (e) { toast(errMsg(e)); } finally { state.packBusy = false; }
+}
+function packRender(body) {
+  if (state.profile?.faction !== "zombie") return;
+  if (!state.pack && !state.packBusy) packSync();
+  const e = state.evo || {}, t = state.pack?.t || 0, other = !!(e.h || e.g || e.s), card = mk("div");
+  card.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
+  card.append(mk("b", "", `🦖 สายแรปเตอร์ ${t >= 1 && !other ? "⭐ สายหลัก" : ""} — ขั้น ${t}/4`), mk("span", "muted", "เลือดน้อยมาก หลบเก่ง มีลูกฝูงสู้แทน (หมาหมู่)"));
+  PACK_TIERS.forEach(([n, d], i) => {
+    const row = mk("div"); row.style.cssText = "display:flex;justify-content:space-between;gap:8px;align-items:center";
+    row.append(mk("span", i < t ? "" : "muted", `${i < t ? "✅" : i === t ? "▶" : "🔒"} ขั้น ${i + 1} ${n}: ${d}`));
+    if (i === t && t < 4) { const cost = packTable().cost[t], b = btn(`${cost} DNA`, () => { if (other) return toast("ต้องรีเซ็ตสายตะกละ/ซากหนา/เลื้อยคลานก่อน"); packSync("buy"); }, "btn primary mini"); b.disabled = other || (e.dna || 0) < cost || !!state.packBusy || !state.evo; row.append(b); }
+    card.append(row);
+  });
+  card.append(mk("span", "muted", "ลูกฝูงปรากฏเอง 1 ตัวตอนเริ่มสู้ (บอสเผ่ามนุษย์/โดนผู้เล่นโจมตี) หายเมื่อจบ ไม่มีเลือดจึงไม่ตาย • ในบอสลูกฝูงกัดช่วย ส่วน PvP รับดาเมจแทนอย่างเดียว • ราคา: HP ต่ำมาก (−20 ถึง −50) ตายง่ายถ้าโดนติดๆ • เป็นสายแยก: ต้องไม่มีขั้นสายอื่น (รีเซ็ตก่อน)"));
+  if (t > 0) { const left = state.pack?.rs ? 86400000 - (serverNow() - state.pack.rs) : 0, rb = btn(left > 0 ? `รีเซ็ตแรปเตอร์ (รออีก ${Math.ceil(left / 3600000)} ชม.)` : `รีเซ็ตแรปเตอร์ (คืน ${Math.floor((state.pack?.sp || 0) * 0.7)} DNA)`, () => { if (confirm("รีเซ็ตสายแรปเตอร์? จะได้ DNA คืน 70%")) packSync("reset"); }, "btn danger wide"); rb.disabled = left > 0 || !!state.packBusy; card.append(rb); }
+  body.append(card);
+}
 
 function searchCost() { return Math.ceil((evoT("s") >= 2 ? 8 : STAMINA_COST) * (state.deep ? (gearHas("toolkit") ? 1.6 : 2) : 1)); }                 // ค้นหาไว: เสียพลังงาน −20%
 function evoCutDmg(dmg) { return evoT("g") >= 2 ? Math.max(1, Math.floor(dmg * 0.85)) : dmg; }   // ไขมันเกราะ: −15%
@@ -4403,7 +4454,7 @@ function listenEvo() {
   const b = btn("🧬 วิวัฒนาการ", openEvo, "btn ghost mini"); b.id = "btn-evo";
   $("btn-profile").before(b);
   onValue(ref(db, "evo/" + state.uid), (s) => {
-    state.evo = s.val(); state.evoResolve?.();
+    state.evo = s.val(); state.evoResolve?.(); if (!state.pack && !state.packBusy) packSync();
     renderBars(); syncEvoTitle();
     scavLabel();
     if (!$("evo-modal")?.classList.contains("hidden")) renderEvo();
@@ -4469,6 +4520,7 @@ function evoClampHp(u, tiers) {   // ถ้าเพดาน HP ใหม่ต
 }
 async function evoBuy(lineId) {
   const e = state.evo; if (!e || state.evoBusy) return;
+  if (packT() > 0) return toast("มีสายแรปเตอร์อยู่ — รีเซ็ตแรปเตอร์ก่อนจึงจะอัปสายอื่นได้");
   const L = EVO_LINES[lineId], cur = e[L.key] || 0, next = cur + 1;
   const main = e.line && e.line !== "none" ? e.line : lineId;
   if (next > 4) return toast("ขั้นสูงสุดแล้ว");
@@ -4550,6 +4602,7 @@ function renderEvo() {
     if (locked) card.append(mk("span", "muted", "สายอื่น: อัปได้ถึงขั้น 1 เท่านั้น"));
     body.append(card);
   });
+  try { packRender(body); } catch (er) { console.warn("pack", er); }
   try { mutRender(body); } catch { /* ข้าม */ }
   const left = e.rs ? EVO_RESET_CD - (serverNow() - e.rs) : 0;
   const rb = btn(left > 0 ? `รีเซ็ต (รออีก ${Math.ceil(left / 3600000)} ชม.)` : `รีเซ็ตวิวัฒนาการ (คืน ${Math.floor((e.sp || 0) * EVO_REFUND)} DNA)`, evoReset, "btn danger wide");
@@ -11887,9 +11940,9 @@ function retCompute(people, now) {   // "หายไป" = ไม่เห็�
   const fac = (f) => { const all = rows.filter((p) => (p.u.faction === "zombie" ? "zombie" : "human") === f); return { n: all.length, gone: all.filter(isGone).length }; };
   return { n: rows.length, gone: gone.length, active: rows.length - gone.length, buckets, medSrch: medianOf(srch), never: srch.filter((x) => x < 1).length, dead: gone.filter((p) => p.u.hp === 0).length, zones: Object.entries(zones).sort((x, y) => y[1] - x[1]).slice(0, 3), human: fac("human"), zombie: fac("zombie") };
 }
-const pvpLineKey = () => { const e = state.evo || {}, t = [["h", e.h || 0], ["g", e.g || 0], ["s", e.s || 0]].sort((a, b) => b[1] - a[1])[0]; return t[1] >= 1 ? t[0] : "n"; };   // สายวิวัฒนาการหลักของผู้ถูกโจมตี (ขั้นสูงสุด; ยังไม่วิวัฒนาการ = n)
+const pvpLineKey = () => { const e = state.evo || {}, t = [["h", e.h || 0], ["g", e.g || 0], ["s", e.s || 0]].sort((a, b) => b[1] - a[1])[0]; return t[1] >= 1 ? t[0] : (typeof packT === "function" && packT() > 0 ? "p" : "n"); };   // สายวิวัฒนาการหลักของผู้ถูกโจมตี (ขั้นสูงสุด; ยังไม่วิวัฒนาการ = n)
 function pvpLinesCompute(people) {   // ซอมบี้ถูกโจมตีแยกตามสาย (บันทึกโดยผู้ถูกโจมตีเอง): qa รับโจมตี / qh โดน / qd ดาเมจรวม / qx ล้ม
-  const R = {}; ["h", "g", "s", "n"].forEach((l) => { R[l] = { atk: 0, hit: 0, dmg: 0, died: 0 }; });
+  const R = {}; ["h", "g", "s", "p", "n"].forEach((l) => { R[l] = { atk: 0, hit: 0, dmg: 0, died: 0 }; });
   people.forEach((p) => { const c = p.a?.c; if (!c) return; for (const l in R) { R[l].atk += c["qa" + l] || 0; R[l].hit += c["qh" + l] || 0; R[l].dmg += c["qd" + l] || 0; R[l].died += c["qx" + l] || 0; } });
   return R;
 }
@@ -11897,6 +11950,11 @@ function pvpCompute(people) {   // ตัวนับบันทึกโดย
   const M = { z: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } }, h: { human: { atk: 0, hit: 0, dmg: 0 }, zombie: { atk: 0, hit: 0, dmg: 0 } } }, died = { human: 0, zombie: 0 };
   people.forEach((p) => { const c = p.a?.c; if (!c || !p.u) return; const df = p.u.faction === "zombie" ? "zombie" : "human"; ["z", "h"].forEach((af) => { const m = M[af][df]; m.atk += c["patk" + af] || 0; m.hit += c["phit" + af] || 0; m.dmg += c["pdmg" + af] || 0; }); died[df] += c.pdie || 0; });
   return { M, died };
+}
+const EVO_DIST_NAMES = [["hunter", "🩸 ตะกละ"], ["giant", "🗿 ซากหนา"], ["shade", "🕷️ เลื้อยคลาน"], ["pack", "🦖 แรปเตอร์"]];
+function evoDistLines(d) {   // d = ผลของ packAct a:"dist" → บรรทัดสรุป (ฟังก์ชันล้วน)
+  const out = EVO_DIST_NAMES.map(([k, n]) => { const a = (d && d[k]) || [0, 0, 0, 0, 0], tot = a[1] + a[2] + a[3] + a[4]; return `${n}: ${tot} คน (${a[1]}/${a[2]}/${a[3]}/${a[4]})`; });
+  out.push(`ยังไม่วิวัฒน์: ${(d && d.none) || 0} คน`); return out;
 }
 // ---- /สถิติผู้เล่น
 async function econRender(box) {
@@ -11927,9 +11985,14 @@ async function econRender(box) {
       box.append(mk("div", "hub-day", "🥊 PvP (นับเมื่อผู้ถูกโจมตีเล่นเวอร์ชันนี้ • ผู้โจมตี→ผู้ถูกโจมตี)"));
       const F = { z: "🧟", h: "🧑" }, DF = { human: "🧑", zombie: "🧟" }; let any = false;
       ["z", "h"].forEach((af) => ["human", "zombie"].forEach((df) => { const m = V.M[af][df]; if (!m.atk) return; any = true; box.append(mk("div", "", `${F[af]}→${DF[df]}: โจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจเฉลี่ย ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"}`)); }));
-      { const LN = { h: "🩸 ตะกละ", g: "🗿 ซากหนา", s: "🕷️ เลื้อยคลาน", n: "ยังไม่วิวัฒน์" }, PL = pvpLinesCompute(D.people); Object.entries(PL).forEach(([l, m]) => { if (m.atk) box.append(mk("div", "", `🧟 ${LN[l]} ถูกโจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจที่รับ/ครั้งที่โดน ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"} • ล้ม ${m.died}`)); }); }
+      { const LN = { h: "🩸 ตะกละ", g: "🗿 ซากหนา", s: "🕷️ เลื้อยคลาน", p: "🦖 แรปเตอร์", n: "ยังไม่วิวัฒน์" }, PL = pvpLinesCompute(D.people); Object.entries(PL).forEach(([l, m]) => { if (m.atk) box.append(mk("div", "", `🧟 ${LN[l]} ถูกโจมตี ${m.atk} ครั้ง โดน ${m.hit} (${pc(m.hit, m.atk)}) • ดาเมจที่รับ/ครั้งที่โดน ${m.hit ? (m.dmg / m.hit).toFixed(1) : "–"} • ล้ม ${m.died}`)); }); }
       box.append(mk("div", any ? "" : "muted", any ? `ล้มจาก PvP: 🧑 ${V.died.human} • 🧟 ${V.died.zombie}` : "ยังไม่มีข้อมูล PvP (เริ่มนับเมื่อผู้ถูกโจมตีอัปเดตเวอร์ชันนี้)"));
     } catch (e) { console.warn("telemetry", e); }
+    try {   // 🧬 ซอมบี้เลือกสายไหนกันแน่ (ฟังก์ชัน packAct a:"dist" — owner/gm)
+      const d = await packCall({ a: "dist" });
+      box.append(mk("div", "hub-day", `🧬 สายวิวัฒนาการของซอมบี้ (${d.n} คน) — ขั้น 1/2/3/4`));
+      evoDistLines(d).forEach((t) => box.append(mk("div", "", t)));
+    } catch (e) { console.warn("evodist", e); }
     const hrs = base ? Math.max(1, Math.round((Date.now() - base.t) / 3600000)) : 0;
     box.append(mk("div", "hub-day", `📊 กิจกรรมรวม (ตลอดชีพ${base ? ` • เทียบ ${hrs} ชม.ก่อน` : " • ยังไม่มีสแนปช็อตเก่าให้เทียบ — เปิดซ้ำภายหลัง"})`));
     ECON_KEYS.forEach(([k, label]) => { const d = base ? X.tot[k] - (base.tot[k] || 0) : null; box.append(mk("div", "", `${label}: ${fmt(X.tot[k])}${d ? `  (+${fmt(d)})` : ""}`)); });

@@ -3,7 +3,7 @@ const fs = require("fs"), assert = require("assert"), path = require("path"), ru
 const sc = fs.readFileSync(path.resolve(__dirname, "../../script.js"), "utf8");
 const part = sc.slice(sc.indexOf("// ---- 📉 สถิติผู้เล่น"), sc.indexOf("// ---- /สถิติผู้เล่น"));
 assert(part.length > 500);
-const { retCompute, pvpCompute } = new Function(part + "; return { retCompute, pvpCompute };")();
+const { retCompute, pvpCompute, pvpLinesCompute, evoDistLines } = new Function(part + "; return { retCompute, pvpCompute, pvpLinesCompute, evoDistLines };")();
 const H = 3600000, D = 86400000, now = 100 * D;
 const P = (u, srch, extra = {}) => ({ u: { role: "player", faction: "human", zone: "ruins", hp: 50, ...u }, a: { c: { srch, ...extra } } });
 const people = [
@@ -32,4 +32,10 @@ assert.deepStrictEqual(V.M.z.human, { atk: 15, hit: 7, dmg: 70 }); assert.deepSt
 // ตัวนับต้องผ่าน rules ach/c ($k = [a-z0-9]{1,10}) และถูกเขียนใน resolveAttack ครบ
 const kre = new RegExp(rules.ach.$uid.c.$k[".validate"].match(/matches\(\/(\^\[[^/]+)\//)[1]);
 for (const k of ["patkz", "patkh", "phitz", "phith", "pdmgz", "pdmgh", "pdie"]) { assert(kre.test(k), "rules key " + k); assert(sc.includes(`"${k}"`) || sc.includes(`"${k.slice(0, -1)}" + sf`), "bump " + k); }
+// สายแรปเตอร์: ตัวนับ PvP แยกสาย (qap/qhp/qdp/qxp ผ่านกฎ ach/c ที่รับคีย์ a-z0-9 ≤10 ตัว) + สรุปจำนวนต่อสาย
+{ const L = pvpLinesCompute([{ a: { c: { qap: 6, qhp: 2, qdp: 30, qxp: 1, qah: 4 } } }, { a: { c: { qap: 4 } } }, { a: null }]);
+  assert.deepStrictEqual(L.p, { atk: 10, hit: 2, dmg: 30, died: 1 }); assert.strictEqual(L.h.atk, 4); assert.deepStrictEqual(Object.keys(L), ["h", "g", "s", "p", "n"]);
+  assert(/^[a-z0-9]{1,10}$/.test("qap") && /^[a-z0-9]{1,10}$/.test("qxp"));
+  const lines = evoDistLines({ hunter: [0, 3, 1, 0, 0], giant: [0, 0, 0, 0, 2], shade: [0, 0, 0, 0, 0], pack: [0, 1, 2, 0, 1], none: 5, n: 15 });
+  assert.deepStrictEqual(lines, ["🩸 ตะกละ: 4 คน (3/1/0/0)", "🗿 ซากหนา: 2 คน (0/0/0/2)", "🕷️ เลื้อยคลาน: 0 คน (0/0/0/0)", "🦖 แรปเตอร์: 4 คน (1/2/0/1)", "ยังไม่วิวัฒน์: 5 คน"]); assert.strictEqual(evoDistLines(null).length, 5); }
 console.log("TELEMETRY OK");
