@@ -1674,6 +1674,7 @@ function renderCraft() {
   const sec = $("craft-section"); if (!sec || !state.profile) return;
   const human = state.profile.faction === "human";
   sec.classList.toggle("hidden", !human); if (!human) return;
+  cookEntry(sec);
   const ul = $("craft-list"); ul.innerHTML = "";
   const canOf = (r) => state.zone === "safe" && Object.entries(r.need).every(([m, n]) => (state.inv[m]?.qty || 0) >= n);
   Object.entries(RECIPES).sort((a, b) => (canOf(b[1]) ? 1 : 0) - (canOf(a[1]) ? 1 : 0)).forEach(([id, r]) => {
@@ -2738,6 +2739,83 @@ function jailWorldRows(box) {
   });
 }
 $("jail-work").addEventListener("click", jailWorkOpen); $("jail-dig").addEventListener("click", jailDig); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
+
+// ---- 🍳 พ่อครัว + มินิเกมทำอาหาร — functions/cook.js • ทำที่ Safe Zone (มนุษย์) • ปิดอยู่จนกว่าเจ้าของตั้ง tune cook_on = 1
+const cookOn = () => T("cook_on", 0) === 1;
+const cookCall = (data) => httpsCallable(fns, "cookAct")(data).then((r) => r.data);
+const COOK_TIER_ICON = ["🥣", "👍", "😋", "🌟"];
+function cookEl() {
+  if (!$("cook-modal")) {
+    const m = mk("div", "modal sheet hidden"); m.id = "cook-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true"); m.setAttribute("aria-label", "ครัวพ่อครัว");
+    m.addEventListener("click", (e) => { if (e.target === m && !state.cookBusy) m.classList.add("hidden"); });
+    const box = mk("div", "modal-box"), head = mk("div", "modal-head"); head.append(mk("h2", "", "🍳 ครัว"), btn("ปิด", () => { if (!state.cookBusy) m.classList.add("hidden"); }, "btn ghost mini"));
+    const body = mk("div", "hub2-body"); body.id = "cook-body"; body.style.marginTop = "10px"; box.append(head, body); m.append(box); document.body.append(m);
+  }
+  return $("cook-body");
+}
+async function cookOpen() {
+  if (state.cookBusy) return; const body = cookEl(); $("cook-modal").classList.remove("hidden"); body.innerHTML = ""; body.append(mk("div", "muted", "กำลังโหลดครัว…"));
+  try { cookMenu(await cookCall({ a: "state" })); } catch (e) { body.innerHTML = ""; body.append(mk("div", "", hbMsg(e))); }
+}
+function cookMenu(s, msg) {
+  const body = cookEl(); body.innerHTML = ""; state.cook = s;
+  if (msg) { const m = mk("div", "", msg); m.style.cssText = "padding:8px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px"; body.append(m); }
+  if (!s.on) return body.append(mk("div", "muted", "ครัวยังไม่เปิดให้บริการ"));
+  body.append(mk("div", "", `👨‍🍳 ${s.title} • ทำสำเร็จ ${s.n} จาน (เพอร์เฟกต์ ${s.p})${s.next ? ` • ขั้นถัดไปที่ ${s.next} จาน` : " • ฝีมือสูงสุดแล้ว"}`));
+  body.append(mk("div", "muted", `กดตามจังหวะ 2–3 ขั้นตอน (สับ/คน/ตีไข่/ทอด/ย่าง) — ยิ่งเป๊ะ บัฟยิ่งแรงและนาน • ฝีมือสูงขึ้น = จังหวะให้อภัยกว้างขึ้น ×${s.win} • ได้บัฟ ไม่ฟื้น HP`));
+  const safe = state.zone === "safe" && state.profile?.hp > 0, NAME = { str: "💪โจมตี", hp: "❤️เลือด", st: "⚡พลังงาน", regen: "🔄ฟื้นตัว" };
+  s.dishes.forEach((d) => {
+    const row = mk("div", "world-row"), have = d.need.map(([id, q]) => `${ITEMS[id]?.icon || "?"} ${state.inv[id]?.qty || 0}/${q}`).join(" "), ok = d.need.every(([id, q]) => (state.inv[id]?.qty || 0) >= q);
+    row.append(mk("div", "", `${d.i} ${d.n}${d.sp ? " ⭐" : ""} ← ${have} • บัฟ ${NAME[d.main]}${d.sec ? ` / ${NAME[d.sec]}` : ""} • ${d.pool.map((k) => ({ chop: "🔪", stir: "🥄", whisk: "🥣", fry: "🍳", grill: "🔥" }[k])).join("")}`));
+    const b = btn(d.locked ? `🔒 ขั้น ${d.rank}` : "ทำ", () => cookPlay(d.id), "btn primary mini"); b.disabled = d.locked || !ok || !safe; if (!safe) b.title = "ต้องอยู่ Safe Zone"; row.append(b); body.append(row);
+  });
+  if (!safe) body.append(mk("div", "muted", "⚠️ ทำอาหารได้เฉพาะที่ Safe Zone"));
+}
+async function cookPlay(dish) {
+  if (state.cookBusy) return; state.cookBusy = true; const body = cookEl(); let raf = 0;
+  const stop = () => { cancelAnimationFrame(raf); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.code === "Space" || e.key === " ") { e.preventDefault(); hit(); } };
+  let st, presses, hit = () => {};
+  try {
+    st = await cookCall({ a: "start", dish }); presses = st.steps.map(() => []);
+    body.innerHTML = ""; const title = mk("div", "", `${st.i} ${st.n}`); title.style.cssText = "font-size:18px;font-weight:bold;text-align:center"; const lab = mk("div", "", "เตรียมตัว…"); lab.style.cssText = "text-align:center;margin:6px 0;font-size:20px;min-height:28px";
+    const lane = mk("div"); lane.style.cssText = "position:relative;height:64px;margin:10px 0;border-radius:10px;background:#20252b;border:1px solid #444;overflow:hidden";
+    const line = mk("div"); line.style.cssText = "position:absolute;top:0;bottom:0;left:18%;width:4px;margin-left:-2px;background:#fff;box-shadow:0 0 8px #fff;z-index:2"; lane.append(line);
+    const notes = st.steps.map((s) => s.at.map((b, i) => { const n = mk("div", "", s.i); n.style.cssText = "position:absolute;top:50%;font-size:30px;line-height:1;transform:translate(-50%,-50%);will-change:left"; lane.append(n); return { b, n, hit: false, step: s }; })).flat();
+    const fb = mk("div", "", " "); fb.style.cssText = "text-align:center;min-height:28px;font-size:22px;font-weight:bold"; const press = btn("🖐️ กด!", () => {}, "btn primary"); press.style.cssText = "width:100%;min-height:72px;font-size:24px;touch-action:manipulation"; press.setAttribute("aria-label", "กดตามจังหวะ");
+    body.append(title, lab, lane, fb, press, mk("div", "muted", "กดปุ่มตอนไอคอนมาถึงเส้นขาว (หรือกดสเปซบาร์)"));
+    const SPEED = 0.2, mul = st.mul || 1, W = { perfect: st.win.perfect * mul, good: st.win.good * mul, ok: st.win.ok * mul };   // % ของเลนต่อมิลลิวินาที
+    const stepAt = (rel) => { let k = -1, bd = 700; st.steps.forEach((s, i) => s.at.forEach((b) => { const d = Math.abs(rel - b); if (d <= bd) { bd = d; k = i; } })); return k; };   // ขั้นที่มีจังหวะใกล้เวลานี้ที่สุด (ภายใน 700ms)
+    hit = () => {
+      const rel = serverNow() - st.t0, k = stepAt(rel); if (k < 0) return;
+      presses[k].push(st.t0 + rel);
+      let best = null, be = 1e9; notes.forEach((x) => { if (x.step === st.steps[k] && !x.hit) { const e = Math.abs(rel - x.b); if (e < be) { be = e; best = x; } } });
+      if (best && be <= W.ok) { best.hit = true; best.n.style.opacity = "0.25"; } fb.textContent = !best ? "✖️" : be <= W.perfect ? "✨ เป๊ะ!" : be <= W.good ? "👍 ดี" : be <= W.ok ? "🙂 พอใช้" : "✖️ พลาด"; try { sfx("click"); } catch { /* ข้าม */ }
+    };
+    press.onpointerdown = (e) => { e.preventDefault(); hit(); }; document.addEventListener("keydown", onKey);
+    await new Promise((resolve) => {
+      const tick = () => {
+        const rel = serverNow() - st.t0; notes.forEach((x) => { const p = 18 + (x.b - rel) * SPEED / 10; x.n.style.left = p.toFixed(1) + "%"; x.n.style.display = p < -5 || p > 105 ? "none" : ""; });
+        const k = stepAt(rel); lab.textContent = rel < st.steps[0].at[0] - 1200 ? "เตรียมตัว…" : k >= 0 ? `${st.steps[k].i} ${st.steps[k].n}  (${k + 1}/${st.steps.length})` : "…";
+        if (rel >= st.end + 250) return resolve(); raf = requestAnimationFrame(tick);
+      }; tick();
+    });
+    stop(); press.disabled = true; lab.textContent = "กำลังตัดสิน…";
+    const r = await cookCall({ a: "done", presses });
+    achBump("cook"); try { sfx(r.tier >= 3 ? "boss" : "click"); } catch { /* ข้าม */ }
+    const sNames = { str: "💪โจมตี", hp: "❤️เลือด", st: "⚡พลังงาน", regen: "🔄ฟื้นตัว" }, fx = Object.entries(r.stats || {}).map(([k, v]) => `${sNames[k]}+${v}`).join(" ");
+    const txt = `${COOK_TIER_ICON[r.tier]} ${r.name}${r.qty > 1 ? ` ×${r.qty} (โชคดี ได้ 2 จาน!)` : ""} — ${r.tierName} • เป๊ะ ${r.perfect}/${r.beats} จังหวะ${r.flawless ? " 🌟 ไร้ที่ติ!" : ""}${fx ? ` • บัฟ ${fx} นาน ${r.bmin} นาที (เมื่อกิน)` : " • ไม่มีบัฟ (กินอิ่มอย่างเดียว)"}${r.rankUp ? ` • 🎉 ฝีมือขึ้นเป็น ${r.title}!` : ""}`;
+    toast(txt); try { logLine(`🍳 ${txt}`, "system"); } catch { /* ข้าม */ }
+    state.cookBusy = false; const s2 = await cookCall({ a: "state" }); cookMenu(s2, txt);
+  } catch (e) { stop(); toast(hbMsg(e)); state.cookBusy = false; try { cookMenu(await cookCall({ a: "state" }), hbMsg(e)); } catch { $("cook-modal")?.classList.add("hidden"); } }
+  finally { stop(); state.cookBusy = false; }
+}
+function cookEntry(sec) {   // ปุ่มเข้าครัวในส่วนคราฟต์ (Safe Zone เท่านั้น)
+  let b = $("cook-open"); const show = cookOn() && state.profile?.faction === "human";
+  if (!b) { b = btn("🍳 เข้าครัว (มินิเกมพ่อครัว)", cookOpen, "btn primary wide"); b.id = "cook-open"; b.classList.add("hidden"); const h = sec.querySelector("h2"); if (h) h.after(b); else sec.prepend(b); }
+  b.classList.toggle("hidden", !show);
+}
+// ---- /พ่อครัว
 // ---- /คุก
 
 /* =========================================================
@@ -11708,6 +11786,7 @@ function tuneDefs() {
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
+  rows.push(["cook_on", "🍳 พ่อครัว: มินิเกมทำอาหารที่ Safe Zone (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน cookAct ก่อน)", 0, 0, 1, "🍳 พ่อครัว"]);
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);
   rows.push(["jail_min", "ระยะโทษพื้นฐาน (นาที — คูณชั้นโทษ 1–4)", 30, 1, 600, "⛓️ คุก"]);
   rows.push(["jail_bail", "ค่าประกันออกจากคุก (แต้มมูลค่า × ชั้นโทษ)", 30, 1, 500, "⛓️ คุก"]);
