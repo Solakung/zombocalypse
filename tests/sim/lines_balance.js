@@ -19,7 +19,7 @@ function duel(z, hu, healFn, o = {}) {
   const cut = 1 - (o.extraCut || 0);   // มิวเตชันซากหนา/ความสามารถ
   while (step++ < 60) {
     // ซอมบี้โจมตี
-    if (d6() > d6()) {
+    if ((step === 1 && o.ambushRoll ? d6() + o.ambushRoll : d6()) > d6()) {
       let raw = 5 + st("str"); if (o.ambush && step === 1) raw *= o.ambush;
       hh -= Math.max(1, Math.round(Math.floor(raw) * (1 - hu.red / 100)));
       zh = Math.min(zMax, zh + healFn(z.e.h || 0, z.m || 0));
@@ -168,3 +168,17 @@ function giantVariants() {
   console.log("เทียบ ตะกละ ขั้น 4 / ขั้น 8 (ฮีล 8)".padEnd(52) + `| ${hz(0, cases[0][1], cases[0][2])}      | ${hz(4, cases[0][1], cases[0][2])}      | ${hz(0, cases[1][1], cases[1][2])}         | ${hz(4, cases[1][1], cases[1][2])}`);
 }
 giantVariants();
+
+// ---- เลื้อยคลาน (สายซุ่ม): ซุ่มฟาดแรกหลังเข้าโซน (ตอนนี้ ×1.5 ขั้น 3 / ×2 ขั้น 4 ครั้งเดียวต่อการเดินทาง) — ดวลที่ซอมบี้ "เปิดด้วยซุ่ม" เสมอ
+function shadeAmbush() {
+  const base = { extraCut: 0.12, dur: 16 };
+  const V = [["ไม่ซุ่ม (ปัจจุบันขั้น 4 ไม่นับซุ่ม)", {}], ["ซุ่มปัจจุบัน ×2", { ambush: 2 }], ["ซุ่ม ×3", { ambush: 3 }], ["ซุ่ม ×4", { ambush: 4 }], ["ซุ่ม ×3 + ทอยแรก +2", { ambush: 3, ambushRoll: 2 }], ["ซุ่ม ×4 + ทอยแรก +2", { ambush: 4, ambushRoll: 2 }], ["ซุ่ม ×4 + ทอยแรก +3 (แทบโดนแน่)", { ambush: 4, ambushRoll: 3 }]];
+  console.log("\n=== เลื้อยคลานขั้น 4 เปิดด้วยซุ่ม — ชนะ% (สมมาตร) • มนุษย์กลาง/ปลายสุด • ซอมบี้กลาง/ปลาย ===");
+  console.log("ตัวเลือก".padEnd(40) + "| กลาง/กลาง | ปลาย/กลาง | ปลาย/ปลายสุด | ดาเมจเปิดเฉลี่ย (ครั้งเดียว/เดินทาง)");
+  for (const [name, o] of V) {
+    const cell = (zs, hu) => pct(run({ s: zs, e: { s: 4 }, m: 0 }, hu, HEAL["ปัจจุบัน 2/3/5"], { ...base, ...o }).win);
+    const zs = ZB["ปลาย 50 แต้ม"], raw = 5 + zs.str + 3 * 0, pHit = (o.ambushRoll ? 1 - (6 - 0) / 36 * 0 : 0) , pm = o.ambushRoll ? (() => { let c = 0; for (let a = 1; a <= 6; a++) for (let b = 1; b <= 6; b++) if (Math.min(6 + o.ambushRoll, a + o.ambushRoll) > b) c++; return c / 36; })() : 15 / 36;
+    console.log(name.padEnd(40) + `|   ${cell(ZB["กลาง 26 แต้ม"], HU["มนุษย์กลาง (ขวาน 18, เกราะ 15%)"])}     |   ${cell(ZB["ปลาย 50 แต้ม"], HU["มนุษย์กลาง (ขวาน 18, เกราะ 15%)"])}     |    ${cell(ZB["ปลาย 50 แต้ม"], HU["มนุษย์ปลาย (ซามูไร 28, เกราะ 20%)"])}      | ≈ ${(pm * (5 + ZB["ปลาย 50 แต้ม"].str + 3) * (o.ambush || 1) * 0.85).toFixed(0)} HP`);
+  }
+}
+shadeAmbush();
