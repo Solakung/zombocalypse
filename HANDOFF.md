@@ -4,8 +4,8 @@
 
 ## 1) ภาพรวมระบบ
 - ฝั่งเกม: `index.html` + `script.js` (**~1.15 MB รวมไว้ไฟล์เดียว** มีหัวข้อ `/* ===== NN) ... */` ~130 จุด ใช้ `grep -n "^   [0-9]*[.)]" script.js` หาตำแหน่ง) + `style.css` (ต่อท้ายไฟล์ทุกฟีเจอร์) + `sw.js` + `version.json` — **ทุกครั้งที่แก้เกมต้องรัน `node bump.js` (เลขเวอร์ชัน)** ไม่งั้นผู้เล่นได้แคชเก่า
-- ฝั่งเซิร์ฟเวอร์: `functions/` (Node 22, region `asia-southeast1`, Admin SDK ข้าม rules) — ไฟล์ละระบบ: `base market pass events daily camp world dive nemesis radio caravan garden col home profile learn ability war casino slave mutate hc zwar`; ลงทะเบียนใน `functions/index.js` (ล่าสุดเพิ่ม `zwar` แต้มศึกชิงโซน, `forge` คราฟต์อาวุธ, `use` ใช้ไอเทม — แผนต่อ: `PLAN_ITEMS_FN.md`) (รูปแบบ `onCall` + ล็อก error เหมือนกันทุกตัว)
-- ข้อมูล: `database_rules.json` (**197 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc zwrl`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
+- ฝั่งเซิร์ฟเวอร์: `functions/` (Node 22, region `asia-southeast1`, Admin SDK ข้าม rules) — ไฟล์ละระบบ: `base market pass events daily camp world dive nemesis radio caravan garden col home profile learn ability war casino slave mutate hc zwar`; ลงทะเบียนใน `functions/index.js` (ล่าสุดเพิ่ม `zwar` แต้มศึกชิงโซน, `forge` คราฟต์อาวุธ, `use` ใช้ไอเทม, `hboss` บอสเผ่ามนุษย์สำหรับซอมบี้ (ปิดอยู่ `hb_on=0`) — แผนต่อ: `PLAN_ITEMS_FN.md`) (รูปแบบ `onCall` + ล็อก error เหมือนกันทุกตัว)
+- ข้อมูล: `database_rules.json` (**197 KB จากเพดาน 256 KiB — อย่าให้โต**) + `storage.rules`; โหนดข้อมูลของระบบที่ย้ายมาเป็นฟังก์ชันไม่อยู่ใน rules (default deny) เข้าได้เฉพาะผ่านฟังก์ชัน: `pass enc crate hunt camp pet2 world dive dive2 nem radio caravan garden col home hw hl prof profRep learn abil war casino ctable mut hc zwrl hboss hbrl`; โหนดที่ไคลเอนต์อ่านได้เพิ่ม: `cpub` (สาธารณะ), `chand/{tid}/{uid}` (ไพ่ตัวเอง), `hc/state`
 - เอกสารรายระบบ: `MIGRATION.md` (หัวข้อต่อระบบ: ข้อมูล/กติกา/ข้อควรระวัง/วิธีทดสอบ) • ออกแบบไอเทมชุดต่อไป: `ITEMS_DESIGN.md` + `items.draft.json` • บทพูด NPC: `npc-*.json`
 
 ## 2) ขั้นตอน deploy (ลำดับสำคัญ)
@@ -33,7 +33,7 @@
 3. **อาวุธใหม่ 20 ชนิด** (`ITEMS_DESIGN.md`): รหัสอาวุธฝังใน rules ~14 จุด (regex ดรอป/รื้อ/บอสโลก/ตรวจ `wpn`) → ต้องเพิ่มรหัสทุกจุด + `config/weaponDmg`/`weaponMaxDur` หรือย้ายการสู้เป็นฟังก์ชัน (ใหญ่) • ~~คราฟต์อาวุธเดิม~~ → ทำแล้ว 7 ชนิดระดับต้น–กลางที่ `functions/forge.js` (`forgeAct`) — ที่เหลือ (ปืนพก/ลูกซอง/ซามูไร/มีดห้องแล็บ) ยังคราฟต์ไม่ได้ตามตั้งใจ
 4. ~~ไอเทมชุดที่ 2 (อาหาร/น้ำ/ยา/บัฟ 36 ชิ้น)~~ → ลงเกมแล้ว (ขบวนพ่อค้า/คราฟต์/ตลาด) • **ที่ยังไม่ได้**: ให้ค้นเจอในโซน (รอขั้น C ของ `PLAN_ITEMS_FN.md` — ย้ายระบบค้นหาเป็นฟังก์ชัน) • รื้อเกราะตามความหายากทำแล้ว (`forge.js`)
 5. แดชบอร์ดแอดมินสร้างข้อมูลผ่านหน้าเว็บ (`adminAct` ระดับ 1 ที่แนะนำ) • เนื้อเรื่องบท 2 ของธารา/เคน (รอเรื่อง) • บอท/โต๊ะ PvP อื่นๆ ของคาสิโน • ถ้าซอมบี้ตันอีกหลังมิวเตชัน (ขั้น 8) ต้องออกแบบชั้นต่อไป (อย่าแตะ `evo/` ใน rules)
-6. **ไอเดียของเจ้าของ (ยังไม่ลงมือ)**: เมืองใหม่ขนาดใหญ่ (ท่าเรือ/น้ำมัน/ชนบท/อุตสาหกรรม) + ระบบพาหนะ + ทำให้เกมเป็น "โลก" เล่นได้ยาว — ดู `IDEAS_WORLD.md` (เริ่มเมื่อเจ้าของสั่งเท่านั้น)
+6. **ไอเดียของเจ้าของ (ยังไม่ลงมือ)**: เมืองใหม่ขนาดใหญ่ (ท่าเรือ/น้ำมัน/ชนบท/อุตสาหกรรม) + ระบบพาหนะ + ทำให้เกมเป็น "โลก" เล่นได้ยาว — ดู `IDEAS_WORLD.md` (เริ่มเมื่อเจ้าของสั่งเท่านั้น) • **ทำแล้ว (ปิดอยู่ ยังไม่ merge)**: บอสเผ่ามนุษย์สำหรับซอมบี้ `functions/hboss.js` (ดู `MIGRATION.md`) — เปิดด้วย `tune hb_on = 1` + เพิ่ม changelog + ต้องมีภาพ `img/boss/hb_<โซน>.webp`
 
 ## 6) ถ้าจะให้ Claude ปกติช่วยต่อ (ประหยัดบริบท)
 - อย่าแนบ `script.js` ทั้งไฟล์ (1.15 MB) — ตัดเฉพาะหัวข้อที่เกี่ยวข้อง (ใช้เลขหัวข้อใน `MIGRATION.md` ชี้) + `functions/<ระบบ>.js` + `functions/lib.js` + หัวข้อที่เกี่ยวใน `MIGRATION.md`

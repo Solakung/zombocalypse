@@ -28,6 +28,7 @@ const { makeMutate } = require("./mutate");
 const { makeHc } = require("./hc");
 const { makeZwar } = require("./zwar");
 const { makeForge } = require("./forge");
+const { makeHboss } = require("./hboss");
 const { makeUse } = require("./use");
 
 // ฐานข้อมูลเกมอยู่ที่ asia-southeast1 (ไม่ใช่ us-central1) → ต้องระบุ URL เอง ไม่งั้น Admin SDK เดาเป็น <project>-default-rtdb.firebaseio.com แล้วต่อไม่ถึง
@@ -206,6 +207,13 @@ const forgeSys = makeForge(admin.database());
 exports.forgeAct = onCall(async (req) => {
   try { return await forgeSys.run(req.auth && req.auth.uid, req.data || {}); }
   catch (e) { if (!(e instanceof HttpsError)) logger.error("forgeAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
+});
+
+// 🏹 บอสเผ่ามนุษย์สำหรับผู้เล่นซอมบี้ (ปิดอยู่จนกว่าตั้ง tune hb_on = 1 — functions/hboss.js)
+const hbossSys = makeHboss(admin.database());
+exports.hbossAct = onCall(async (req) => {
+  try { return await hbossSys.run(req.auth && req.auth.uid, req.data || {}); }
+  catch (e) { if (!(e instanceof HttpsError)) logger.error("hbossAct failed", { uid: req.auth && req.auth.uid, data: req.data, err: String(e && e.stack || e) }); throw e; }
 });
 
 // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ/สเตตัส (ผลคำนวณและเขียนที่ฝั่งเซิร์ฟเวอร์ — rules ไม่มีกิ่ง eatSlot ของการกินแล้ว ยกเว้นยาในการสู้บอส)

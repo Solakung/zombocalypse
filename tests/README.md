@@ -20,6 +20,7 @@ curl -X PUT -H "Authorization: Bearer owner" --data-binary @database_rules.json 
 | `casino.js` `casinoparity.js` | คาสิโน (ชิป/หนี้/เกมทั้ง 7/เพดาน) • พาริตี้ rules โซนคาสิโน |
 | `slaveeng.js` `slave.js` `slaverules.js` | สลาฟ: เอนจิน (จำลอง 1,500 เกม), ฟังก์ชันบน emulator, rules ของ `cpub`/`chand` |
 | `hc.js` `hcrules.js` | ภารกิจ HC (ค้นพบธารา/ส่ง DNA) + เทียบ rules เก่า/ใหม่ (`rules_main.json` = rules เดิมจาก `git show origin/main:database_rules.json`) |
+| `hboss.js` | บอสเผ่ามนุษย์สำหรับซอมบี้ (`functions/hboss.js`): เปิด/ปิด tune, ทอยเจอ+คูลดาวน์+ถังโทเค็น, สู้เป็นรอบ (โล่/เลือดไหล/ยาอ่อนแรง/ฉมวก/ซุ่มตีก่อน), หนี/ตาย/รับรางวัล, สูตรตรง `script.js` (BOSS_W, วิวัฒนาการ, regex กระเป๋า) |
 | `mut.js` `career56.js` `abil.js` | มิวเตชันซอมบี้ / อาชีพขั้น 5–6 / ความสามารถ+ศึกใหญ่ |
 | `prof.js` `learn.js` `home.js` `garden.js` `col.js` `passevt.js` `sys3.js` `sys4.js` `themetest.js` | โปรไฟล์/รูป webp, โค้ช, ห้อง, สวน, สมุดสะสม, Pass+อีเวนต์, ระบบอื่นๆ |
 | `ruleparity.js` `diff.js` `basediff.js` `marketdiff.js` `e2e*.js` `walltest.js` `batch1test.js` | เทียบ rules เก่า/ใหม่ของระบบที่ย้ายมาเป็นฟังก์ชันในช่วงแรก |

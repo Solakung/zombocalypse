@@ -54,13 +54,14 @@ const zwCall = (data) => httpsCallable(fns, "zwAct")(data).then((r) => r.data); 
 const forgeCall = (data) => httpsCallable(fns, "forgeAct")(data).then((r) => r.data);   // 🔨 คราฟต์อาวุธระดับต้น–กลาง (functions/forge.js)
 const useCall = (data) => httpsCallable(fns, "useAct")(data).then((r) => r.data);   // 🍽️ ใช้ไอเทม กิน/ดื่ม/ยา/บัฟ (functions/use.js)
 const warCall = (data) => httpsCallable(fns, "warAct")(data).then((r) => r.data);   // ⚔️ ศึกใหญ่ประจำสัปดาห์ (functions/war.js)
+const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data);   // 🏹 บอสเผ่ามนุษย์สำหรับซอมบี้ (functions/hboss.js)
 
 /* ---------------------------------------------------------
    อัปเดตเวอร์ชันอัตโนมัติ (GitHub Pages cache ไฟล์ ~10 นาที แก้ header เองไม่ได้)
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-06.1052";
+const APP_VERSION = "2026-10-07.0132";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1236,6 +1237,7 @@ function startGame() {
   state.started = true;
   state.sessionStart = serverNow() - 30000;
   setTimeout(() => { try { clogAuto(); } catch { /* ข้าม */ } }, 4000);   // 📰 มีอะไรใหม่ (changelog.json)
+  setTimeout(() => { try { hbRestore(); } catch { /* ข้าม */ } }, 5000);   // 🏹 บอสเผ่ามนุษย์ (ซอมบี้): รีเฟรชกลางการสู้ → เปิดต่อ
 
   onValue(ref(db, "stats/" + state.uid), (s) => {
     state.stats = s.val(); state.statsLoaded = true;
@@ -1274,7 +1276,7 @@ function startGame() {
     $("btn-admin").classList.toggle("hidden", !isStaff());
     document.querySelector(".owner-only").classList.toggle("hidden", p.role !== "owner");
     if (state.statsLoaded && !state.stats) openStatModal();
-    renderBars(); renderInv();
+    renderBars(); renderInv(); if (state.hb) { try { hbRender(); } catch { /* ข้าม */ } }
     if (p.hp === 0) processDeath();
   });
   setInterval(renderBars, 1000);
@@ -1325,7 +1327,7 @@ async function enterZone(z, initial = false, moved = false) {
     if (!initial) {
       if (!moved) {
         if (state.profile.hp <= 0) return;
-        if (state.boss) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
+        if (state.boss || state.hb) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
         const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
         if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
         if (cur < cost) return toast(`พลังงานไม่พอเดินทาง (ต้องใช้ ${cost})`);
@@ -2004,7 +2006,7 @@ async function scavengeOnce() {
   const p = state.profile;
   if (p.hp <= 0) return;
   if (state.zone === "casino") return toast("บ่อนนี้ไม่มีอะไรให้ค้น — ไปแลกของเป็นชิปหรือเล่นเกมแทน");
-  if (state.boss) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
+  if (state.boss || state.hb) return toast("คุณกำลังเผชิญหน้ากับบอสอยู่!");
   if (effActive("stun")) return toast("😵 คุณมึนงง ค้นหาไอเทมไม่ได้ในตอนนี้");
   const cur = curStamina();
   const fd = curFood();
@@ -2065,6 +2067,7 @@ async function scavengeOnce() {
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
+    try { hbAfterSearch(found); } catch { /* ข้าม */ }
     try { evtSearchHook(); fxSearchHook(); } catch { /* ข้าม */ }
     try { if (!hcFind && found !== "zombie" && found !== "boss") { encAfterSearch(); nemAfterSearch(); } } catch { /* ข้าม */ }
   }
@@ -2411,6 +2414,68 @@ $("boss-bandage").addEventListener("click", () => bossRound("bandage"));
 $("boss-medkit").addEventListener("click", () => bossRound("medkit"));
 $("boss-flee").addEventListener("click", () => bossRound("flee"));
 $("boss-claim").addEventListener("click", claimBossReward);
+
+// ---- 🏹 บอสเผ่ามนุษย์ (ฝั่งซอมบี้) — functions/hboss.js • ปิดอยู่จนกว่าเจ้าของตั้ง tune hb_on = 1
+// ผู้รอดชีวิตที่ไม่ยอมเข้า Safe Zone ประจำโซน: ซอมบี้ค้นหาแล้วมีโอกาสเจอ (โอกาสเท่าบอสฝั่งมนุษย์ ทอยที่เซิร์ฟเวอร์) สู้เป็นรอบ โจมตี/หนี รับรางวัลเป็นของซอมบี้
+const HB_ZONES = ["forest", "police", "port", "factory", "hospital", "tunnel"];   // ต้องตรงกับ W ใน functions/hboss.js
+const hbOn = () => T("hb_on", 0) === 1;
+const hbMsg = (e) => { const m = String(e?.message || ""); return !m || /^(internal|unknown)$/i.test(m) ? errMsg(e) : m; };
+function hbLog(t) { const ul = $("hb-log"); ul.append(mk("li", "", t)); while (ul.children.length > 30) ul.firstChild.remove(); ul.scrollTop = ul.scrollHeight; }
+function hbRender() {
+  if (state.hb && state.profile?.faction === "zombie" && !(state.profile.hp > 0) && state.hb.hp > 0) state.hb = null;   // ล้มลงแล้ว: เซิร์ฟเวอร์ปิดการสู้ให้แล้ว
+  const m = $("hb-modal"), f = state.hb, p = state.profile, open = !!(f && p && p.faction === "zombie" && (p.hp > 0 || f.hp <= 0));
+  m.classList.toggle("hidden", !open);
+  if (!open) return;
+  const won = f.hp <= 0, busy = !!state.hbBusy, stun = effActive("stun");
+  $("hb-title").textContent = `${f.icon} ${f.name}`;
+  { const art = $("hb-art"); if (art) { const src = `img/boss/${f.art}.webp`; art.classList.add("hidden"); imgProbe(src, (ok) => { if (ok) { art.style.backgroundImage = `url(${src})`; art.classList.remove("hidden"); } }); } }
+  $("hb-tag").textContent = f.tag + (f.shieldMax ? ` • 🛡️ โล่ ${f.shield}/${f.shieldMax}` : "") + (f.pdot ? ` • 🩸 แผลติดตัว −${f.pdot.per}/รอบ (อีก ${f.pdot.n} รอบ)` : "") + (f.weak ? ` • 💉 อ่อนแรง (โจมตีอีก ${f.weak.n} ครั้งเหลือ ${100 - f.weak.pct}%)` : "");
+  $("bar-hb").style.width = Math.max(0, (f.hp / f.max) * 100) + "%"; $("txt-hb").textContent = `เขา ${Math.max(0, f.hp)}/${f.max}`;
+  $("bar-hb-me").style.width = Math.min(100, (p.hp / maxHp()) * 100) + "%"; $("txt-hb-me").textContent = `HP ${p.hp}/${maxHp()}`;
+  $("hb-attack").classList.toggle("hidden", won); $("hb-attack").disabled = busy || stun; $("hb-attack").textContent = stun ? "😵 มึนงง" : "🦷 ขย้ำ";
+  $("hb-flee").classList.toggle("hidden", won); $("hb-flee").disabled = busy;
+  $("hb-claim").classList.toggle("hidden", !won); $("hb-claim").disabled = busy;
+}
+async function hbDo(a) { try { return await hbCall({ a }); } catch (e) { if (!/aborted/.test(e?.code || "")) throw e; await new Promise((r) => setTimeout(r, 800)); return await hbCall({ a }); } }   // ติดล็อกลองใหม่ 1 ครั้ง
+async function hbRound(action) {
+  if (state.hbBusy || !state.hb || state.hb.hp <= 0) return;
+  state.hbBusy = true; hbRender();
+  try {
+    const f0 = state.hb, r = await hbDo(action);
+    (r.log || []).forEach(hbLog); state.hb = r.fight || null;
+    if (r.won) { hbLog(`🏆 ${f0.name}ล้มลงแล้ว!`); logLine(`${f0.icon} คุณล้ม${f0.name}ได้สำเร็จ!`, "combat"); try { stat("boss"); } catch { /* ข้าม */ } }
+    else if (r.dead) logLine(`${f0.icon} ${f0.name}สู้คุณจนล้มลง…`, "system");
+    else if (r.fled) logLine(`คุณหนี${f0.name}มาได้`, "info");
+  } catch (e) { if (/ไม่มีการต่อสู้/.test(String(e?.message))) state.hb = null; toast(hbMsg(e)); }
+  finally { state.hbBusy = false; hbRender(); }
+  if (state.hb && state.hb.hp <= 0) await hbClaim();
+}
+async function hbClaim() {
+  if (state.hbBusy || !state.hb || state.hb.hp > 0) return;
+  state.hbBusy = true; hbRender();
+  try {
+    const f0 = state.hb, r = await hbDo("claim"), got = (r.claimed || []).map((x) => `${ITEMS[x.id]?.icon || ""} ${ITEMS[x.id]?.name || x.id}${x.qty > 1 ? " ×" + x.qty : ""}`).join(" + ");
+    state.hb = null; logLine(`🏆 รางวัลจาก${f0.name}: ${got}`, "combat"); toast(`ได้รับ ${got}`);
+  } catch (e) { if (/ไม่มีการต่อสู้/.test(String(e?.message))) state.hb = null; toast(hbMsg(e)); }
+  finally { state.hbBusy = false; hbRender(); }
+}
+async function hbRestore() {   // เข้าเกม/รีเฟรชกลางการสู้ → เปิดต่อ
+  if (!hbOn() || state.profile?.faction !== "zombie" || state.hb) return;
+  try { const r = await hbCall({ a: "state" }); if (r?.fight) { state.hb = r.fight; $("hb-log").textContent = ""; hbLog(`${r.fight.icon} ${r.fight.name}ยังขวางทางคุณอยู่!`); hbRender(); } } catch { /* ข้าม */ }
+}
+async function hbAfterSearch(found) {   // ค้นหาเสร็จ → ให้เซิร์ฟเวอร์ทอยโอกาสเจอเผ่ามนุษย์ (ไม่ทอยถ้าเจอบอส/ไม่อยู่โซนที่มีเผ่า)
+  const p = state.profile;
+  if (!hbOn() || p?.faction !== "zombie" || !(p.hp > 0) || state.hb || found === "boss" || !HB_ZONES.includes(state.zone)) return;
+  try {
+    const r = await hbCall({ a: "roll" }); if (!r?.hit) return;
+    if (!r.fight) { logLine(`${(r.log || [])[0] || "ผู้รอดชีวิตโผล่มา"} — คุณถูกซุ่มโจมตีจนล้มลง…`, "system"); return; }
+    state.hb = r.fight; $("hb-log").textContent = ""; (r.log || []).forEach(hbLog); logLine(`${r.fight.icon} ${r.log[0]}`, "combat"); hbRender();
+  } catch { /* ข้าม — ค้นหาปกติไม่ควรล้มเพราะบอส */ }
+}
+$("hb-attack").addEventListener("click", () => hbRound("attack"));
+$("hb-flee").addEventListener("click", () => hbRound("flee"));
+$("hb-claim").addEventListener("click", hbClaim);
+// ---- /บอสเผ่ามนุษย์
 
 /* =========================================================
    10b) บอสโลก (World Boss) — GM/Owner เรียกที่โซนไหนก็ได้ ทุกคนในโซนช่วยกันตี HP ร่วมกัน
@@ -11104,6 +11169,8 @@ function tuneDefs() {
   rows.push(["hc_drop", "น้ำหนักดรอป 🧬 ชิ้นส่วน DNA ในศูนย์วิจัย (ตารางรวม ~110 • 8 ≈ 7% ต่อการค้น)", 8, 0, 40, "📡 ภารกิจ HC"]);
   rows.push(["hc_goal", "เป้าหมายส่งชิ้นส่วน DNA รวมทั้งเซิร์ฟเวอร์ (ชิ้น)", 300, 10, 5000, "📡 ภารกิจ HC"]);
   rows.push(["hc_pm", "โอกาสเจอธาราต่อการค้น 1 ครั้งที่ศูนย์วิจัย (‰ — 4 = 0.4%, ซอมบี้ได้ครึ่งหนึ่ง) • ใครเจอก่อนคือผู้ค้นพบของทั้งเซิร์ฟเวอร์ เฉลี่ยทั้งโลกค้นรวม ~250 ครั้ง • ต้องใช้ฟังก์ชัน hcAct + rules ใหม่", 4, 0, 1000, "📡 ภารกิจ HC"]);
+  rows.push(["hb_on", "🏹 บอสเผ่ามนุษย์ของผู้เล่นซอมบี้ (1 = เปิด, 0 = ปิด • เปิดเมื่อมีภาพบอสและเพิ่ม changelog • ต้อง deploy ฟังก์ชัน hbossAct ก่อน)", 0, 0, 1, "🏹 บอสเผ่ามนุษย์"]);
+  rows.push(["hb_pct", "โอกาสเจอบอสเผ่ามนุษย์เทียบบอสฝั่งมนุษย์ (% — 100 = เท่ากัน, 50 = ครึ่งหนึ่ง)", 100, 0, 1000, "🏹 บอสเผ่ามนุษย์"]);
   rows.push(["duel_on", "ท้าดวลระหว่างผู้เล่น (1 = เปิด, 0 = ซ่อนปุ่ม 🎲 • ต้องใช้ rules v41)", 1, 0, 1, "🎲 ท้าดวล"]);
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
