@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1131";
+const APP_VERSION = "2026-10-08.1138";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -8466,7 +8466,8 @@ async function baseUpgrade() {
   state.busy = true;
   try {
     await baseCall({ a: "upgrade" });
-    achBump("bup"); toast(`🏠 อัปเกรดที่พักแล้ว ได้ช่องเพิ่ม (รวม ${baseSlots() + 1} ช่อง)`);
+    state.gardenAt = 0;   // จำนวนแปลงสวนผูกกับขั้นที่พัก — ล้างแคชสวนให้โหลดใหม่ทันที (เดิมค้างค่าเก่าได้ถึง 2 นาที ผู้เล่นเห็นว่าอัปเกรดแล้วแปลงไม่เพิ่ม)
+    achBump("bup"); toast(`🏠 อัปเกรดที่พักแล้ว ได้ช่องเพิ่ม (รวม ${baseSlots() + 1} ช่อง) และแปลงสวนเพิ่ม`);
   } catch (e) { toast(baseErr(e)); } finally { state.busy = false; renderBase(); }
 }
 function renderBase() {
@@ -8514,7 +8515,7 @@ function renderBase() {
   if (lv >= 3) c2.append(mk("b", "", "🏠 ที่พักอัปเกรดสูงสุดแล้ว (5 ช่อง)"));
   else {
     const cost = BASE_UP[lv], have = state.inv[it]?.id === it ? state.inv[it].qty : 0;
-    c2.append(mk("b", "", `🔨 อัปเกรดที่พัก (ขั้น ${lv}/3)`), mk("span", "muted", `เพิ่ม 1 ช่อง ใช้ ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost} (คุณมี ${have}) — ต้องออกไปหาข้างนอก`));
+    c2.append(mk("b", "", `🔨 อัปเกรดที่พัก (ขั้น ${lv}/3)`), mk("span", "muted", `เพิ่ม 1 ช่องผลิต และแปลงสวน ${lv === 0 ? "เริ่มที่ 4 แปลง" : "+2 แปลง"} • ใช้ ${ITEMS[it].icon} ${ITEMS[it].name} ×${cost} (คุณมี ${have}) — ต้องออกไปหาข้างนอก`));
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
