@@ -18,6 +18,7 @@ const waitFor = async (pg, fn, ms = 25000) => { const t = Date.now(); while (Dat
   await B.pg.evaluate(() => document.querySelector('.zone-btn[data-zone="base"]').click()); await B.pg.waitForTimeout(500);
   const bar = await B.pg.evaluate(() => { const b = document.getElementById("walk-bar"), r = b.getBoundingClientRect(); return { hidden: b.classList.contains("hidden"), txt: document.getElementById("walk-txt").textContent, w: r.width, right: r.right, vw: innerWidth, confirm: (window.__confirms || [])[0] || "" }; });
   assert(!bar.hidden && /เดินไป ค่ายทหารร้าง/.test(bar.txt) && /ช่อง [12]\/3/.test(bar.txt), bar.txt); assert(bar.right <= bar.vw + 1, "แถบไม่ล้นจอมือถือ " + JSON.stringify(bar));
+  assert(!bar.confirm.includes("\\n") && bar.confirm.includes("\n"), "ข้อความยืนยันต้องขึ้นบรรทัดใหม่จริง ไม่ใช่ตัวอักษร \\n");
   assert(/Safe Zone → โรงงานร้าง → โรงพยาบาล → ค่ายทหารร้าง/.test(bar.confirm) && /3 ช่อง/.test(bar.confirm) && /พลังงานรวม ~17/.test(bar.confirm) && /โอกาสเจอ\/โดนซุ่มระหว่างทาง: (🟢|🟡|🔴)/.test(bar.confirm), bar.confirm);
   assert(await waitFor(B.pg, () => window.__DB.users.u1.zone === "base"), "เดินถึงค่ายทหาร"); await B.pg.waitForTimeout(800);
   const lg = (await B.pg.evaluate(() => window.__logs || [])).join("\n"); assert(/โรงงานร้าง \(−5 พลังงาน\)/.test(lg) && /โรงพยาบาล \(−5 พลังงาน\)/.test(lg) && /ค่ายทหารร้าง \(−7 พลังงาน\)/.test(lg), "พลังงานต่อช่วงถนน 5/5/7: " + lg.slice(-300));
