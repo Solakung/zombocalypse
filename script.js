@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1058";
+const APP_VERSION = "2026-10-08.1131";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -8479,7 +8479,7 @@ function renderBase() {
     body.append(tabs);
     const sc = mk("div"); sc.id = "base-scene"; body.append(sc);
     try {
-      if (state.baseView === "yard") { const D = state.gardenD, spent = Date.now() - (state.gardenAt || Date.now()); sc.innerHTML = baseYardSvg(baseLv(), fac, D ? D.plots : [], spent, state.uid); if (!D && !state.gardenBusy && !state.gardenLoad) { state.gardenLoad = true; gardenGo("state").finally(() => { state.gardenLoad = false; }); } }
+      if (state.baseView === "yard") { const D = state.gardenD, spent = Date.now() - (state.gardenAt || Date.now()); sc.onclick = (e) => { const g = e.target.closest && e.target.closest("[data-i]"); if (g) { state.gardenSel = Number(g.getAttribute("data-i")); try { baseAgain(); } catch { /* ข้าม */ } } }; /* แตะแปลงในฉากบ้านเพื่อเลือก */ sc.innerHTML = baseYardSvg(baseLv(), fac, D ? D.plots : [], spent, state.uid); if (!D && !state.gardenBusy && !state.gardenLoad) { state.gardenLoad = true; gardenGo("state").finally(() => { state.gardenLoad = false; }); } }
       else if (state.baseView === "edit") { homeEdit(sc, body); return; }
       else { baseSceneFill(sc, baseSceneOwn()); homeLoad(); }
     } catch (e) { console.warn("scene", e); } }
@@ -10461,9 +10461,12 @@ function baseYardSvg(lv, zom, plots, spent, uid) {
   const n = Math.min(12, plots.length); const gap = 300 / Math.max(1, n);   // แสดงทุกแปลง (ที่พักขั้น 3 + อัปเกรดสูงสุด = 10)
   for (let k = 0; k < n; k++) {
     const pl = plots[k], cx = 10 + gap * (k + 0.5), by = 176, left = Math.max(0, (pl.left || 0) - spent), st = gStage(pl, left);
-    o.push(`<ellipse cx="${cx}" cy="${by + 3}" rx="${Math.min(20, gap / 2 - 2)}" ry="6" fill="${pl.w ? "#33261a" : "#4a3320"}"/>`);
+    const rx = Math.min(20, gap / 2 - 2);
+    o.push(`<ellipse cx="${cx}" cy="${by + 3}" rx="${rx}" ry="6" fill="${pl.w ? "#33261a" : "#4a3320"}"/>`);
     if (st === 3) o.push(`<circle class="gpu" cx="${cx}" cy="${by - 9}" r="15" fill="url(#ggl${q})"/>`);
     if (st > 0) o.push(`<g transform="translate(${cx} ${by}) scale(.62)">${gPlant(pl.c, st)}</g>`);
+    if (pl.i === state.gardenSel) o.push(`<ellipse cx="${cx}" cy="${by + 3}" rx="${rx + 3}" ry="9" fill="none" stroke="#ffd27a" stroke-width="1.6" stroke-dasharray="4 3"/>`);   // แปลงที่เลือก
+    o.push(`<g data-i="${pl.i}" style="cursor:pointer"><rect x="${cx - Math.max(rx, 12)}" y="${by - 34}" width="${Math.max(rx, 12) * 2}" height="52" fill="transparent"/></g>`);   // จุดแตะเลือกแปลง (เดิมภาพนี้แตะไม่ได้ ผู้เล่นเข้าใจว่าเลือกแปลงไม่ได้)
   }
   if (!n) o.push(`<text x="160" y="178" font-size="10" text-anchor="middle" fill="#fff" opacity=".45">ยังไม่มีแปลงปลูก — อัปเกรดที่พักเป็นขั้น 1</text>`);
   o.push(`</svg>`); return o.join("");
