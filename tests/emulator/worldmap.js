@@ -2,7 +2,7 @@
 const fs = require("fs"), assert = require("assert");
 const F = "/home/user/zombocalypse/", sc = fs.readFileSync(F + "script.js", "utf8"), M = require(F + "functions/worldmap");
 const part = sc.slice(sc.indexOf("// ---- 🗺️ แผนที่โลก"), sc.indexOf("// ---- /แผนที่โลก")); assert(part.length > 800, "slice");
-const C = new Function(part + ";return { WORLD, worldPts, worldLen, worldCost, worldRoute, worldRisk };")();
+const C = new Function(part + ";return { WORLD, worldPts, worldLen, worldCost, worldSecs, worldRoute, worldRisk };")();
 // ตรงกันทุกอย่าง
 assert.deepStrictEqual(C.WORLD, M.WORLD, "WORLD data");
 const ids = Object.keys(M.WORLD.nodes);
@@ -36,4 +36,8 @@ assert(M.worldRoute("safe", "forest", "bike").energy < M.worldRoute("safe", "for
   for (const z of ids) assert.deepStrictEqual(C.worldRisk(C.worldRoute("safe", z), (x) => dg[x], none), risk(z), "risk parity " + z);
   assert.strictEqual(risk("ruins").level, 0); assert.strictEqual(risk("factory").level, 0); assert.strictEqual(risk("base").level, 2); assert.strictEqual(risk("lab").level, 2); assert(risk("hospital").score < risk("base").score, "ไกลกว่าเสี่ยงกว่า");
   assert(risk("hospital", () => 5).score > risk("hospital").score, "มีคนเยอะเสี่ยงกว่า"); assert.strictEqual(risk("hospital", () => 99).score, risk("hospital", () => 5).score, "ผู้เล่นนับสูงสุด 5"); assert.deepStrictEqual(M.worldRisk(M.worldRoute("safe", "safe"), (x) => dg[x]), { score: 0, level: 0 }); }
+// เวลาเดินต่อถนน: ฝั่งเกมต้องตรงกับฝั่ง functions • ถนนสั้นเร็วกว่าถนนยาว/ทางป่า • อยู่ในช่วง 25–70 วินาที เฉลี่ยใกล้ 45
+for (const r of M.WORLD.roads) { assert.strictEqual(C.worldSecs(r), M.worldSecs(r), "secs parity " + r[0] + r[1]); assert(M.worldSecs(r) >= 25 && M.worldSecs(r) <= 70, "secs range " + r[0] + r[1]); }
+const secs = M.WORLD.roads.map((r) => M.worldSecs(r)); assert(Math.min(...secs) < 36 && Math.max(...secs) > 50, "ความต่างของเวลา"); const savg = secs.reduce((t, x) => t + x, 0) / secs.length; assert(savg > 38 && savg < 48, "เฉลี่ย " + savg);
+assert.strictEqual(M.worldSecs(M.WORLD.roads[0], "car"), M.worldSecs(M.WORLD.roads[0]) > 28 ? Math.max(10, Math.round(M.worldSecs(M.WORLD.roads[0]) * 0.35)) : 10, "รถเร็วกว่า");
 console.log("worldmap OK (" + M.WORLD.roads.length + " roads, avg " + avg.toFixed(1) + "⚡)");

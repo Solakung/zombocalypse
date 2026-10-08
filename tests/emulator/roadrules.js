@@ -26,7 +26,25 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
   const at = (zone, extra = {}, st = 100) => base({ tune: { travel_roads: 1 }, config: { roads } }, { zone, stamina: st, staminaTs: now - 1000, lastTravel: now - 60000, ...extra });
   const off = (zone, extra = {}, st = 100) => base({}, { zone, stamina: st, staminaTs: now - 1000, lastTravel: now - 60000, ...extra });
   const go = (z, cost, st = 100) => () => ({ "users/U/zone": z, "users/U/lastTravel": SV, "users/U/stamina": st - cost, "users/U/staminaTs": SV });
+  const roadt = {}; M.WORLD.roads.forEach((r) => { const c = M.worldSecs(r); roadt[r[0] + "_" + r[1]] = c; roadt[r[1] + "_" + r[0]] = c; });
+  const atT = (zone, ago, o = {}) => base({ tune: { travel_roads: o.off ? 0 : 1 }, config: o.noT ? { roads } : { roads, roadt } }, { zone, stamina: 100, staminaTs: now - 1000, lastTravel: now - ago });
+  const sec = (a, b) => roadt[a + "_" + b];
+  assert(sec("safe", "factory") === 33 && sec("safe", "forest") === 52, "เวลาถนนตามตาราง");
   const C = [   // [ชื่อ, ข้อมูลตั้งต้น, การเขียน, เก่าผ่าน?, ใหม่ผ่าน?]
+    // ---- เวลาเดินต่อถนน (config/roadt): คูลดาวน์ก่อนออกเดิน = เวลาของถนนสายนั้น • เก่า = 45 วินาทีเสมอ
+    ["เวลา: ถนนสั้น Safe→โรงงาน 33 วิ รอครบ 34 วิ ผ่าน", atT("safe", 34000), go("factory", 5), false, true],
+    ["เวลา: Safe→โรงงาน 33 วิ รอแค่ 30 วิ ไม่ผ่าน", atT("safe", 30000), go("factory", 5), false, false],
+    ["เวลา: ทางป่ายาว Safe→ป่า 52 วิ รอ 46 วิ (เกิน 45 เดิม) ไม่ผ่านแล้ว", atT("safe", 46000), go("forest", 7), true, false],
+    ["เวลา: Safe→ป่า รอ 53 วิ ผ่าน", atT("safe", 53000), go("forest", 7), true, true],
+    ["เวลา: โรงพยาบาล→อุโมงค์ 54 วิ รอ 50 วิ ไม่ผ่าน", atT("hospital", 50000), go("tunnel", 8), false, false],
+    ["เวลา: โรงพยาบาล→อุโมงค์ รอ 55 วิ ผ่าน", atT("hospital", 55000), go("tunnel", 8), false, true],
+    ["เวลา: ไม่มี config/roadt → ถอยไป 45 วิ (รอ 40 วิ ไม่ผ่าน)", atT("safe", 40000, { noT: true }), go("factory", 5), false, false],
+    ["เวลา: ไม่มี config/roadt รอ 46 วิ ผ่าน", atT("safe", 46000, { noT: true }), go("factory", 5), false, true],
+    ["เวลา: ปิดสวิตช์แล้วยังใช้ 45 วิ (รอ 34 วิ ไม่ผ่าน ทั้งเก่า/ใหม่)", atT("safe", 34000, { off: true }), go("factory", 10), false, false],
+    ["เวลา: ปิดสวิตช์ รอ 46 วิ ผ่านเหมือนเดิม", atT("safe", 46000, { off: true }), go("factory", 10), true, true],
+    ["เวลา: ไม่เคยเดินทาง (ไม่มี lastTravel) ผ่าน", base({ tune: { travel_roads: 1 }, config: { roads, roadt } }, { zone: "safe", stamina: 100, staminaTs: now - 1000 }), go("factory", 5), false, true],
+    ["เวลา: ใส่เวลา lastTravel ปลอม (ไม่ใช่ now) ไม่ผ่าน", atT("safe", 60000), () => ({ "users/U/zone": "factory", "users/U/lastTravel": now - 1, "users/U/stamina": 95, "users/U/staminaTs": SV }), false, false],
+    ["เวลา: เขียน lastTravel เดี่ยว ๆ ซ้ำใน 3 วิ (ต่ำกว่าพื้น 5 วิ) ไม่ผ่านทั้งเก่า/ใหม่", atT("safe", 3000), () => ({ "users/U/lastTravel": SV }), false, false],
     // ---- ปิดสวิตช์ = ระบบเดิมทุกอย่าง
     ["ปิดอยู่: Safe→ค่ายทหาร กดข้ามได้ (14)", off("safe"), go("base", 14), true, true],
     ["ปิดอยู่: Safe→เมืองร้าง (6)", off("safe"), go("ruins", 6), true, true],
@@ -58,13 +76,15 @@ const R = { old: process.env.OLD_RULES ? fs.readFileSync(process.env.OLD_RULES, 
     ["เปิดแต่ไม่มี config: Safe→เมืองร้าง", base({ tune: { travel_roads: 1 } }, { zone: "safe", stamina: 100, staminaTs: now - 1000, lastTravel: now - 60000 }), go("ruins", 5), false, false],
     // ---- ทางอื่นของโซนไม่กระทบ: เกิดใหม่/เข้าคุก
     ["เปิด: ล้มแล้วฟื้นที่ Safe Zone ยังได้", base({ tune: { travel_roads: 1 }, config: { roads }, inventory: {} }, { hp: 0, zone: "forest" }), () => ({ "users/U/hp": 50, "users/U/zone": "safe", "users/U/lastDeath": SV }), true, true],
-    ["เปิด: ผู้เล่นปกติเขียน config/roads ไม่ได้", at("safe"), () => ({ "config/roads/safe_base": 1 }), false, false]
+    ["เปิด: ผู้เล่นปกติเขียน config/roads ไม่ได้", at("safe"), () => ({ "config/roads/safe_base": 1 }), false, false],
+    ["เวลา: ผู้เล่นปกติเขียน config/roadt ไม่ได้", atT("safe", 60000), () => ({ "config/roadt/safe_factory": 1 }), false, false]
   ];
   const res = {};
   for (const k of ["old", "nw"]) {
     await setRules(k); res[k] = {};
     for (const [name, seed, w] of C) {
-      await adb.ref().set(JSON.parse(JSON.stringify(seed)));
+      const sd = JSON.parse(JSON.stringify(seed)), lt = sd.users && sd.users.U && sd.users.U.lastTravel; if (typeof lt === "number") sd.users.U.lastTravel = lt + (Date.now() - now);   // เลื่อนเวลาตามที่ผ่านไปจริง ไม่ให้เคส "รอ N วินาที" เพี้ยนเพราะเทสต์รันนาน
+      await adb.ref().set(sd);
       const db = env.authenticatedContext("U", { firebase: { sign_in_provider: "password" } }).database();
       let ok = true; try { await db.ref().update(w()); } catch { ok = false; }
       res[k][name] = ok;

@@ -15,12 +15,14 @@ const waitFor = async (pg, fn, ms = 25000) => { const t = Date.now(); while (Dat
 
   // 2) เปิด: เดินตามถนน Safe → โรงงาน → โรงพยาบาล → ค่ายทหาร
   B = await boot({ faction: "human", viewport: { width: 390, height: 844 }, seed: { tune: { travel_roads: 1 }, config: { roads, questDefs: defs } } }); await B.pg.waitForTimeout(2800); await accel(B.pg);
+  await B.pg.evaluate(() => { window.__wks = []; setInterval(() => { const zp = window.__DB.zonePlayers || {}; for (const z in zp) if (zp[z].u1 && zp[z].u1.wk && !window.__wks.includes(z)) window.__wks.push(z); }, 50); });   // เก็บโซนที่เราถูกติดธง 🚶 กำลังเดินผ่าน
   await B.pg.evaluate(() => document.querySelector('.zone-btn[data-zone="base"]').click()); await B.pg.waitForTimeout(500);
   const bar = await B.pg.evaluate(() => { const b = document.getElementById("walk-bar"), r = b.getBoundingClientRect(); return { hidden: b.classList.contains("hidden"), txt: document.getElementById("walk-txt").textContent, w: r.width, right: r.right, vw: innerWidth, confirm: (window.__confirms || [])[0] || "" }; });
   assert(!bar.hidden && /เดินไป ค่ายทหารร้าง/.test(bar.txt) && /ช่อง [12]\/3/.test(bar.txt), bar.txt); assert(bar.right <= bar.vw + 1, "แถบไม่ล้นจอมือถือ " + JSON.stringify(bar));
   assert(!bar.confirm.includes("\\n") && bar.confirm.includes("\n"), "ข้อความยืนยันต้องขึ้นบรรทัดใหม่จริง ไม่ใช่ตัวอักษร \\n");
   assert(/Safe Zone → โรงงานร้าง → โรงพยาบาล → ค่ายทหารร้าง/.test(bar.confirm) && /3 ช่อง/.test(bar.confirm) && /พลังงานรวม ~17/.test(bar.confirm) && /โอกาสเจอ\/โดนซุ่มระหว่างทาง: (🟢|🟡|🔴)/.test(bar.confirm), bar.confirm);
   assert(await waitFor(B.pg, () => window.__DB.users.u1.zone === "base"), "เดินถึงค่ายทหาร"); await B.pg.waitForTimeout(800);
+  { const wk = await B.pg.evaluate(() => window.__wks), left = await B.pg.evaluate(() => JSON.stringify(window.__DB.zonePlayers || {}).includes('"wk"')); assert(wk.includes("factory") && wk.includes("hospital") && !wk.includes("base") && !wk.includes("safe"), "ธง 🚶 เฉพาะโซนทางผ่าน: " + wk); assert(!left, "ถึงปลายทางแล้วไม่เหลือธง wk"); }
   const lg = (await B.pg.evaluate(() => window.__logs || [])).join("\n"); assert(/โรงงานร้าง \(−5 พลังงาน\)/.test(lg) && /โรงพยาบาล \(−5 พลังงาน\)/.test(lg) && /ค่ายทหารร้าง \(−7 พลังงาน\)/.test(lg), "พลังงานต่อช่วงถนน 5/5/7: " + lg.slice(-300));
   const qp = await B.pg.evaluate(() => window.__DB.questProg && window.__DB.questProg.u1 && window.__DB.questProg.u1.weekly); assert(qp && qp.t1 && qp.t1.n === 1 && qp.t2 && qp.t2.n === 1, "เควสไปถึงโซน: โรงพยาบาล(ผ่านทาง)+ค่ายทหาร(ปลายทาง) " + JSON.stringify(qp)); assert(qp.t3 && qp.t3.n === 1, "เดินทางทั่วไปนับ 1 ครั้งต่อการเดิน (ไม่ใช่ 3) " + JSON.stringify(qp));
   assert.strictEqual(await B.pg.evaluate(() => document.getElementById("walk-bar").classList.contains("hidden")), true, "เดินเสร็จแถบหาย");
