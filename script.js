@@ -5945,32 +5945,88 @@ if (HAS_DOM && typeof window !== "undefined") {
    23) แผนที่โซน • ติดตั้งเป็นแอป (PWA) • แจ้งเตือนเมื่อพร้อม • ตั้งค่า • ไอเทมโปรด (hotbar)
    ฝั่งเกมล้วน — ไม่แตะ rules (แผนที่ใช้ปุ่มโซนเดิม ฟังก์ชันเดินทางเดิมทุกอย่าง)
    ========================================================= */
-/* ---- แผนที่โซน: ตำแหน่งโหนด (เปอร์เซ็นต์) และถนนเชื่อม — แค่ภาพ ไม่มีผลกับค่าเดินทาง ---- */
-// ผังแผนที่: แถวล่างสุด = Safe Zone ยิ่งขึ้นไปยิ่งไกล/อันตราย (ใกล้: ป่าลึก เขตเมืองร้าง / กลาง: ท่าเรือ โรงงาน ห้าง โรงพยาบาล / ไกล: ค่ายทหาร สถานีตำรวจ อุโมงค์)
-const ZMAP = { casino: [20, 34], base: [20, 12], police: [50, 12], tunnel: [80, 12], lab: [80, 34], hospital: [50, 34], port: [20, 56], factory: [50, 56], mall: [80, 56], ruins: [20, 78], safe: [50, 78], forest: [80, 78] };
-const ZROADS = [["safe", "ruins"], ["safe", "forest"], ["safe", "factory"], ["ruins", "port"], ["forest", "mall"], ["factory", "port"], ["factory", "mall"], ["factory", "hospital"], ["hospital", "base"], ["hospital", "police"], ["hospital", "tunnel"], ["hospital", "lab"], ["tunnel", "lab"], ["hospital", "casino"]];
+// ---- 🗺️ แผนที่โลก (ข้อมูลโหนด/ถนน) — ฟังก์ชันล้วน • ต้องตรงกับ functions/worldmap.js (tests/emulator/worldmap.js ตรวจ) • ยังเป็นภาพ+ตัววางแผนเส้นทาง ไม่มีผลกับการเดินทางจริงจนกว่าจะเปิดระบบเดินตามถนน
+// พิกัด: x 0–100 (ตะวันตก→ตะวันออก) × y 0–130 (เหนือ→ใต้) — ทะเลอยู่ตะวันตก ภูเขาอยู่เหนือ/ตะวันออกเฉียงเหนือ แม่น้ำไหลจากตะวันออกลงทะเลคั่นเมืองเหนือ/ใต้ (สะพานโรงพยาบาลเป็นทางข้ามเดียว)
+// ถนน [จาก, ถึง, ชนิด, จุดโค้ง?] • พลังงานต่อถนน = round(ความยาว ÷ unit × ตัวคูณชนิดถนน × ตัวคูณพาหนะ) ขั้นต่ำ 2 • risk = ตัวคูณโอกาสซุ่ม (เตรียมไว้ ยังไม่ใช้) • modes = พาหนะ (เตรียมรองรับอัปเดตรถยนต์/จักรยาน — on:false = ยังไม่เปิด)
+const WORLD = {
+  w: 100, h: 130, unit: 5.6, km: 0.25,
+  nodes: { safe: [52, 106], ruins: [24, 108], forest: [82, 108], factory: [52, 80], port: [18, 82], mall: [82, 82], hospital: [50, 54], casino: [20, 52], base: [24, 22], police: [52, 16], tunnel: [80, 24], lab: [86, 52] },
+  roads: [["safe", "ruins", "street", [[38, 110]]], ["safe", "forest", "trail", [[68, 100]]], ["safe", "factory", "main"], ["ruins", "port", "street", [[16, 96]]], ["factory", "port", "street", [[34, 84]]], ["factory", "mall", "street", [[67, 78]]], ["forest", "mall", "trail", [[86, 95]]],
+    ["factory", "hospital", "bridge", [[51, 67]]], ["hospital", "casino", "street", [[35, 50]]], ["hospital", "base", "street", [[36, 40]]], ["hospital", "police", "main"], ["hospital", "tunnel", "main", [[66, 44]]], ["hospital", "lab", "street", [[70, 57]]], ["tunnel", "lab", "tunnel", [[88, 38]]]],
+  classes: { main: { n: "ถนนหลัก", mul: 1, risk: 0.8, w: 3.2, c: "#c8b077" }, street: { n: "ถนน", mul: 1, risk: 1, w: 2.2, c: "#9aa4ac" }, trail: { n: "ทางป่า", mul: 1.25, risk: 1.4, w: 1.4, c: "#8a7550", dash: "3 2" }, tunnel: { n: "อุโมงค์", mul: 1, risk: 1.6, w: 2.4, c: "#b8b8c8", dash: "1.5 1.5" }, bridge: { n: "สะพาน", mul: 1, risk: 1.2, w: 2.6, c: "#cfc7ad" } },
+  modes: { foot: { n: "เดินเท้า", mul: 1, roads: ["main", "street", "trail", "tunnel", "bridge"], on: true }, bike: { n: "จักรยาน", mul: 0.6, roads: ["main", "street", "trail", "bridge"], on: false }, car: { n: "รถยนต์", mul: 0.35, roads: ["main", "street", "bridge", "tunnel"], on: false } }
+};
+const worldPts = (r) => [WORLD.nodes[r[0]], ...(r[3] || []), WORLD.nodes[r[1]]];
+const worldLen = (r) => { const p = worldPts(r); let t = 0; for (let i = 1; i < p.length; i++) t += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return t; };
+const worldCost = (r, mode = "foot") => { const m = WORLD.modes[mode]; return m && m.roads.includes(r[2]) ? Math.max(2, Math.round((worldLen(r) / WORLD.unit) * WORLD.classes[r[2]].mul * m.mul)) : null; };
+function worldRoute(a, b, mode = "foot") {   // เส้นทางพลังงานน้อยที่สุด (Dijkstra) → { path:[โซน], roads:[ดัชนีถนน], energy, steps, km } หรือ null ถ้าไปไม่ได้ด้วยพาหนะนี้
+  if (!WORLD.nodes[a] || !WORLD.nodes[b]) return null;
+  const dist = { [a]: 0 }, prev = {}, done = new Set();
+  for (;;) {
+    let u = null; for (const k of Object.keys(dist)) if (!done.has(k) && (u === null || dist[k] < dist[u])) u = k;
+    if (u === null) return null; if (u === b) break; done.add(u);
+    WORLD.roads.forEach((r, i) => { const c = worldCost(r, mode); if (c === null || (r[0] !== u && r[1] !== u)) return; const v = r[0] === u ? r[1] : r[0]; if (done.has(v)) return; if (dist[v] === undefined || dist[u] + c < dist[v]) { dist[v] = dist[u] + c; prev[v] = [u, i]; } });
+  }
+  const path = [b], roads = []; for (let v = b; v !== a;) { const [u, i] = prev[v]; roads.unshift(i); path.unshift(u); v = u; }
+  return { path, roads, energy: dist[b], steps: roads.length, km: Math.round(roads.reduce((t, i) => t + worldLen(WORLD.roads[i]), 0) * WORLD.km * 10) / 10 };
+}
+// ---- /แผนที่โลก
+/* ---- แผนที่โซน (แผนที่เมือง): ตำแหน่งภูมิศาสตร์และถนนจาก WORLD ด้านบน — เป็นภาพ + ตัววางแผนเส้นทาง ไม่มีผลกับค่าเดินทางจริง (ยังกดข้ามโซนได้เหมือนเดิม) ---- */
 const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
-function zmapRoads() {
-  const ns = "http://www.w3.org/2000/svg", svg = document.createElementNS(ns, "svg");
-  svg.setAttribute("viewBox", "0 0 100 100"); svg.setAttribute("preserveAspectRatio", "none");
-  ZROADS.forEach(([a, b]) => { if (!ZMAP[a] || !ZMAP[b]) return; const l = document.createElementNS(ns, "line"); l.setAttribute("x1", ZMAP[a][0]); l.setAttribute("y1", ZMAP[a][1]); l.setAttribute("x2", ZMAP[b][0]); l.setAttribute("y2", ZMAP[b][1]); l.setAttribute("vector-effect", "non-scaling-stroke"); svg.append(l); });
-  const li = mk("li", "zroads"); li.setAttribute("aria-hidden", "true"); li.append(svg); return li;
+const ZNS = "http://www.w3.org/2000/svg";
+const zel = (t, a, kids) => { const e = document.createElementNS(ZNS, t); Object.entries(a || {}).forEach(([k, v]) => e.setAttribute(k, v)); (kids || []).forEach((c) => e.append(c)); return e; };
+const zpct = (p) => ({ x: (p[0] / WORLD.w) * 100, y: (p[1] / WORLD.h) * 100 });
+function zrand(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function zmapSvg() {   // ฉากหลังแผนที่เมือง: ทะเล/ชายหาด/แม่น้ำ/ภูเขา/ป่า/ย่านอาคาร/นิคมโรงงาน + ถนนตามชนิด
+  const svg = zel("svg", { viewBox: `0 0 ${WORLD.w} ${WORLD.h}`, preserveAspectRatio: "xMidYMid meet", class: "zworld" }), R = zrand(7);
+  svg.append(zel("defs", {}, [zel("pattern", { id: "zhatch", width: 3, height: 3, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" }, [zel("line", { x1: 0, y1: 0, x2: 0, y2: 3, stroke: "#4a4338", "stroke-width": 0.7 })])]));
+  const g = (cls) => { const e = zel("g", { class: cls }); svg.append(e); return e; };
+  const land = g("zland");   // ผืนดิน
+  land.append(zel("rect", { x: 0, y: 0, width: WORLD.w, height: WORLD.h, fill: "#1c2127" }));
+  const blocks = (x0, y0, x1, y1, n, fill) => { for (let i = 0; i < n; i++) { const x = x0 + R() * (x1 - x0), y = y0 + R() * (y1 - y0); land.append(zel("rect", { x: x.toFixed(1), y: y.toFixed(1), width: (2 + R() * 3).toFixed(1), height: (1.6 + R() * 2.2).toFixed(1), rx: 0.4, fill, opacity: 0.55 })); } };
+  [[34, 40, 68, 66, 26], [68, 70, 96, 94, 18], [38, 6, 66, 30, 16], [10, 98, 36, 122, 14], [40, 96, 64, 118, 12], [10, 40, 30, 64, 8]].forEach(([a, b, c, d, n]) => blocks(a, b, c, d, n, "#2c343c"));   // ย่านอาคาร: กลาง/ห้าง/ตำรวจ/เมืองร้าง/ค่าย/คาสิโน
+  land.append(zel("rect", { x: 40, y: 72, width: 24, height: 17, fill: "url(#zhatch)", opacity: 0.8, rx: 1 }));   // นิคมโรงงาน
+  for (let i = 0; i < 70; i++) { const x = 58 + R() * 40, y = 96 + R() * 30; land.append(zel("circle", { cx: x.toFixed(1), cy: y.toFixed(1), r: (1 + R() * 1.2).toFixed(1), fill: "#21462a", opacity: 0.8 })); }   // ป่าลึกทางตะวันออกเฉียงใต้
+  for (let i = 0; i < 22; i++) { const x = 20 + R() * 22, y = 24 + R() * 14; land.append(zel("circle", { cx: x.toFixed(1), cy: y.toFixed(1), r: (0.9 + R() * 1).toFixed(1), fill: "#1f3d26", opacity: 0.7 })); }   // ป่าเชิงเขาใกล้ค่ายทหาร
+  const mt = g("zmount"); const peak = (x, y, s, c) => mt.append(zel("path", { d: `M${x - s} ${y + s * 0.8}L${x} ${y - s * 0.9}L${x + s} ${y + s * 0.8}Z`, fill: c, stroke: "#444c54", "stroke-width": 0.3 }));
+  [[68, 10, 5], [76, 6, 6], [86, 9, 6], [94, 16, 5], [91, 30, 6], [96, 40, 5], [72, 34, 4], [62, 7, 4], [44, 4, 4], [32, 8, 4], [16, 14, 5], [10, 24, 4], [30, 30, 3.5], [94, 58, 4]].forEach(([x, y, s]) => peak(x, y, s, "#2d3338"));   // เทือกเขาทางเหนือ/ตะวันออกเฉียงเหนือ
+  const sea = g("zsea");   // ทะเลทางตะวันตก + ชายหาด + ท่าเทียบเรือ + แม่น้ำ
+  const coast = "M0 0H13C11 14 15 26 12 38C9 50 12 60 9 72C6 84 8 96 12 108C14 118 15 124 15 130H0Z";
+  sea.append(zel("path", { d: coast, fill: "#1b3149" }), zel("path", { d: coast.replace(/^M0 0H13/, "M13 0"), fill: "none", stroke: "#6d9bb8", "stroke-width": 0.7, opacity: 0.7 }));
+  sea.append(zel("path", { d: "M100 66C86 64 74 70 62 68C50 66 36 70 26 71C18 72 14 72 10 72", fill: "none", stroke: "#1b3149", "stroke-width": 3.4, "stroke-linecap": "round" }), zel("path", { d: "M100 66C86 64 74 70 62 68C50 66 36 70 26 71C18 72 14 72 10 72", fill: "none", stroke: "#2a4a66", "stroke-width": 0.8, "stroke-linecap": "round", opacity: 0.7 }));
+  [[6, 78], [6, 84], [8, 90]].forEach(([x, y]) => sea.append(zel("line", { x1: x, y1: y, x2: x + 10, y2: y, stroke: "#6b7380", "stroke-width": 0.9 })));   // ท่าเทียบเรือ
+  [["🌊 ทะเล", 3, 42], ["⛰️ เทือกเขา", 62, 22], ["🌲 ป่าลึก", 70, 120], ["〰️ แม่น้ำ", 76, 63]].forEach(([t, x, y]) => svg.append(Object.assign(zel("text", { x, y, class: "zlbl", "font-size": 3.2 }), { textContent: t })));
+  const roads = g("zroads2");
+  WORLD.roads.forEach((r, i) => {
+    const c = WORLD.classes[r[2]], d = worldPts(r).map((p, k) => `${k ? "L" : "M"}${p[0]} ${p[1]}`).join("");
+    roads.append(zel("g", { class: "zroad", "data-r": i, "data-a": r[0], "data-b": r[1] }, [zel("path", { class: "zcase", d, fill: "none", stroke: "#0e1114", "stroke-width": c.w + 1.5, "stroke-linejoin": "round", "stroke-linecap": "round", opacity: 0.85 }), zel("path", { class: "zfill", d, fill: "none", stroke: c.c, "stroke-width": c.w, "stroke-linejoin": "round", "stroke-linecap": "butt", ...(c.dash ? { "stroke-dasharray": c.dash } : {}) })]));
+  });
+  return svg;
+}
+function zroadMid(r) { const p = worldPts(r), L = worldLen(r); let acc = 0; for (let i = 1; i < p.length; i++) { const s = Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); if (acc + s >= L / 2) { const t = (L / 2 - acc) / s; return [p[i - 1][0] + (p[i][0] - p[i - 1][0]) * t, p[i - 1][1] + (p[i][1] - p[i - 1][1]) * t]; } acc += s; } return p[0]; }
+function zmapRoads() { const li = mk("li", "zroads"); li.setAttribute("aria-hidden", "true"); li.append(zmapSvg()); return li; }
+function zmapHl(on, from, to) {   // ไฮไลต์เส้นทางพลังงานน้อยที่สุดจากโซนปัจจุบัน → โซนที่ชี้
+  const ul = $("zone-list"); if (!ul) return; ul.querySelectorAll(".zroad.hl").forEach((e) => e.classList.remove("hl")); if (!on) return;
+  const q = worldRoute(from, to); if (q) q.roads.forEach((i) => ul.querySelector(`.zroad[data-r="${i}"]`)?.classList.add("hl"));
 }
 function buildZoneList() {
   const ul = $("zone-list"); ul.innerHTML = "";
   ul.append(zmapRoads());
+  if (T("map_energy", 0) === 1) WORLD.roads.forEach((r) => { const m = zpct(zroadMid(r)), li = mk("li", "zeng", `${worldCost(r)}⚡`); li.style.setProperty("--x", m.x + "%"); li.style.setProperty("--y", m.y + "%"); li.title = `${WORLD.classes[r[2]].n} ${(worldLen(r) * WORLD.km).toFixed(1)} กม.`; ul.append(li); });
   [...Object.entries(ZONES), ["casino", ZONES.casino]].forEach(([id, z]) => {
     const li = mk("li"); li.style.padding = "0"; li.style.border = "0"; li.style.background = "none";
-    if (ZMAP[id]) { li.style.setProperty("--x", ZMAP[id][0] + "%"); li.style.setProperty("--y", ZMAP[id][1] + "%"); }
+    if (WORLD.nodes[id]) { const p = zpct(WORLD.nodes[id]); li.style.setProperty("--x", p.x + "%"); li.style.setProperty("--y", p.y + "%"); }
     const b = mk("button", "zone-btn");
     const dg = dangerInfo(id), nm = mk("span", "zname"); nm.append(mk("b", "zi", z.icon), mk("span", "zt", z.name));
     b.append(nm, mk("span", "danger-tag d" + dg.tier, `⚠ ${z.danger}/10`));
-    b.title = `${z.name} • อันตราย ${z.danger}/10 • เจอซอมบี้ ${dg.chance}%`;
+    const base = `${z.name} • อันตราย ${z.danger}/10 • เจอซอมบี้ ${dg.chance}%`; b.title = base;
     b.dataset.zone = id;
-    b.addEventListener("click", () => { enterZone(id); setTab("chat"); });
+    const show = () => { const q = state.zone && state.zone !== id ? worldRoute(state.zone, id) : null; if (q) { b.title = `${base} • เส้นทางตามถนน: ${q.path.map((x) => ZONES[x]?.name || x).join(" → ")} (${q.steps} ช่อง ~${q.km} กม.)`; zmapHl(true, state.zone, id); } };
+    b.addEventListener("mouseenter", show); b.addEventListener("focus", show); b.addEventListener("mouseleave", () => zmapHl(false)); b.addEventListener("blur", () => zmapHl(false));
+    b.addEventListener("click", () => { zmapHl(false); enterZone(id); setTab("chat"); });
     li.append(b); ul.append(li);
   });
-  ul.append((() => { const lg = mk("li", "zlegend", "⚠ อันตราย • ⚡ ค่าเดินทาง • 👥 คนในโซน • 👹 บอสโลก"); return lg; })());
+  ul.append((() => { const lg = mk("li", "zlegend", "⚠ อันตราย • 👥 คนในโซน • 👹 บอสโลก • ━ ถนนหลัก ─ ถนน ┄ ทางป่า ┅ อุโมงค์"); return lg; })());
   zmapApply(); zmapListen(); zmapBadges();
 }
 function zmapApply() {
@@ -11793,6 +11849,7 @@ function tuneListen() {
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
+    { const me = T("map_energy", 0); if (me !== state.zmapEn) { const first = state.zmapEn === undefined; state.zmapEn = me; if (!first || me) { try { buildZoneList(); } catch { /* ข้าม */ } } } }   // เปิด/ปิดป้ายพลังงานต่อถนนบนแผนที่ทันที
     try { worldRefresh(); const am = $("admin-modal"); if (am && !am.classList.contains("hidden") && state.admTab === "tune" && !(document.activeElement && ["INPUT", "SELECT"].includes(document.activeElement.tagName))) admTab("tune"); } catch { /* ข้าม */ }
   }, (er) => console.warn("tune", er?.code || er));
 }
@@ -11861,6 +11918,7 @@ function tuneDefs() {
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
+  rows.push(["map_energy", "🗺️ แสดงพลังงานต่อถนนบนแผนที่ (ตัวอย่างก่อนเปิดเดินตามถนน — การเดินทางจริงยังเหมือนเดิม • 1 = แสดง)", 0, 0, 1, "🗺️ แสดงพลังงานต่อถนน"]);
   rows.push(["chat_av_on", "🖼️ แสดงรูปโปรไฟล์วงกลมหน้าชื่อในแชท (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน profAct เพื่อให้เห็นรูป ถ้ายังไม่ deploy จะแสดงไอคอนฝ่ายเหมือนเดิม)", 1, 0, 1, "🖼️ รูปโปรไฟล์ในแชท"]);
   rows.push(["ground_ttl_h", "🧹 ของที่ผู้เล่นวางทิ้งบนพื้นโซนจะถูกเคลียร์เมื่อครบกี่ชั่วโมง (0 = ปิด • ต้อง deploy ฟังก์ชัน groundAct ก่อน)", 6, 0, 168, "🧹 เคลียร์ของบนพื้น (ชม.)"]);
   rows.push(["cook_on", "🍳 พ่อครัว: มินิเกมทำอาหารที่ Safe Zone (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน cookAct ก่อน)", 1, 0, 1, "🍳 พ่อครัว"]);

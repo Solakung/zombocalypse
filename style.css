@@ -528,7 +528,7 @@ textarea#chat-input {
 .zmap-toggle { display: flex; gap: 4px; margin: 0 0 8px; }
 .zmap-toggle .btn { flex: 1; min-height: 32px; padding: 3px 8px; font-size: 13px; }
 .zmap-toggle .on { outline: 1px solid var(--hazard); color: var(--hazard); }
-#zone-list .zroads, #zone-list .zlegend { display: none; }
+#zone-list .zroads, #zone-list .zlegend, #zone-list .zeng { display: none; }
 
 #zone-list.zmap {
   display: block; position: relative; aspect-ratio: 1 / 1.3; width: 100%;
@@ -543,13 +543,16 @@ textarea#chat-input {
 }
 #zone-list.zmap .zroads { display: block; position: absolute; inset: 0; margin: 0; padding: 0; pointer-events: none; }
 #zone-list.zmap .zroads svg { width: 100%; height: 100%; display: block; }
-#zone-list.zmap .zroads line { stroke: #4a5560; stroke-width: 2; stroke-dasharray: 5 5; stroke-linecap: round; }
+#zone-list.zmap .zroad.hl .zfill { stroke: #ffd27a; filter: drop-shadow(0 0 1.2px #ffb43a); }
+#zone-list.zmap .zroad.hl .zcase { stroke: #5a3d0a; }
+#zone-list.zmap .zlbl { fill: #8fa3b3; opacity: .55; font-family: inherit; }
+#zone-list.zmap .zeng { display: block; position: absolute; left: var(--x); top: var(--y); transform: translate(-50%, -50%); font-size: 9.5px; line-height: 1; padding: 1px 4px; border-radius: 8px; background: rgba(14,17,20,.88); border: 1px solid #46505b; color: #ece4c4; pointer-events: none; z-index: 1; width: auto; min-width: 0; }
 #zone-list.zmap .zlegend { display: block; position: absolute; left: 0; right: 0; bottom: 6px; text-align: center; font-size: 10.5px; color: var(--muted); padding: 0 6px; background: none; border: 0; }
-#zone-list.zmap li:not(.zroads):not(.zlegend) { position: absolute; left: var(--x); top: var(--y); width: 26%; min-width: 62px; transform: translate(-50%, -50%); }
+#zone-list.zmap li:not(.zroads):not(.zlegend):not(.zeng) { position: absolute; left: var(--x); top: var(--y); width: 23%; min-width: 60px; transform: translate(-50%, -50%); }
 
 #zone-list.zmap .zone-btn {
   position: relative; display: flex; flex-wrap: wrap; justify-content: center; align-content: center; align-items: center; gap: 2px 3px;
-  width: 100%; min-height: 54px; padding: 4px 3px; text-align: center; border-radius: 12px; font-size: 11px; line-height: 1.2;
+  width: 100%; min-height: 48px; padding: 3px 2px; text-align: center; border-radius: 12px; font-size: 11px; line-height: 1.2;
   background: #252c34; border: 2px solid #46505b; box-shadow: 0 3px 8px rgba(0,0,0,.45);
 }
 #zone-list.zmap .zone-btn .zname { flex: 0 0 100%; display: flex; flex-direction: column; align-items: center; text-align: center; }
