@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1009";
+const APP_VERSION = "2026-10-08.1032";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -6055,7 +6055,7 @@ const roadsExpected = () => { const o = {}; WORLD.roads.forEach((r) => { const c
 const roadsCfgOk = () => { const c = state.roadsCfg || {}, e = roadsExpected(); return Object.keys(e).length === Object.keys(c).length && Object.keys(e).every((k) => c[k] === e[k]); };
 async function roadsSync() {   // owner: เขียนตารางพลังงานต่อถนนจาก WORLD ลง config/roads (rules อ่านตอนเดินทาง)
   if (state.profile?.role !== "owner") return;
-  if (!confirm(`ซิงก์ถนน ${WORLD.roads.length} เส้น (ไป-กลับ ${WORLD.roads.length * 2} รายการ) ลง config/roads?\\nต้องทำก่อนเปิด travel_roads = 1 และทำซ้ำทุกครั้งที่แก้ตารางถนน`)) return;
+  if (!confirm(`ซิงก์ถนน ${WORLD.roads.length} เส้น (ไป-กลับ ${WORLD.roads.length * 2} รายการ) ลง config/roads?\nต้องทำก่อนเปิด travel_roads = 1 และทำซ้ำทุกครั้งที่แก้ตารางถนน`)) return;
   try { await set(ref(db, "config/roads"), roadsExpected()); toast("ซิงก์ถนนแล้ว"); } catch (e) { toast(errMsg(e)); }
 }
 const walkRiskInfo = (q) => { const r = worldRisk(q, (z) => ZONES[z]?.danger || 0, (z) => state.zcount?.[z] || 0); return { ...r, label: ["🟢 ต่ำ", "🟡 กลาง", "🔴 สูง"][r.level] }; };
@@ -6072,7 +6072,7 @@ async function walkTo(to) {
   const from = state.zone, q = worldRoute(from, to);
   if (!q || !q.steps) return toast("ไม่มีเส้นทางไปที่นั่น");
   const cd = Math.ceil(travelCooldownLeft() / 1000), secs = cd + (q.steps - 1) * Math.ceil(TRAVEL_COOLDOWN / 1000), risk = walkRiskInfo(q), names = q.path.map((x) => ZONES[x]?.name || x).join(" → ");
-  if (!confirm(`เดินไป ${ZONES[to]?.name || to}\\n${names}\\n${q.steps} ช่อง • ~${q.km} กม. • พลังงานรวม ~${q.energy} (คิดตามถนนแต่ละช่วง) • ใช้เวลาอย่างน้อย ~${Math.ceil(secs / 60 * 10) / 10} นาที\\nโอกาสเจอ/โดนซุ่มระหว่างทาง: ${risk.label}\\n(พลังงานไม่พอ/ถูกโจมตี/เจอบอส = หยุดเดินทันที)`)) return;
+  if (!confirm(`เดินไป ${ZONES[to]?.name || to}\n${names}\n${q.steps} ช่อง • ~${q.km} กม. • พลังงานรวม ~${q.energy} (คิดตามถนนแต่ละช่วง) • ใช้เวลาอย่างน้อย ~${Math.ceil(secs / 60 * 10) / 10} นาที\nโอกาสเจอ/โดนซุ่มระหว่างทาง: ${risk.label}\n(พลังงานไม่พอ/ถูกโจมตี/เจอบอส = หยุดเดินทันที)`)) return;
   walkAbort(); const w = state.walk = { path: q.path, i: 1, to, cancel: false }; walkBarRender();
   try { await walkLoop(w); } finally { if (state.walk === w) { state.walk = null; walkBarRender(); } }
 }
