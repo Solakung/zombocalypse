@@ -26,5 +26,10 @@ function worldRoute(a, b, mode = "foot") {   // เส้นทางพลั�
   const path = [b], roads = []; for (let v = b; v !== a;) { const [u, i] = prev[v]; roads.unshift(i); path.unshift(u); v = u; }
   return { path, roads, energy: dist[b], steps: roads.length, km: Math.round(roads.reduce((t, i) => t + worldLen(WORLD.roads[i]), 0) * WORLD.km * 10) / 10 };
 }
+// โอกาสโดนซุ่มตลอดเส้นทาง (ตัวเลขประเมิน ไม่ใช่กลไกสุ่มใหม่): Σ ตัวคูณความเสี่ยงของถนน × (0.3 + อันตรายปลายทาง/10) × (1 + 0.1 × ผู้เล่นปลายทาง ≤ 5) • ระดับ 0 ต่ำ (<1.2) / 1 กลาง (<2.4) / 2 สูง — ใช้แสดงตอนวางเส้นทาง
+function worldRisk(q, danger, presence) {
+  let s = 0; q.roads.forEach((ri, k) => { const r = WORLD.roads[ri], z = q.path[k + 1]; s += WORLD.classes[r[2]].risk * (0.3 + ((danger && danger(z)) || 0) / 10) * (1 + 0.1 * Math.min(5, (presence && presence(z)) || 0)); });
+  s = Math.round(s * 100) / 100; return { score: s, level: s < 1.2 ? 0 : s < 2.4 ? 1 : 2 };
+}
 
-module.exports = { WORLD, worldPts, worldLen, worldCost, worldRoute };
+module.exports = { WORLD, worldPts, worldLen, worldCost, worldRoute, worldRisk };

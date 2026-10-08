@@ -844,7 +844,8 @@ function openGuide() {
   ]);
   sec("การเดินทาง", [
     `ย้ายโซนเสียพลังงานตามความไกลจาก Safe Zone: ใกล้ 6 / กลาง ${TRAVEL_STAMINA} / ไกล 14 (กลับ Safe Zone เสีย ${TRAVEL_STAMINA_SAFE})`,
-    `หลังเดินทางต้องรอ ${fmtDur(TRAVEL_COOLDOWN)} ก่อนย้ายโซนอีกครั้ง`
+    `หลังเดินทางต้องรอ ${fmtDur(TRAVEL_COOLDOWN)} ก่อนย้ายโซนอีกครั้ง`,
+    ...(roadsOn() ? [`เดินตามถนนทีละช่องบนแผนที่ (ไปโซนไกลต้องผ่านโซนทางผ่าน): พลังงานคิดตามความยาวถนนแต่ละช่วง (ราว 5 ต่อช่อง) • กดโซนที่ไกลออกไปเพื่อเดินต่อเนื่องอัตโนมัติ (พลังงานหมด/ถูกโจมตี/เจอบอส = หยุดเดิน) • ระหว่างทางอาจเจอผู้เล่นอื่นซุ่ม — พกของเพิ่มพลังงานติดตัวไว้`] : [])
   ]);
   sec("เมื่อ HP หมด", [
     `คุณจะฟื้นที่ Safe Zone ด้วย 50 HP แต่ของสิ้นเปลืองเหลือ ${Math.round(DEATH_KEEP * 100)}% (ปัดลง) และอาวุธที่ถืออยู่เสียความทนไปครึ่งหนึ่ง`,
@@ -1007,7 +1008,7 @@ function renderTravelState() {
     if (!t) { t = mk("span", "travel-tag"); b.insertBefore(t, b.querySelector(".danger-tag")); }
     const here = b.dataset.zone === state.zone;
     b.classList.toggle("cooling", !here && (cd > 0 || dead));
-    t.textContent = here ? "" : b.dataset.zone === "safe" && crimMe() ? (crimRed(state.uid) ? "🔴 ห้ามเข้า" : "🟠 ห้ามเข้า") : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}`;
+    t.textContent = here ? "" : b.dataset.zone === "safe" && crimMe() ? (crimRed(state.uid) ? "🔴 ห้ามเข้า" : "🟠 ห้ามเข้า") : cd > 0 ? `⏳ ${Math.ceil(cd / 1000)}วิ` : `⚡${travelCost(b.dataset.zone)}${roadsOn() && WORLD.nodes[state.zone] && roadOf(state.zone, b.dataset.zone) < 0 ? "🚶" + (worldRoute(state.zone, b.dataset.zone)?.steps || "") : ""}`;
     t.title = here ? "" : cd > 0 ? "ยังล้าจากการเดินทางครั้งก่อน" : `เดินทางไปที่นี่ใช้พลังงาน ${travelCost(b.dataset.zone)}`;
   });
   try { zmapBadges(); } catch { /* ยังไม่พร้อม */ }
@@ -1306,7 +1307,7 @@ $("btn-copy-id").addEventListener("click", async () => {
 // buildZoneList → ดูหัวข้อ 23 ท้ายไฟล์ (แผนที่โซน)
 function teardownZone() { state.unsubs.forEach((f) => f()); state.unsubs = []; }
 
-const travelCost = (z) => (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.includes(z) ? 6 : TRAVEL_FAR.includes(z) ? 14 : TRAVEL_STAMINA) + wxTravelExtra(z);
+const travelCost = (z) => { if (roadsOn() && state.zone && state.zone !== z && WORLD.nodes[state.zone] && WORLD.nodes[z]) { const q = worldRoute(state.zone, z); return q ? q.energy + wxTravelExtra(z) : 0; } return (z === "safe" ? TRAVEL_STAMINA_SAFE : TRAVEL_NEAR.includes(z) ? 6 : TRAVEL_FAR.includes(z) ? 14 : TRAVEL_STAMINA) + wxTravelExtra(z); };   // เปิดเดินตามถนน: ต้นทุน = พลังงานรวมตามเส้นทางสั้นสุด
 function travelCooldownLeft() { const t = state.profile?.lastTravel; return typeof t === "number" ? Math.max(0, TRAVEL_COOLDOWN - (serverNow() - t)) : 0; }
 
 // moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
@@ -1330,15 +1331,18 @@ function presenceWatch() {
   setInterval(fix, 20000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(fix, 1200); });
 }
-async function enterZone(z, initial = false, moved = false) {
+async function enterZone(z, initial = false, moved = false, opt = {}) {
   if (!initial && z === state.zone) return;
-  const old = state.zone; state.presEntering = true;
+  const old = state.zone; state.presEntering = true; let bump = false, spent = null;
   try {
     if (!initial) {
       if (!moved) {
         if (state.profile.hp <= 0) return;
+        if (roadsOn() && !opt.hop && WORLD.nodes[old] && WORLD.nodes[z]) { if (state.zone === "jail") return toast("⛓️ คุณติดคุกอยู่ ออกไปไม่ได้จนกว่าจะครบโทษ"); if (roadOf(old, z) < 0) { state.presEntering = false; return walkTo(z); } walkAbort(); }   // เดินตามถนน: ไม่ติดกัน = เดินหลายช่องอัตโนมัติ
         if (state.boss || state.hb) return toast("บอสขวางทางอยู่ — สู้หรือหนีก่อน");
-        const cd = travelCooldownLeft(), cost = travelCost(z), cur = curStamina();
+        const cd = travelCooldownLeft(), cost = roadsOn() && WORLD.nodes[old] && WORLD.nodes[z] ? hopCost(old, z) : travelCost(z), cur = curStamina();
+        if (cost === null) return toast("ไม่มีถนนไปที่นั่นจากตรงนี้");
+        if (roadsOn() && !roadsCfgOk() && !state.roadsCfgWarn) { state.roadsCfgWarn = true; console.warn("config/roads ไม่ตรงกับแผนที่ — เจ้าของต้องกดซิงก์ถนน"); }
         if (state.zone === "jail") return toast("⛓️ คุณติดคุกอยู่ ออกไปไม่ได้จนกว่าจะครบโทษ (ทำงานลดโทษ จ่ายประกัน หรือแหกคุก)");
         if (z === "safe" && crimMe()) return toast(`🟠 คุณเป็นผู้ก่อเหตุ เข้า Safe Zone ไม่ได้อีก ~${crimMinsLeft()} นาที (หรือจ่ายค่าประกันที่แถบส้ม)`);
         if (cd > 0) return toast(`เพิ่งเดินทางมา ยังล้าอยู่ รออีก ${Math.ceil(cd / 1000)} วินาที`);
@@ -1347,11 +1351,12 @@ async function enterZone(z, initial = false, moved = false) {
           [`users/${state.uid}/zone`]: z, [`users/${state.uid}/lastTravel`]: serverTimestamp(),
           [`users/${state.uid}/stamina`]: cur - cost, [`users/${state.uid}/staminaTs`]: serverTimestamp()
         });
-        questBump("travel");
+        bump = true; spent = cost;
       }
       if (old) await remove(ref(db, `zonePlayers/${old}/${state.uid}`));
     }
-    teardownZone(); state.zone = z; try { $("screen-game").dataset.zone = z; } catch { /* */ } try { achZone(z); } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
+    teardownZone(); state.zone = z; if (bump) { if (opt.part) questBump("travel", { zoneOnly: true }); else questBump("travel"); }   // นับหลังโซนเปลี่ยนแล้ว (เควส "ไปถึงโซน X" ตรวจโซนปัจจุบัน) • เดินหลายช่อง: ช่องระหว่างทางนับเฉพาะเควสผูกโซน ปลายทางนับเต็ม
+    try { $("screen-game").dataset.zone = z; } catch { /* */ } try { achZone(z); } catch { /* */ } state.ground = {}; state.wbHits = {}; state.wbClaim = null;
     $("chat-log").innerHTML = ""; $("zone-title").textContent = `${ZONES[z].icon} ${ZONES[z].name}`; $("zone-desc").textContent = ZONES[z].desc; zoneBanner(z); renderZoneDanger(z); wallRender(); kZoneHook(); try { casinoBar(z); } catch { /* ข้าม */ }
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
@@ -1370,7 +1375,7 @@ async function enterZone(z, initial = false, moved = false) {
       onValue(ref(db, `worldBossClaims/${z}/${state.uid}`), (s) => { state.wbClaim = s.val(); renderWB(); })
     );
     signStyle(); renderWB();
-    if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${travelCost(z)} พลังงาน)`}`, "info");
+    if (!initial) logLine(`คุณเดินทางมาถึง ${ZONES[z].name}${moved ? "" : ` (−${spent ?? travelCost(z)} พลังงาน)`}`, "info");
   } catch (e) { toast(errMsg(e)); } finally { state.presEntering = false; }
 }
 
@@ -2747,7 +2752,7 @@ function jailWorldRows(box) {
     row.append(b); box.append(row);
   });
 }
-$("jail-work").addEventListener("click", jailWorkOpen); $("jail-dig").addEventListener("click", jailDig); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
+$("walk-cancel")?.addEventListener("click", () => walkAbort("คุณสั่งหยุด")); $("jail-work").addEventListener("click", jailWorkOpen); $("jail-dig").addEventListener("click", jailDig); $("jail-esc").addEventListener("click", () => jailAction("escape")); $("jail-bail").addEventListener("click", () => jailAction("bail"));
 
 // ---- 🍳 พ่อครัว + มินิเกมทำอาหาร — functions/cook.js • ทำที่ Safe Zone (มนุษย์) • เปิดเป็นค่าเริ่มต้น (ปิดได้ด้วย tune cook_on = 0)
 const cookOn = () => T("cook_on", 1) === 1;
@@ -3378,6 +3383,7 @@ async function resolveAttack(key, a) {
   const p = state.profile;
   if (serverNow() - a.ts > 35000 || a.zone !== state.zone) { await remove(aRef); return; }
 
+  if (state.walk) walkAbort("ถูกโจมตี");
   const defRoll = d6() + effV("dice");
   const w = equippedWeapon();
   const u = { [`attacks/${state.uid}/${key}`]: null };
@@ -3506,6 +3512,7 @@ function admTuneRender(pane) {
   const sel = document.createElement("select"); sel.style.cssText = "width:100%;margin-bottom:8px";
   [["", "ทุกหมวด"], ["__force", "⚡ บังคับเหตุการณ์/สภาพอากาศ"], ...groups.map((g) => [g, g])].forEach(([v, l]) => sel.append(new Option(l, v)));
   sel.value = state.admTuneGrp || ""; sel.addEventListener("change", () => { state.admTuneGrp = sel.value; admTab("tune"); });
+  if (state.profile?.role === "owner" && typeof roadsCfgOk === "function") { const row = document.createElement("div"); row.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"; const st = document.createElement("span"); st.className = "muted"; st.textContent = roadsCfgOk() ? "✅ config/roads ตรงกับแผนที่" : "⚠️ config/roads ยังไม่ตรงกับแผนที่ (ต้องซิงก์ก่อนเปิดเดินตามถนน)"; row.append(btn("🗺️ ซิงก์ถนนเข้าฐานข้อมูล", async () => { await roadsSync(); admTab("tune"); }, "btn ghost mini"), st); pane.append(row); }
   pane.append(sel); tuneRender(pane, state.admTuneGrp || "");
 }
 function admTab(t) {
@@ -5147,7 +5154,10 @@ const QP_SEED = {
     w3: { title: "ซื้อ/ขายในตลาด 3 ครั้ง", ev: "market", need: 3, r: { human: { id: "water_jug", qty: 1 }, zombie: { id: "water_jug", qty: 1 } } },
     w4: { title: "เดินทางระหว่างโซน 10 ครั้ง", ev: "travel", need: 10, r: { human: { id: "energy_drink", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } },
     w5: { title: "คราฟต์ 5 ครั้ง", ev: "craft", need: 5, f: "human", r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "army_meal", qty: 1 } } },
-    w6: { title: "ซ่อมกำแพงค่าย 5 ครั้ง", ev: "wall", need: 5, f: "human", r: { human: { id: "bandage", qty: 2 }, zombie: { id: "bandage", qty: 2 } } }
+    w6: { title: "ซ่อมกำแพงค่าย 5 ครั้ง", ev: "wall", need: 5, f: "human", r: { human: { id: "bandage", qty: 2 }, zombie: { id: "bandage", qty: 2 } } },
+    w7: { title: "เดินทางไปถึงโรงพยาบาล", desc: "ไปให้ถึงโรงพยาบาล (ผ่านสะพานจากโรงงาน)", ev: "travel", z: "hospital", need: 1, r: { human: { id: "bandage", qty: 2 }, zombie: { id: "energy_drink", qty: 1 } } },
+    w8: { title: "เดินทางไปถึงค่ายทหารร้าง", desc: "โซนไกล 3 ช่องจาก Safe Zone — พกพลังงานไปให้พอ", ev: "travel", z: "base", need: 1, r: { human: { id: "army_meal", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } },
+    w9: { title: "เดินทางไปถึงศูนย์วิจัยร้าง", desc: "โซนไกล 3 ช่องจาก Safe Zone — เสี่ยงสูง", ev: "travel", z: "lab", need: 1, r: { human: { id: "medkit", qty: 1 }, zombie: { id: "energy_drink", qty: 1 } } }
   },
   newbie: {
     n1: { title: "ออกค้นหาไอเทมครั้งแรก", desc: "กดปุ่ม ค้นหาไอเทม", ev: "search", need: 1, r: { human: { id: "scrap", qty: 2 }, zombie: { id: "rotten_meat", qty: 1 } } },
@@ -5180,11 +5190,12 @@ const qpClaimable = () => QP_PERIODS.reduce((s, [per]) => s + qpList(per).filter
 
 // เรียกจากจุดต่างๆ ของเกมหลังทำสำเร็จ — ไม่รอ ไม่โยน error (ความคืบหน้าพลาดไม่กระทบการกระทำจริง)
 let qpChain = Promise.resolve();
-function questBump(evName) { try { achEv(evName); } catch { /* ข้าม */ } qpChain = qpChain.then(() => qpBumpRun(evName)).catch((e) => console.warn("quest", e?.code || e)); }
-async function qpBumpRun(evName) {
+function questBump(evName, opt) { try { if (!(opt && opt.zoneOnly)) achEv(evName); } catch { /* ข้าม */ } qpChain = qpChain.then(() => qpBumpRun(evName, opt)).catch((e) => console.warn("quest", e?.code || e)); }
+async function qpBumpRun(evName, opt) {
   const uid = state.uid; if (!state.qDefs || !uid || !state.profile || state.profile.banned) return;
   for (const [per] of QP_PERIODS) for (const [qid, d] of qpList(per)) {
     if (d.ev !== evName) continue;
+    if (opt && opt.zoneOnly && !d.z) continue;   // ช่องระหว่างทางของการเดินหลายช่อง: นับเฉพาะเควสผูกโซน
     if (d.z && d.z !== state.zone) continue;   // เควสผูกโซน: นับเฉพาะตอนอยู่โซนนั้น (rules ตรวจโซนปัจจุบันซ้ำ)
     let x = qpState(per, qid);
     if (x.done || x.claimed) continue;
@@ -5303,7 +5314,7 @@ function qpRender() {
   if (state.profile?.role === "owner") {
     const c = card("🛠️ เจ้าของ — ข้อมูลเควส");
     c.append(mk("span", "muted", "เควสเก็บที่ config/questDefs (แก้รายข้อได้ที่ Firebase Console ไม่ต้องแก้ rules) เหตุการณ์ที่นับได้: " + QP_EVENTS + " • ของรางวัลต้องเป็นของเอาชีวิตรอดเท่านั้น ≤ 20 ชิ้น"));
-    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซนรายวัน", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini"), btn("เติมเควสเช็กอิน+ปิดล้อม+เป้าหมายร่วม", qpSeedStreak, "btn ghost mini")); c.append(r); body.append(c);
+    const r = row(); r.append(btn("เติมเควสเริ่มต้น", qpSeed, "btn primary mini"), btn("เติมเควสโซน (รายวัน+ไกล)", qpSeedZone, "btn ghost mini"), btn("เติมเควส NPC", qpSeedNpc, "btn ghost mini"), btn("เติมเควสเช็กอิน+ปิดล้อม+เป้าหมายร่วม", qpSeedStreak, "btn ghost mini")); c.append(r); body.append(c);
   }
 }
 
@@ -5657,13 +5668,15 @@ function zoneQuestSeed() {
     out[`zd${d}z2`] = { title: `ค้นหา 6 ครั้งที่${zn(z1)}`, ev: "search", need: 6, z: z1, dw: d, f: "zombie", r: { human: R("water", 1), zombie: R("rotten_meat", 3) } };
     const [e4, n4, g4] = Z3[d], zz = ["hit", "search", "bite"].includes(e4);
     out[`zd${d}z3`] = { title: `${EV[e4]} ${n4} ครั้ง${zz ? "ที่" + zn(z3) : ""}`, ev: e4, need: n4, ...(zz ? { z: z3 } : {}), dw: d, f: "zombie", r: { human: R("water", 1), zombie: R(g4, 1) } };
+    const tz = ["factory", "forest", "mall", "forest", "factory", "mall", "ruins"][d];   // เดินทางไปถึงโซนง่ายๆ (1–2 ช่องจาก Safe Zone) หมุนตามวัน
+    out[`zd${d}t`] = { title: `เดินทางไปถึง${zn(tz)}`, desc: "ใช้ปุ่มโซน เดินตามถนนไปให้ถึง", ev: "travel", need: 1, z: tz, dw: d, r: { human: R("scrap", 2), zombie: R("rotten_meat", 1) } };
   }
   return out;
 }
 async function qpSeedZone() {
   if (state.profile?.role !== "owner") return;
-  if (!confirm("เติมเควสโซนรายวัน?\nจะเพิ่ม/อัปเดตเควส zd0h1…zd6z3 (42 ข้อ) ใน config/questDefs/daily โดยไม่แตะเควสอื่น")) return;
-  try { await update(ref(db, "config/questDefs/daily"), zoneQuestSeed()); toast("เติมเควสโซนรายวันแล้ว"); }
+  if (!confirm("เติมเควสโซน?\nจะเพิ่ม/อัปเดตเควสรายวัน zd0h1…zd6t (49 ข้อ รวมเควส \"เดินทางไปถึงโซนง่ายๆ\") และเควสรายสัปดาห์ w7–w9 (เดินทางไปถึงโรงพยาบาล/ค่ายทหาร/ศูนย์วิจัย) โดยไม่แตะเควสอื่น")) return;
+  try { await update(ref(db, "config/questDefs/daily"), zoneQuestSeed()); const wk = {}; ["w7", "w8", "w9"].forEach((k) => { wk[k] = QP_SEED.weekly[k]; }); await update(ref(db, "config/questDefs/weekly"), wk); toast("เติมเควสโซนแล้ว"); }
   catch (e) { console.error("qpSeedZone", e?.code || e); toast(errMsg(e)); }
 }
 
@@ -5970,6 +5983,11 @@ function worldRoute(a, b, mode = "foot") {   // เส้นทางพลั�
   const path = [b], roads = []; for (let v = b; v !== a;) { const [u, i] = prev[v]; roads.unshift(i); path.unshift(u); v = u; }
   return { path, roads, energy: dist[b], steps: roads.length, km: Math.round(roads.reduce((t, i) => t + worldLen(WORLD.roads[i]), 0) * WORLD.km * 10) / 10 };
 }
+// โอกาสโดนซุ่มตลอดเส้นทาง (ตัวเลขประเมิน ไม่ใช่กลไกสุ่มใหม่): Σ ตัวคูณความเสี่ยงของถนน × (0.3 + อันตรายปลายทาง/10) × (1 + 0.1 × ผู้เล่นปลายทาง ≤ 5) • ระดับ 0 ต่ำ (<1.2) / 1 กลาง (<2.4) / 2 สูง — ใช้แสดงตอนวางเส้นทาง
+function worldRisk(q, danger, presence) {
+  let s = 0; q.roads.forEach((ri, k) => { const r = WORLD.roads[ri], z = q.path[k + 1]; s += WORLD.classes[r[2]].risk * (0.3 + ((danger && danger(z)) || 0) / 10) * (1 + 0.1 * Math.min(5, (presence && presence(z)) || 0)); });
+  s = Math.round(s * 100) / 100; return { score: s, level: s < 1.2 ? 0 : s < 2.4 ? 1 : 2 };
+}
 // ---- /แผนที่โลก
 /* ---- แผนที่โซน (แผนที่เมือง): ตำแหน่งภูมิศาสตร์และถนนจาก WORLD ด้านบน — เป็นภาพ + ตัววางแผนเส้นทาง ไม่มีผลกับค่าเดินทางจริง (ยังกดข้ามโซนได้เหมือนเดิม) ---- */
 const zmapOn = () => LS.get("zc_zmap", "map") !== "list";
@@ -6029,6 +6047,50 @@ function buildZoneList() {
   ul.append((() => { const lg = mk("li", "zlegend", "⚠ อันตราย • 👥 คนในโซน • 👹 บอสโลก • ━ ถนนหลัก ─ ถนน ┄ ทางป่า ┅ อุโมงค์"); return lg; })());
   zmapApply(); zmapListen(); zmapBadges();
 }
+// ---- 🚶 เดินตามถนน (ระบบเดินทางทีละช่อง — เปิดด้วย tune travel_roads = 1) • rules ตรวจโซนติดกัน + พลังงานต่อถนนจาก config/roads (เจ้าของกด "ซิงก์ถนน" ในแผงแอดมิน) • ปิดอยู่ = กดข้ามโซนเหมือนเดิม
+const roadsOn = () => T("travel_roads", 0) === 1;
+const roadOf = (a, b) => WORLD.roads.findIndex((r) => (r[0] === a && r[1] === b) || (r[0] === b && r[1] === a));
+const hopCost = (a, b) => { const i = roadOf(a, b); return i < 0 ? null : worldCost(WORLD.roads[i]) + wxTravelExtra(b); };   // พลังงานต่อ 1 ช่อง (ถนน + สภาพอากาศ)
+const roadsExpected = () => { const o = {}; WORLD.roads.forEach((r) => { const c = worldCost(r); o[r[0] + "_" + r[1]] = c; o[r[1] + "_" + r[0]] = c; }); return o; };
+const roadsCfgOk = () => { const c = state.roadsCfg || {}, e = roadsExpected(); return Object.keys(e).length === Object.keys(c).length && Object.keys(e).every((k) => c[k] === e[k]); };
+async function roadsSync() {   // owner: เขียนตารางพลังงานต่อถนนจาก WORLD ลง config/roads (rules อ่านตอนเดินทาง)
+  if (state.profile?.role !== "owner") return;
+  if (!confirm(`ซิงก์ถนน ${WORLD.roads.length} เส้น (ไป-กลับ ${WORLD.roads.length * 2} รายการ) ลง config/roads?\\nต้องทำก่อนเปิด travel_roads = 1 และทำซ้ำทุกครั้งที่แก้ตารางถนน`)) return;
+  try { await set(ref(db, "config/roads"), roadsExpected()); toast("ซิงก์ถนนแล้ว"); } catch (e) { toast(errMsg(e)); }
+}
+const walkRiskInfo = (q) => { const r = worldRisk(q, (z) => ZONES[z]?.danger || 0, (z) => state.zcount?.[z] || 0); return { ...r, label: ["🟢 ต่ำ", "🟡 กลาง", "🔴 สูง"][r.level] }; };
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+function walkBarRender(sec) {
+  const bar = $("walk-bar"); if (!bar) return; const w = state.walk;
+  bar.classList.toggle("hidden", !w); document.querySelectorAll("#zone-list .zroad.walk").forEach((e) => e.classList.remove("walk"));
+  if (!w) return;
+  $("walk-txt").textContent = `🚶 เดินไป ${ZONES[w.to]?.name || w.to} — ช่อง ${Math.min(w.i, w.path.length - 1)}/${w.path.length - 1} → ${ZONES[w.path[Math.min(w.i, w.path.length - 1)]]?.name || ""}${sec ? ` • พักเดินทาง ${sec} วิ` : ""}`;
+  for (let k = w.i - 1; k < w.path.length - 1; k++) { const ri = roadOf(w.path[k], w.path[k + 1]); document.querySelector(`#zone-list .zroad[data-r="${ri}"]`)?.classList.add("walk"); }
+}
+function walkAbort(why) { const w = state.walk; if (!w) return; w.cancel = true; state.walk = null; walkBarRender(); if (why) { toast(`🚶 หยุดเดิน — ${why}`); try { logLine(`🚶 หยุดเดินระหว่างทางไป ${ZONES[w.to]?.name || w.to}: ${why}`, "system"); } catch { /* ข้าม */ } } }
+async function walkTo(to) {
+  const from = state.zone, q = worldRoute(from, to);
+  if (!q || !q.steps) return toast("ไม่มีเส้นทางไปที่นั่น");
+  const cd = Math.ceil(travelCooldownLeft() / 1000), secs = cd + (q.steps - 1) * Math.ceil(TRAVEL_COOLDOWN / 1000), risk = walkRiskInfo(q), names = q.path.map((x) => ZONES[x]?.name || x).join(" → ");
+  if (!confirm(`เดินไป ${ZONES[to]?.name || to}\\n${names}\\n${q.steps} ช่อง • ~${q.km} กม. • พลังงานรวม ~${q.energy} (คิดตามถนนแต่ละช่วง) • ใช้เวลาอย่างน้อย ~${Math.ceil(secs / 60 * 10) / 10} นาที\\nโอกาสเจอ/โดนซุ่มระหว่างทาง: ${risk.label}\\n(พลังงานไม่พอ/ถูกโจมตี/เจอบอส = หยุดเดินทันที)`)) return;
+  walkAbort(); const w = state.walk = { path: q.path, i: 1, to, cancel: false }; walkBarRender();
+  try { await walkLoop(w); } finally { if (state.walk === w) { state.walk = null; walkBarRender(); } }
+}
+async function walkLoop(w) {
+  while (!w.cancel && state.walk === w && w.i < w.path.length) {
+    const next = w.path[w.i], cost = hopCost(state.zone, next);
+    if (cost === null || state.zone !== w.path[w.i - 1]) return walkAbort("ตำแหน่งเปลี่ยนไป");
+    for (;;) { if (w.cancel || state.walk !== w) return; const cd = travelCooldownLeft(); if (cd <= 0) break; walkBarRender(Math.ceil(cd / 1000)); await sleepMs(Math.min(500, cd + 20)); }
+    if (state.profile.hp <= 0) return walkAbort("คุณล้มลง");
+    if (state.boss || state.hb) return walkAbort("บอสขวางทาง");
+    if (curStamina() < cost) return walkAbort(`พลังงานไม่พอ (ต้องใช้ ${cost}) — พักอยู่ที่ ${ZONES[state.zone]?.name}`);
+    walkBarRender(); await enterZone(next, false, false, { hop: true, part: w.i < w.path.length - 1 });
+    if (state.zone !== next) return walkAbort("ย้ายต่อไม่ได้");
+    w.i++; walkBarRender();
+  }
+  if (!w.cancel && state.walk === w) { toast(`🚶 ถึง ${ZONES[w.to]?.name || w.to} แล้ว`); }
+}
+// ---- /เดินตามถนน
 function zmapApply() {
   const ul = $("zone-list"); if (!ul) return; const on = zmapOn(); ul.classList.toggle("zmap", on);
   let tg = $("zmap-toggle");
@@ -11846,9 +11908,11 @@ function tuneListen() {
   if (state.tuneOn || !state.uid) return; state.tuneOn = true; let last = null;
   evtForceListen(); wxListen();
   statStyle(); statupListen();
+  onValue(ref(db, "config/roads"), (s) => { state.roadsCfg = s.val() || {}; }, () => {});   // ตารางพลังงานต่อถนนที่ rules อ่าน (ไว้เทียบกับแผนที่)
   onValue(ref(db, "tune"), (snap) => {
     state.tune = snap.val() || {};
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
+    { const tr = T("travel_roads", 0); if (tr !== state.roadsEn) { const first = state.roadsEn === undefined; state.roadsEn = tr; if (!first) { try { walkAbort(); renderTravelState(); } catch { /* ข้าม */ } } } }
     { const me = T("map_energy", 0); if (me !== state.zmapEn) { const first = state.zmapEn === undefined; state.zmapEn = me; if (!first || me) { try { buildZoneList(); } catch { /* ข้าม */ } } } }   // เปิด/ปิดป้ายพลังงานต่อถนนบนแผนที่ทันที
     try { worldRefresh(); const am = $("admin-modal"); if (am && !am.classList.contains("hidden") && state.admTab === "tune" && !(document.activeElement && ["INPUT", "SELECT"].includes(document.activeElement.tagName))) admTab("tune"); } catch { /* ข้าม */ }
   }, (er) => console.warn("tune", er?.code || er));
@@ -11918,6 +11982,7 @@ function tuneDefs() {
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
+  rows.push(["travel_roads", "🚶 เดินทางตามถนนทีละช่อง (1 = เปิด, 0 = กดข้ามโซนเหมือนเดิม • ต้อง publish rules และกด \"ซิงก์ถนน\" ก่อน • เปิดแล้วถ้าไม่ซิงก์ถนน ผู้เล่นจะเดินทางไม่ได้)", 0, 0, 1, "🚶 เดินตามถนน"]);
   rows.push(["map_energy", "🗺️ แสดงพลังงานต่อถนนบนแผนที่ (ตัวอย่างก่อนเปิดเดินตามถนน — การเดินทางจริงยังเหมือนเดิม • 1 = แสดง)", 0, 0, 1, "🗺️ แสดงพลังงานต่อถนน"]);
   rows.push(["chat_av_on", "🖼️ แสดงรูปโปรไฟล์วงกลมหน้าชื่อในแชท (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน profAct เพื่อให้เห็นรูป ถ้ายังไม่ deploy จะแสดงไอคอนฝ่ายเหมือนเดิม)", 1, 0, 1, "🖼️ รูปโปรไฟล์ในแชท"]);
   rows.push(["ground_ttl_h", "🧹 ของที่ผู้เล่นวางทิ้งบนพื้นโซนจะถูกเคลียร์เมื่อครบกี่ชั่วโมง (0 = ปิด • ต้อง deploy ฟังก์ชัน groundAct ก่อน)", 6, 0, 168, "🧹 เคลียร์ของบนพื้น (ชม.)"]);

@@ -2,7 +2,7 @@
 const fs = require("fs"), assert = require("assert");
 const F = "/home/user/zombocalypse/", sc = fs.readFileSync(F + "script.js", "utf8"), M = require(F + "functions/worldmap");
 const part = sc.slice(sc.indexOf("// ---- 🗺️ แผนที่โลก"), sc.indexOf("// ---- /แผนที่โลก")); assert(part.length > 800, "slice");
-const C = new Function(part + ";return { WORLD, worldPts, worldLen, worldCost, worldRoute };")();
+const C = new Function(part + ";return { WORLD, worldPts, worldLen, worldCost, worldRoute, worldRisk };")();
 // ตรงกันทุกอย่าง
 assert.deepStrictEqual(C.WORLD, M.WORLD, "WORLD data");
 const ids = Object.keys(M.WORLD.nodes);
@@ -31,4 +31,9 @@ assert.strictEqual(M.worldRoute("safe", "forest", "car"), null, "ป่าต้
 assert(M.worldRoute("safe", "forest", "bike").energy < M.worldRoute("safe", "forest", "foot").energy); assert(M.worldRoute("safe", "base", "car").energy <= 8);
 // สะพานโรงพยาบาลเป็นทางข้ามเดียวไปทางเหนือ (ผลของแม่น้ำบนแผนที่ — ตัดแล้วโซนเหนือทั้งหมดไปไม่ถึง)
 { const cut = { ...M.WORLD, roads: M.WORLD.roads.filter((r) => r[2] !== "bridge") }, reach = new Set(["safe"]); let ch = true; while (ch) { ch = false; cut.roads.forEach(([a, b]) => { if (reach.has(a) !== reach.has(b)) { reach.add(a); reach.add(b); ch = true; } }); } assert(["hospital", "base", "police", "tunnel", "lab", "casino"].every((z) => !reach.has(z)), "สะพาน = ทางเดียว"); }
+// ความเสี่ยงตามเส้นทาง: ฝั่งเกม=เซิร์ฟเวอร์ • ใกล้ Safe ต่ำ / โซนไกลสูง / ผู้เล่นในโซนเพิ่มคะแนน
+{ const dg = { safe: 0, ruins: 4, forest: 2, factory: 5, port: 5, mall: 6, hospital: 7, casino: 3, base: 8, police: 9, tunnel: 10, lab: 9 }, none = () => 0, risk = (z, p = none) => M.worldRisk(M.worldRoute("safe", z), (x) => dg[x], p);
+  for (const z of ids) assert.deepStrictEqual(C.worldRisk(C.worldRoute("safe", z), (x) => dg[x], none), risk(z), "risk parity " + z);
+  assert.strictEqual(risk("ruins").level, 0); assert.strictEqual(risk("factory").level, 0); assert.strictEqual(risk("base").level, 2); assert.strictEqual(risk("lab").level, 2); assert(risk("hospital").score < risk("base").score, "ไกลกว่าเสี่ยงกว่า");
+  assert(risk("hospital", () => 5).score > risk("hospital").score, "มีคนเยอะเสี่ยงกว่า"); assert.strictEqual(risk("hospital", () => 99).score, risk("hospital", () => 5).score, "ผู้เล่นนับสูงสุด 5"); assert.deepStrictEqual(M.worldRisk(M.worldRoute("safe", "safe"), (x) => dg[x]), { score: 0, level: 0 }); }
 console.log("worldmap OK (" + M.WORLD.roads.length + " roads, avg " + avg.toFixed(1) + "⚡)");

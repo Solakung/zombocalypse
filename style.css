@@ -959,3 +959,8 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 /* รูปโปรไฟล์วงกลมหน้าชื่อในแชท */
 .cav { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; overflow: hidden; vertical-align: middle; margin-right: 5px; font-size: 13px; line-height: 1; box-sizing: border-box; border: 2px solid transparent; flex: none; }
 .cav img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* เดินตามถนน: แถบสถานะ + เส้นทางที่กำลังเดินบนแผนที่ */
+#walk-bar.hidden { display: none !important; }
+#zone-list.zmap .zroad.walk .zfill { stroke: #6fb4ff; filter: drop-shadow(0 0 1.2px #3a7bd5); }
+#zone-list.zmap .zroad.walk .zcase { stroke: #123a66; }
