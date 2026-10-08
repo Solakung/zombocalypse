@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.0352";
+const APP_VERSION = "2026-10-08.1009";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -8347,7 +8347,7 @@ function baseKind(k) {
   return {
     w: { icon: "💧", name: "ตะแกรงรองน้ำฝน", item: "water", tip: "รองน้ำฝนสะสมไว้ให้" },
     t: z ? { icon: "🪤", name: "หลุมดักซาก", item: "rotten_meat", tip: "ดักซากสัตว์ให้" } : { icon: "🪤", name: "กับดักสัตว์", item: "canned_food", tip: "ดักสัตว์ป่าแล้วทำเป็นอาหารกระป๋องให้" },
-    m: { icon: "🌱", name: "แปลงมอส", item: "moss", tip: "มอสสมานแผลโตเองในที่ร่ม" }
+    m: { icon: "🌱", name: "มอสขวดโหล", item: "moss", tip: "มอสสมานแผลโตเองในที่ร่ม" }
   }[k];
 }
 const baseLv = () => Math.max(0, Math.min(3, state.base?.lv || 0));
@@ -8451,6 +8451,8 @@ function renderBase() {
       else if (state.baseView === "edit") { homeEdit(sc, body); return; }
       else { baseSceneFill(sc, baseSceneOwn()); homeLoad(); }
     } catch (e) { console.warn("scene", e); } }
+  const gFirst = state.baseView === "yard";   // แท็บลานบ้าน: แผงสวนขึ้นก่อนช่องสถานีผลิต (เดิมอยู่ท้ายจอ ผู้เล่นเลื่อนไม่ถึงแล้วเข้าใจว่าปลูกได้แปลงเดียว)
+  if (gFirst) { try { gardenRows(body); } catch (e) { console.warn("garden rows", e); } }
   const slots = baseSlots(); let total = 0;
   for (let i = 1; i <= 5; i++) {
     const c = mk("div"); c.style.cssText = "border:1px solid var(--line);border-radius:10px;padding:10px;display:grid;gap:6px";
@@ -8484,7 +8486,7 @@ function renderBase() {
     const ub = btn(`อัปเกรด (${ITEMS[it].icon}×${cost})`, baseUpgrade, "btn primary mini"); ub.disabled = !can || have < cost; c2.append(ub);
   }
   body.append(c2);
-  try { gardenRows(body); benchRows(body); expRows(body); petRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
+  try { if (!gFirst) gardenRows(body); benchRows(body); expRows(body); petRows(body); labRows(body); decoRows(body); } catch (e) { console.warn("bench/deco rows", e); }
 }
 
 /* =========================================================
@@ -10450,7 +10452,8 @@ function gardenRows(body) {
   const spent = Date.now() - state.gardenAt, zom = state.profile?.faction === "zombie";
   const leftOf = (pl) => Math.max(0, (pl.left || 0) - spent);
   if (!D.plots.some((p) => p.i === state.gardenSel)) state.gardenSel = (D.plots.find((p) => p.c && leftOf(p) <= 0) || D.plots.find((p) => !p.c) || D.plots[0]).i;
-  box.append(mk("span", "muted", `${zom ? "บ่อบ่มเชื้อ" : "สวนลับในค่าย"} ${D.n} แปลง • ${SEASON_TH[D.season]} (ฤดูกาลมีผลกับเวลาโต) • แตะแปลงในภาพเพื่อเลือก`));
+  box.append(mk("span", "muted", `${zom ? "บ่อบ่มเชื้อ" : "สวนลับในค่าย"} ${D.n} แปลง • ${SEASON_TH[D.season]} (ฤดูกาลมีผลกับเวลาโต)`));
+  { const h = mk("b", "", "👆 แตะแปลงในภาพเพื่อเลือกว่าจะปลูกแปลงไหน"); h.style.cssText = "color:var(--hazard);font-size:.9em"; box.append(h); }
   if (D.daily) box.append(btn("🎁 รับเมล็ดฟรีวันนี้", () => gardenGo("daily", null, (r) => { toast(`🌱 ได้ ${mRew(r.got)}`); logLine(`🌱 เมล็ดฟรีรายวัน: ${mRew(r.got)}`, "system"); }), "btn primary"));
   const scn = mk("div"); scn.innerHTML = gardenSceneSvg(D, state.gardenSel, spent, zom);
   scn.onclick = (e) => { const g = e.target.closest && e.target.closest("[data-i]"); if (g) { state.gardenSel = Number(g.getAttribute("data-i")); try { baseAgain(); } catch { /* ข้าม */ } } };
