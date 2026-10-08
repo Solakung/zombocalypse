@@ -16,7 +16,7 @@ const { boot } = require("./_fakefb"); const assert = require("assert");
   console.log(JSON.stringify(info)); console.log("ORDER:", JSON.stringify(await pg.evaluate(() => [...document.querySelectorAll("#base-body b, #base-body summary")].map((e) => e.textContent.slice(0, 40)))));
   await pg.screenshot({ path: "/tmp/claude-0/-home-user-zombocalypse/151a244a-95d6-5679-8654-49c6a5860fe0/scratchpad/garden.png", fullPage: false });
   const ord = await pg.evaluate(() => [...document.querySelectorAll("#base-body b")].map((e) => e.textContent)); assert(ord.findIndex((t) => /แปลงปลูก/.test(t)) < ord.findIndex((t) => /ช่องที่ 1/.test(t)), "แผงสวนต้องมาก่อนช่องสถานีผลิต");
-  assert.strictEqual(info.taps, 4, "แตะเลือกได้ 4 แปลง");
+  assert.strictEqual(info.taps, 8, "แตะเลือกได้ 4 แปลง × 2 ภาพ (ฉากบ้านด้านบน + ภาพในแผงสวน)");
   // แตะแปลง 3 (ว่าง) แล้วปลูกมะเขือเทศ
   await pg.evaluate(() => document.querySelector('#base-body [data-i="3"]').dispatchEvent(new MouseEvent("click", { bubbles: true }))); await pg.waitForTimeout(500);
   const sel = await pg.evaluate(() => document.getElementById("base-body").innerText.match(/แปลงที่ \d \(ว่าง\)[^\n]*/)?.[0]); console.log("selected:", sel); assert(/แปลงที่ 3/.test(sel || ""), "เลือกแปลง 3");
