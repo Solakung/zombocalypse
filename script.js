@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1043";
+const APP_VERSION = "2026-10-08.1058";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1323,10 +1323,21 @@ function travelCooldownLeft(to) {
 
 // moved = true → ถูกย้ายโซนจากระบบ (ล้มลงแล้วฟื้นที่ Safe Zone) ไม่เสียต้นทุน/คูลดาวน์
 // รายชื่อในโซน (zonePlayers) ถูกลบโดย onDisconnect ทุกครั้งที่สัญญาณหลุด (มือถือหลับ/สลับเน็ต/พับจอ) — ต้องเขียนกลับเมื่อต่อใหม่ ไม่งั้นผู้เล่นยังตี/ค้นหา/แชทได้แต่ไม่โผล่ในรายชื่อ ใครโดนตีก็ตีสวนไม่ได้
+// ---- 🛡️ โล่ผู้เล่นใหม่: บัญชีอายุ < 3 วัน และค้นหา < 100 ครั้ง ถูกผู้เล่นอื่นโจมตีไม่ได้ (ทุกโซน) • โล่หมดถาวรเมื่อโจมตีผู้เล่นอื่นเอง (เขียน shield/{uid}/off) • rules `attacks` ตรวจจริง ธง nb ใน zonePlayers มีไว้โชว์/ปิดปุ่ม
+const NB_MS = 3 * 86400000, NB_SRCH = 100;
+const nbYoung = () => { const c = state.profile?.createdAt; return typeof c === "number" && serverNow() - c < NB_MS; };
+const nbMine = () => nbYoung() && !state.shieldOff && (state.ach?.c?.srch || 0) < NB_SRCH;
+function shieldListen() {
+  if (state.shieldOn || !state.uid) return; state.shieldOn = true;
+  onValue(ref(db, `shield/${state.uid}/off`), (s) => { state.shieldOff = s.val() || 0; try { if (state.psnap) renderPlayers(state.psnap); } catch { /* ข้าม */ } }, () => {});
+}
+// ---- /โล่ผู้เล่นใหม่
 async function presenceSet(z = state.zone) {
   if (!z || !state.uid || !state.profile) return;
   const pRef = ref(db, `zonePlayers/${z}/${state.uid}`);
-  await set(pRef, { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}), ...(evoTitleKey() ? { evo4: evoTitleKey() } : {}) });
+  const base = { name: state.profile.username, faction: state.profile.faction, ...(state.profile.infected && state.profile.faction === "human" ? { infected: true } : {}), ...(evoTitleKey() ? { evo4: evoTitleKey() } : {}) };
+  const flags = { ...(nbMine() ? { nb: true } : {}), ...(state.presWk ? { wk: true } : {}) };   // nb = ผู้เล่นใหม่ติดโล่ (rules ตรวจซ้ำ) • wk = กำลังเดินผ่านโซนนี้ระหว่างทาง
+  try { await set(pRef, { ...base, ...flags }); } catch (e) { if (!Object.keys(flags).length) throw e; await set(pRef, base); }   // ธงถูกปฏิเสธ (เช่นเกณฑ์โล่ฝั่งเซิร์ฟเวอร์ไม่ตรง) → ตั้งตัวตนโดยไม่มีธง จะได้ไม่หลุดจากรายชื่อโซน
   onDisconnect(pRef).remove();
 }
 function presenceWatch() {
@@ -1372,6 +1383,7 @@ async function enterZone(z, initial = false, moved = false, opt = {}) {
     document.querySelectorAll(".zone-btn").forEach((b) => b.classList.toggle("current", b.dataset.zone === z));
     renderCraft(); renderInv();
 
+    state.presWk = !!opt.part;   // เดินตามถนนและยังไม่ถึงปลายทาง = กำลังเดินผ่านโซนนี้
     await presenceSet(z);
 
     const chatQ = query(ref(db, "chats/" + z), orderByKey(), limitToLast(CHAT_LIMIT));
@@ -1595,7 +1607,7 @@ function renderPlayers(snap) {
     const v = c.val(), me = c.key === state.uid;
     state.players[c.key] = v;
     const li = mk("li");
-    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${crimMark(c.key)}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
+    li.append(mk("span", "", `${FACTION[v.faction]?.icon || ""} ${v.name}${me ? " (คุณ)" : ""}${v.infected ? " 🦠" : ""}${(me ? nbMine() : v.nb) ? " 🛡️" : ""}${v.wk ? " 🚶" : ""}${crimMark(c.key)}${v.evo4 ? " " + evoTitleText(v.evo4) : ""}`), achBadge(c.key));
     if (v.infected) li.title = "ติดเชื้อ";
     if (!me) {
       const grp = mk("div", "row-btns");
@@ -1609,7 +1621,7 @@ function renderPlayers(snap) {
       }, "btn ghost mini"));
       if ((state.zone !== "safe" || wallBroken()) && state.zone !== "jail") {
         const ab = btn("โจมตี", () => attack(c.key, v.name), "btn danger mini atk-btn");
-        ab.dataset.uid = c.key; grp.append(ab);
+        ab.dataset.uid = c.key; if (v.nb) { ab.dataset.nb = "1"; ab.title = "ผู้เล่นใหม่ — มีโล่คุ้มครอง โจมตีไม่ได้"; } grp.append(ab);
       }
       li.append(grp);
     }
@@ -3195,6 +3207,7 @@ function attackCooldownLeft() {
 function updateAttackButtons() {
   const left = Math.ceil(attackCooldownLeft() / 1000);
   document.querySelectorAll(".atk-btn").forEach((b) => {
+    if (b.dataset.nb === "1") { b.disabled = true; b.textContent = "🛡️ มีโล่"; return; }   // ผู้เล่นใหม่ (rules ก็ปฏิเสธเช่นกัน)
     const pending = state.pending.has(b.dataset.uid);
     const stunned = effActive("stun");
     b.disabled = left > 0 || pending || stunned;
@@ -3261,6 +3274,8 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
   const skId = skd && skd.kind === "pvp" && skd.type !== "brace" ? state.pvpSkill : null;
   if (skId && !skillReady(skId)) { state.pvpSkill = null; renderPvpSkillBar(); return toast("สกิลยังไม่พร้อม"); }
   const sty = skId ? skd.type : null;
+  if (state.players?.[targetUid]?.nb) return toast("🛡️ ผู้เล่นใหม่ ยังมีโล่คุ้มครอง โจมตีไม่ได้");
+  if (nbMine() && !confirm("โจมตีผู้เล่นอื่นแล้ว 🛡️ โล่ผู้เล่นใหม่ของคุณจะหมดถาวร\nต้องการโจมตีต่อไหม")) return;
 
   state.attacking = true; state.pending.add(targetUid); updateAttackButtons();
 
@@ -3300,6 +3315,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
     ...(skId ? { sk: skId, ...(skd.basic ? {} : { skt: skd.type, skn: skd.name, ski: skd.icon }) } : {})
   };
   if (skId) skillUseWrites(selfUpdate, skId);
+  if (nbYoung() && !state.shieldOff) { selfUpdate[`shield/${state.uid}/off`] = serverTimestamp(); selfUpdate[`zonePlayers/${state.zone}/${state.uid}/nb`] = null; }   // โจมตีผู้เล่น = โล่หมด (rules บังคับให้คนที่ยังมีโล่ต้องเขียนอันนี้ในการโจมตีเดียวกัน)
   if (am > 1) state.evoAmbFor = state.profile.lastTravel;
 
   try {
@@ -6083,7 +6099,7 @@ function walkBarRender(sec) {
   $("walk-txt").textContent = `🚶 เดินไป ${ZONES[w.to]?.name || w.to} — ช่อง ${Math.min(w.i, w.path.length - 1)}/${w.path.length - 1} → ${ZONES[w.path[Math.min(w.i, w.path.length - 1)]]?.name || ""}${sec ? ` • พักเดินทาง ${sec} วิ` : ""}`;
   for (let k = w.i - 1; k < w.path.length - 1; k++) { const ri = roadOf(w.path[k], w.path[k + 1]); document.querySelector(`#zone-list .zroad[data-r="${ri}"]`)?.classList.add("walk"); }
 }
-function walkAbort(why) { const w = state.walk; if (!w) return; w.cancel = true; state.walk = null; walkBarRender(); if (why) { toast(`🚶 หยุดเดิน — ${why}`); try { logLine(`🚶 หยุดเดินระหว่างทางไป ${ZONES[w.to]?.name || w.to}: ${why}`, "system"); } catch { /* ข้าม */ } } }
+function walkAbort(why) { const w = state.walk; if (!w) return; if (state.presWk) { state.presWk = false; try { remove(ref(db, `zonePlayers/${state.zone}/${state.uid}/wk`)).catch(() => {}); } catch { /* ข้าม */ } } w.cancel = true; state.walk = null; walkBarRender(); if (why) { toast(`🚶 หยุดเดิน — ${why}`); try { logLine(`🚶 หยุดเดินระหว่างทางไป ${ZONES[w.to]?.name || w.to}: ${why}`, "system"); } catch { /* ข้าม */ } } }
 async function walkTo(to) {
   const from = state.zone, q = worldRoute(from, to);
   if (!q || !q.steps) return toast("ไม่มีเส้นทางไปที่นั่น");
@@ -6120,14 +6136,14 @@ function zmapApply() {
 // จำนวนผู้เล่นในแต่ละโซน (ฟัง zonePlayers ทุกโซน — ข้อมูลเล็ก) + เครื่องหมายบอสโลก
 function zmapListen() {
   if (state.zmapOn) return; state.zmapOn = true; state.zcount = state.zcount || {};
-  [...Object.keys(ZONES), "casino"].forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { try { state.zcount[z] = typeof s.numChildren === "function" ? s.numChildren() : Object.keys(s.val?.() || s || {}).length; zmapBadges(); } catch (e) { console.warn("zcount", z, e); } }, () => {}));
+  [...Object.keys(ZONES), "casino"].forEach((z) => onValue(ref(db, "zonePlayers/" + z), (s) => { try { state.zcount[z] = typeof s.numChildren === "function" ? s.numChildren() : Object.keys(s.val?.() || s || {}).length; let wk = 0; if (typeof s.forEach === "function") s.forEach((c) => { if (c.val()?.wk) wk++; }); (state.zwk = state.zwk || {})[z] = wk; zmapBadges(); } catch (e) { console.warn("zcount", z, e); } }, () => {}));
 }
 function zmapBadges() {
   document.querySelectorAll(".zone-btn").forEach((b) => {
     const z = b.dataset.zone; if (!z) return;
     let c = b.querySelector(".zc"); if (!c) { c = mk("span", "zc"); b.append(c); }
     const n = state.zcount?.[z] || 0, wb = state.wb?.[z], boss = wb && wbAlive(wb);
-    const txt = (n ? `👥${n}` : "") + (boss ? " 👹" : ""); if (c.textContent !== txt) c.textContent = txt;
+    const wkn = state.zwk?.[z] || 0, txt = (n ? `👥${n}` : "") + (wkn ? ` 🚶${wkn}` : "") + (boss ? " 👹" : ""); if (c.textContent !== txt) c.textContent = txt;
     c.classList.toggle("hidden", !txt); b.classList.toggle("hasboss", !!boss);
   });
 }
@@ -7456,7 +7472,7 @@ function coopTick() { const C = state.coop; if (!C || !state.profile || !state.a
 function coopInit() {
   if (state.coop) return;
   state.coop = { pend: {}, mine: {}, sums: {}, subs: {}, last: 0, busy: false, tm: 0, q: Promise.resolve(), mvp: null, mvpBusy: false };
-  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } try { bty2Listen(); } catch (e) { console.warn("bty2Listen", e); } try { jailListen(); jailPubListen(); } catch (e) { console.warn("jailListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
+  tuneListen(); try { hcGlobalListen(); } catch { /* ข้าม */ } try { shieldListen(); } catch { /* ข้าม */ } feedListen(); bountyListen(); try { crimListen(); } catch (e) { console.warn("crimListen", e); } try { bty2Listen(); } catch (e) { console.warn("bty2Listen", e); } try { jailListen(); jailPubListen(); } catch (e) { console.warn("jailListen", e); } setInterval(evtTick, 15000); setTimeout(evtTick, 6000); coopListen(); setInterval(coopFlush, COOP_FLUSH_MS); setInterval(coopTick, 15000); setTimeout(coopTick, 4000); try { fxInit(); } catch (e) { console.warn("fxInit", e); }
 }
 function worldRefresh() { const hm = $("hub-modal"); if (hm && !hm.classList.contains("hidden") && hm.dataset.tab === "world") { const b = $("hub-body"), y = b ? b.scrollTop : 0; hubTab("world"); if (b) b.scrollTop = y; } }
 
