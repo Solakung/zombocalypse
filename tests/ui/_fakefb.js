@@ -30,7 +30,7 @@ export const serverTimestamp = () => SV;
 `;
 const AUTH = `export const getAuth = () => ({ currentUser: { uid: "u1" } }); export const onAuthStateChanged = (a, cb) => { setTimeout(() => cb({ uid: "u1" }), 30); return () => {}; }; export const createUserWithEmailAndPassword = async () => ({}); export const signInWithEmailAndPassword = async () => ({}); export const signOut = async () => { console.error("SIGNOUT CALLED"); }; export const deleteUser = async () => {};`;
 const APP = `export const initializeApp = () => ({});`;
-const FN = `export const getFunctions = () => ({}); export const httpsCallable = (f, name) => async (d) => { window.__calls = (window.__calls || []); window.__calls.push(name + ":" + (d && d.a)); return { data: { ok: true, perks: [], steps: [], list: [], items: [] } }; };`;
+const FN = `export const getFunctions = () => ({}); export const httpsCallable = (f, name) => async (d) => { window.__calls = (window.__calls || []); window.__calls.push(name + ":" + (d && d.a)); if (window.__FNRES && window.__FNRES[name]) return { data: await window.__FNRES[name](d) }; return { data: { ok: true, perks: [], steps: [], list: [], items: [] } }; };`;
 const ST = `export const getStorage = () => ({}); export const ref = () => ({}); export const uploadBytes = async () => ({}); export const getDownloadURL = async () => "";`;
 
 async function boot(o = {}) {
