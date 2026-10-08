@@ -1,20 +1,22 @@
 // จำลองสมดุลบอสเผ่ามนุษย์ (ซอมบี้) เทียบบอสฝั่งมนุษย์ — `node tests/sim/hboss_balance.js` • สมมติสเตตัส/ของ/นโยบายผู้เล่น (ไม่ใช่ข้อมูลจริง) ใช้ตัวเลขบอสจาก functions/hboss.js และ script.js โดยตรง
 const fs = require("fs"); const R = require("path").resolve(__dirname, "../..") + "/";
-const H = require(R + "functions/hboss.js"); const sc = fs.readFileSync(R + "script.js", "utf8");
+const H = require(R + "functions/hboss.js"), PK = require(R + "functions/pack.js"); const sc = fs.readFileSync(R + "script.js", "utf8");
 const hb = sc.slice(sc.indexOf("const BOSSES = {"), sc.indexOf("\n};", sc.indexOf("const BOSSES = {")) + 3);
 const HBOSS = new Function(hb.replace("const BOSSES", "const B") + "; return B;")();
 const d6 = () => 1 + Math.floor(Math.random() * 6), ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const mult = (r) => (r === 1 ? 0 : r <= 3 ? 0.6 : r <= 5 ? 1 : 1.5);
-const evoB = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 5, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0); else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][g]; else if (k === "tough") v = g >= 1 ? 2 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
+const evoB0 = (e, k) => { const h = e.h || 0, g = e.g || 0, s = e.s || 0, cap = { str: 2, hp: 5, agi: 4, tough: 2 }; let v = 0; if (k === "str") v = (h >= 1) + (h >= 4); else if (k === "hp") v = (g >= 1 ? 3 : 0) + (g >= 4 ? 2 : 0) - (s >= 3 ? 2 : s >= 2 ? 1 : 0); else if (k === "agi") v = (s >= 1 ? 2 : 0) + (s >= 4 ? 1 : 0) - [0, 0, 1, 2, 2][g]; else if (k === "tough") v = g >= 1 ? 2 : 0; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };
+const evoB = (e, k) => { const t = PK.packTier(e), v = evoB0(e, k) + PK.packBonus(k, t), cap = { str: 2, hp: 5, agi: 4, tough: 2 }; return cap[k] !== undefined ? Math.min(v, cap[k]) : v; };   // + สายแรปเตอร์ (e.p)
 // ---- ซอมบี้ผู้เล่นสู้บอสเผ่า (ตรงกับ functions/hboss.js)
 function zFight(z, b) {
-  const st = (k) => (z.s[k] || 0) + evoB(z.e || {}, k), maxHp = 100 + 10 * st("hp"); let hp = maxHp, bh = b.hp, sh = b.shield || 0, round = 0, pdN = 0, pdP = 0, wk = 0, rounds = 0;
-  const strike = () => { let t = 0, landed = 0; const heavy = b.heavy && round % b.heavy === 0; for (let i = 0; i < b.hits; i++) { if (Math.random() >= b.acc) continue; if (Math.random() < Math.max(0, 0.03 * st("agi"))) continue; let d = ri(b.dmg[0], b.dmg[1]); if (heavy) d = Math.round(d * 1.5); d = Math.max(1, d - Math.max(0, st("tough"))); t += d; landed++; } if (landed) { if (b.pdot) { pdN = b.pdot.n; pdP = b.pdot.per; } if (b.weak) wk = b.weak.n; } return t; };
+  const st = (k) => (z.s[k] || 0) + evoB(z.e || {}, k), maxHp = 100 + 10 * st("hp"); const pt = PK.packTier(z.e || {}); let hp = maxHp, bh = b.hp, sh = b.shield || 0, round = 0, pdN = 0, pdP = 0, wk = 0, rounds = 0;
+  const strike = () => { let t = 0, landed = 0; const heavy = b.heavy && round % b.heavy === 0; for (let i = 0; i < b.hits; i++) { if (Math.random() >= b.acc) continue; if (Math.random() < Math.min(PK.DODGE_CAP, Math.max(0, 0.03 * st("agi")) + (pt ? PK.DODGE[pt] : 0))) continue; if (pt && Math.random() < PK.INTERCEPT[pt]) continue; let d = ri(b.dmg[0], b.dmg[1]); if (heavy) d = Math.round(d * 1.5); d = Math.max(1, d - Math.max(0, st("tough"))); t += d; landed++; } if (landed) { if (b.pdot) { pdN = b.pdot.n; pdP = b.pdot.per; } if (b.weak) wk = b.weak.n; } return t; };
   if (b.first) { round = 1; hp -= strike(); if (hp <= 0) return { r: "dead", loss: 1, rounds: 0 }; }
   for (;;) {
     round++; rounds++;
     if (hp < 0.35 * maxHp) { if (Math.random() < b.flee) return { r: "flee", loss: 1 - hp / maxHp, rounds }; }
     else { let dmg = Math.round(Math.max(1, 5 + st("str")) * mult(d6())); if (wk > 0 && dmg > 0) { dmg = Math.max(1, Math.round(dmg * (100 - b.weak.pct) / 100)); wk--; } if (dmg && sh > 0) { const ab = Math.min(sh, dmg); sh -= ab; dmg -= ab; } bh -= dmg; if (bh <= 0) return { r: "win", loss: 1 - hp / maxHp, rounds }; }
+    if (pt && Math.random() < PK.BITE_ACC) { let md = ri(PK.BITE[pt][0], PK.BITE[pt][1]); if (sh > 0) { const ab = Math.min(sh, md); sh -= ab; md -= ab; } bh -= md; if (bh <= 0) return { r: "win", loss: 1 - hp / maxHp, rounds }; }   // ลูกฝูงกัดทุกรอบที่สู้ต่อ
     if (pdN > 0) { hp -= pdP; pdN--; } if (hp > 0) hp -= strike(); if (hp <= 0) return { r: "dead", loss: 1, rounds };
     if (rounds > 200) return { r: "stall", loss: 1 - hp / maxHp, rounds };
   }
@@ -43,6 +45,12 @@ const ZB = H.BOSSES, ZZ = ["forest", "police", "port", "factory", "hospital", "t
 console.log("=== ซอมบี้ผู้เล่น vs บอสเผ่ามนุษย์ (นโยบาย: HP<35% ลองหนี) — ชนะ/หนี/ตาย, เสียเลือดเฉลี่ย, รอบเฉลี่ย ===");
 for (const [tn, tot, e] of TIERS) for (const a of Object.keys(ARCH)) {
   const z0 = alloc(tot, ARCH[a]), z = { s: { ...z0, str: Math.min(17, z0.str) }, e: zeroTier(e, a) }; let line = `${tn.padEnd(14)} ${a.padEnd(8)} str${z.s.str} hp${z.s.hp} agi${z.s.agi} tgh${z.s.tough} |`;
+  for (const zn of ZZ) { const r = run(zFight, z, ZB[zn]); line += ` ${zn.slice(0, 4)} ${pct(r.win)}/${pct(r.flee)}/${pct(r.dead)}`; }
+  console.log(line);
+}
+console.log("\n=== 🦖 สายแรปเตอร์เทียบสายเดิมที่ขั้นเท่ากัน (สเตตัสพื้นฐานแบบ balanced) — ชนะ/หนี/ตาย ===");
+for (const [tn, tot] of [["เริ่มต้น 7 แต้ม", 7], ["ต้น 12 แต้ม", 12]]) for (const t of [1, 2, 3, 4]) for (const [ln, e] of [["ตะกละ", { h: t }], ["ซากหนา", { g: t }], ["เลื้อยคลาน", { s: t }], ["แรปเตอร์", { p: t }]]) {
+  const z0 = alloc(tot, ARCH.balanced), z = { s: { ...z0, str: Math.min(17, z0.str) }, e: { h: 0, g: 0, s: 0, ...e } }; let line = `${tn.padEnd(14)} ขั้น${t} ${ln.padEnd(10)} |`;
   for (const zn of ZZ) { const r = run(zFight, z, ZB[zn]); line += ` ${zn.slice(0, 4)} ${pct(r.win)}/${pct(r.flee)}/${pct(r.dead)}`; }
   console.log(line);
 }

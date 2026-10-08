@@ -47,6 +47,10 @@ const T0 = Date.UTC(2026, 8, 7, 3), H = 3600000;
   store.set("raw/a", Buffer.alloc(11 * 1024 * 1024, 1)); await rej(run("a", { a: "commit" }, T0 + 6 * H), "10 MB");
   // ======= สาธารณะ/รายงาน/GM =======
   let v = await run("r1", { a: "visit", uid: "a" }); assert(v.card.up && v.card.up.v === 2 && v.card.av === "av_wolf" && v.card.ti === "ti_seeker" && !v.self && !v.canGm && !("own" in v.card));
+  // รูปย่อสำหรับแชท (mini): คืนเฉพาะคนที่มีอวาตาร์/รูป • ตัด uid แปลก/ซ้ำ • สูงสุด 25 • รูปที่ซ่อนไม่ส่ง
+  { const m = await run("r1", { a: "mini", uids: ["a", "a", "nobody", "bad id!", 5, null] }); assert.deepStrictEqual(Object.keys(m.list), ["a"]); assert(m.list.a.avic === "🐺" && m.list.a.upv === 2 && typeof m.list.a.fr === "string", JSON.stringify(m.list));
+    await db.ref("prof/a/hid").set(true); const mh = await run("r1", { a: "mini", uids: ["a"] }); assert(mh.list.a && mh.list.a.upv === null && mh.list.a.avic === "🐺", "ซ่อนรูป: ยังเห็นอวาตาร์เกมแต่ไม่ส่งรูปอัปโหลด"); await db.ref("prof/a/hid").remove();
+    const many = await run("r1", { a: "mini", uids: Array.from({ length: 40 }, (_, i) => "u" + i) }); assert.deepStrictEqual(many.list, {}); await rej(run(null, { a: "mini", uids: ["a"] }), "ล็อกอิน"); assert.deepStrictEqual((await run("r1", { a: "mini" })).list, {}); }
   await rej(run("a", { a: "report", uid: "a" }), "ตัวเอง"); await rej(run("r1", { a: "report", uid: "z" }), "ไม่มีรูป"); await db.ref("ach/g/c/srch").set(50);
   let rp = await run("r1", { a: "report", uid: "a" }); assert(rp.reports === 1 && !rp.hidden); await run("r1", { a: "report", uid: "a" }); rp = await run("r2", { a: "report", uid: "a" }); assert(rp.reports === 2 && !rp.hidden);
   await rej(run("n1", { a: "report", uid: "a" }), "ใช้งานไม่ได้"); rp = await run("r3", { a: "report", uid: "a" }); assert(rp.hidden, "3 reporters hide");

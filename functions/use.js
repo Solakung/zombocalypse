@@ -3,6 +3,7 @@
 // - หิว/น้ำ/พลังงานเก็บแบบ "ค่า + timestamp" (ค่าจริง = ค่าที่เก็บ − รอบที่ผ่านไป) — hungerShift/พลังงานต้องตรงสูตรฝั่งเกม (hungerShift, getRegenRate, curStamina)
 // - ไม่ทำฝั่งฟังก์ชัน (ยังเป็นของไคลเอนต์): ภูมิต้านพิษของยาแก้พิษ (LS pimm), ตัวนับเควสต์/ความสำเร็จ/มื้ออาหาร — ไคลเอนต์ทำต่อหลังฟังก์ชันตอบสำเร็จ
 const { fail, withLock } = require("./lib");
+const PK = require("./pack");   // 🦖 สายแรปเตอร์ — โบนัส hp/agi ต้องตรง script.js
 
 const HP_BASE = 100, STAMINA_BASE = 100;
 const FOOD_DECAY_MS = { human: 150000, zombie: 100000 }, WATER_DECAY_MS = 100000;
@@ -75,8 +76,8 @@ function makeUse(db, admin) {
     if (!/^[A-Za-z0-9_\-]{1,40}$/.test(slot)) fail("invalid-argument", "ไม่พบไอเทมนี้");
     const replaceBuff = !!(data && data.replaceBuff);
     return withLock(db, uid, now, async () => {
-      const [pS, iS, stS, bS, eS, evS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`inventory/${uid}/${slot}`).get(), db.ref(`stats/${uid}`).get(), db.ref(`buffs/${uid}`).get(), db.ref(`effects/${uid}`).get(), db.ref(`evo/${uid}`).get()]);
-      const p = pS.val(), it = iS.val(), stats = stS.exists() ? col(stS.val()) : null, buff = bS.val(), effects = col(eS.val()), evo = col(evS.val());
+      const [pS, iS, stS, bS, eS, evS, mtS] = await Promise.all([db.ref(`users/${uid}`).get(), db.ref(`inventory/${uid}/${slot}`).get(), db.ref(`stats/${uid}`).get(), db.ref(`buffs/${uid}`).get(), db.ref(`effects/${uid}`).get(), db.ref(`evo/${uid}`).get(), db.ref(`mut/${uid}`).get()]);
+      const p = pS.val(), it = iS.val(), stats = stS.exists() ? col(stS.val()) : null, buff = bS.val(), effects = col(eS.val()), evo = col(evS.val()), pkT = PK.packTier(evo), pkM = PK.packMut({ ...evo, mp: col(mtS.val()).p });
       if (!p || p.banned === true) fail("permission-denied", "บัญชีนี้ใช้งานไม่ได้");
       if (!(p.hp > 0)) fail("failed-precondition", "คุณสลบอยู่ ใช้ไอเทมไม่ได้");
       if (!it || !(it.qty >= 1)) fail("failed-precondition", "ไม่พบไอเทมนี้ในกระเป๋า");
@@ -99,6 +100,7 @@ function makeUse(db, admin) {
         else if (k === "tough") v = g >= 1 ? 2 : 0;
         else if (k === "st") v = g >= 3 ? -2 : 0;
         else if (k === "regen") v = g >= 3 ? -1 : 0;
+        v += PK.packBonus(k, pkT, pkM);
         return cap[k] !== undefined ? Math.min(v, cap[k]) : v;
       };
       const baseStat = (k) => num(stats && stats[k]), statOf = (k) => baseStat(k) + (buffActive ? num(buff[k]) : 0) + evoBonus(k);

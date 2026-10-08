@@ -29,7 +29,7 @@ const TITLES = [
   ["ti_hunter", "นักล่าค่าหัว", ["ach", "boss", 15]], ["ti_diver", "นักดิ่งลึก", ["ach", "dive", 10]], ["ti_nem", "ผู้ล้มคู่อาฆาต", ["ach", "nemk", 5]], ["ti_radio", "ผู้ถอดรหัส", ["ach", "radio", 1]], ["ti_trader", "พ่อค้าตลาดมืด", ["ach", "mkt", 40]],
   ["ti_pet", "เพื่อนสัตว์โลก", ["ach", "petc", 20]], ["ti_decor", "นักตกแต่ง", ["ach", "home", 5]], ["ti_loved", "ห้องเป็นที่รัก", ["likes", 15]], ["ti_pass", "ผู้พิชิตซีซัน", ["tier", 30]], ["ti_full", "ผู้รอดชีวิตเต็มตัว", ["pct", 100]],
   ["ti_biter", "ผู้กัดไม่ปรานี", ["ach", "bite", 100]], ["ti_slayer", "ผู้ล้างซอมบี้", ["ach", "zwin", 150]], ["ti_craft", "ช่างฝีมือ", ["ach", "craft", 60]], ["ti_enc", "ผู้ผ่านเหตุการณ์", ["ach", "enc", 30]], ["ti_vet", "ผู้อยู่รอดนาน", ["ach", "login", 20]],
-  ["ti_tara", "ผู้ค้นพบธารา", ["hcf"]], ["ti_mut_h", "อสูรทมิฬ", ["mut", "h", 4]], ["ti_mut_g", "ยักษ์ศิลาอมตะ", ["mut", "g", 4]], ["ti_mut_s", "ราชันเงา", ["mut", "s", 4]]
+  ["ti_tara", "ผู้ค้นพบธารา", ["hcf"]], ["ti_mut_h", "อสูรทมิฬ", ["mut", "h", 4]], ["ti_mut_g", "ยักษ์ศิลาอมตะ", ["mut", "g", 4]], ["ti_mut_s", "ราชันเงา", ["mut", "s", 4]], ["ti_mut_p", "จ่าฝูงดึกดำบรรพ์", ["mut", "p", 4]]
 ];
 const ALL = {};
 AVATARS.forEach(([id, ic, n, req, f]) => { ALL[id] = { id, k: "av", ic, n, req, f }; });
@@ -85,6 +85,17 @@ function makeProfile(db, bucketFn) {
   async function run(uid, data, now = Date.now(), deps = {}) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
+    if (a === "mini") {   // รูปโปรไฟล์ย่อสำหรับแชท: รับ uid ได้ครั้งละ ≤ 25 → {uid: {avic, fr, upv}} เฉพาะคนที่มีอวาตาร์/รูป (ไม่มี = ไคลเอนต์ใช้ไอคอนฝ่าย) • รูปที่ถูกซ่อน/บัญชีแบนไม่ส่ง
+      await load(uid);
+      const ids = [...new Set((Array.isArray(data.uids) ? data.uids : []).map(String).filter((x) => /^[A-Za-z0-9_-]{1,64}$/.test(x)))].slice(0, 25), list = {};
+      await Promise.all(ids.map(async (id) => {
+        const [pS, uS] = await Promise.all([db.ref(`prof/${id}`).get(), db.ref(`users/${id}/banned`).get()]);
+        if (uS.val() === true || !pS.exists()) return;
+        const pf = col(pS.val()), c = pub(pf, "", "human"), upv = c.up && c.uu !== false ? c.up.v : null;
+        if (c.avic || upv || (c.fr && c.fr !== "fr_none")) list[id] = { avic: c.avic, fr: c.fr, upv };
+      }));
+      return { ok: true, list };
+    }
     if (a === "visit") {   // ดูการ์ดโปรไฟล์ผู้อื่น (สาธารณะ)
       await load(uid);
       const to = String(data.uid || ""), t = (await db.ref(`users/${to}`).get()).val();

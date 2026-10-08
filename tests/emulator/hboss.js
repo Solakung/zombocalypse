@@ -18,10 +18,10 @@ const sc = fs.readFileSync(F + "script.js", "utf8");
   assert.strictEqual(Number(sc.match(/UNARMED_DMG = (\d+)/)[1]), H.UNARMED_DMG); assert.strictEqual(Number(sc.match(/DODGE_PER_POINT = ([\d.]+)/)[1]), H.DODGE_PER_POINT); assert.strictEqual(Number(sc.match(/HP_BASE = (\d+)/)[1]), H.HP_BASE);
   assert.deepStrictEqual(JSON.parse(sc.match(/const HB_ZONES = (\[[^\]]*\])/)[1]), Object.keys(H.W), "HB_ZONES");
   const evoSrc = sc.slice(sc.indexOf("function evoBonusAt"), sc.indexOf("function evoBonus(k)"));
-  const clientEvo = new Function(evoSrc + "; return evoBonusAt;")();
+  const pkSrc = sc.slice(sc.indexOf("function packTable()"), sc.indexOf("const packT = ")), clientEvo = new Function(pkSrc + evoSrc + "; return evoBonusAt;")();
   const srvSrc = fs.readFileSync(F + "functions/hboss.js", "utf8"), eb = srvSrc.slice(srvSrc.indexOf("function evoBonus(evo, k)"), srvSrc.indexOf("async function load"));
-  const srvEvo = new Function("const num = (x) => (typeof x === \"number\" && Number.isFinite(x) ? x : 0);" + eb + "; return evoBonus;")();
-  for (let h = 0; h <= 4; h++) for (let g = 0; g <= 4; g++) for (let s = 0; s <= 4; s++) for (const k of ["str", "hp", "agi", "tough", "st", "regen"]) assert.strictEqual(srvEvo({ h, g, s }, k), clientEvo(k, { h, g, s }), `evo ${k} ${h}${g}${s}`);
+  const srvEvo = new Function("PK", "const num = (x) => (typeof x === \"number\" && Number.isFinite(x) ? x : 0);" + eb + "; return evoBonus;")(require(F + "functions/pack"));
+  for (let h = 0; h <= 4; h++) for (let g = 0; g <= 4; g++) for (let s = 0; s <= 4; s++) for (let p = 0; p <= 4; p++) for (let mp = 0; mp <= 4; mp++) for (const k of ["str", "hp", "agi", "tough", "st", "regen"]) assert.strictEqual(srvEvo({ h, g, s, p, mp }, k), clientEvo(k, { h, g, s, p, mp }), `evo ${k} ${h}${g}${s} p${p} m${mp}`);   // รวมสายแรปเตอร์ (มีผลเฉพาะเมื่อไม่มีสายอื่น)
   // รางวัลทุกชิ้นต้องอยู่ใน ITEMS ของเกม และผ่าน regex ของ rules ช่องกระเป๋า
   const rules = JSON.parse(fs.readFileSync(F + "database_rules.json", "utf8")).rules, rx = new RegExp(rules.inventory.$uid.$slot[".validate"].match(/matches\(\/(\^\([^/]+\)\$)\//)[1]);
   const ids = new Set(); for (const [z, b] of Object.entries(H.BOSSES)) { assert(H.W[z], "W " + z); for (const [id] of [...b.loot, ...b.bonus]) if (id) ids.add(id); }
