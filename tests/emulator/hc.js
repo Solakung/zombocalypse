@@ -28,7 +28,8 @@ const T0 = Date.UTC(2026, 9, 7, 3);
   r = await hc.run("h2", { a: "roll" }, T0 + 6000); assert(r.hit === false && r.already, "only one finder"); r = await hc.run("z1", { a: "roll" }, T0 + 6000); assert(r.already);
   r = await hc.run("h2", { a: "state" }, T0); assert(r.found && r.found.by === "h1");
   // ผู้ค้นพบเป็นซอมบี้
-  await db.ref("hc").remove(); await db.ref("announcements").remove(); r = await hc.run("z1", { a: "roll" }, T0 + 9000); assert(r.hit && r.reward === "organ"); assert.strictEqual((await db.ref("inventory/z1/mut_fang5").get()).val().qty, 1);
+  await db.ref("hc").remove(); await db.ref("announcements").remove(); await db.ref("tune/hc_pm").set(2000);   // ซอมบี้ได้ครึ่งเดียว (1000‰ → 50%) จึงใช้ 2000‰ ให้ทอยติดแน่นอน ไม่ให้เทสต์สุ่มผ่านบ้างไม่ผ่านบ้าง
+  r = await hc.run("z1", { a: "roll" }, T0 + 9000); assert(r.hit && r.reward === "organ"); assert.strictEqual((await db.ref("inventory/z1/mut_fang5").get()).val().qty, 1);
   // ส่ง DNA
   await rej(hc.run("hs", { a: "donate", q: 0 }, T0), "จำนวน"); await rej(hc.run("hr", { a: "donate", q: 1 }, T0), "Safe Zone"); await rej(hc.run("h1", { a: "donate", q: 1 }, T0), "Safe Zone");
   r = await hc.run("hs", { a: "donate", q: 30 }, T0); assert.strictEqual(r.donated, 30); assert.strictEqual(r.total, 30); assert.strictEqual((await db.ref("inventory/hs/dna_frag/qty").get()).val(), 20); assert.strictEqual((await db.ref("coop/hc1/hs/n").get()).val(), 30);
