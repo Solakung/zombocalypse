@@ -37,5 +37,10 @@ const waitFor = async (pg, fn, ms = 25000) => { const t = Date.now(); while (Dat
   await B.pg.evaluate(() => document.querySelector('.zone-btn[data-zone="base"]').click()); await B.pg.waitForTimeout(500);
   assert(await waitFor(B.pg, () => document.getElementById("walk-bar").classList.contains("hidden") && window.__DB.users.u1.zone !== "safe", 20000), "หยุดเมื่อพลังงานหมด");
   u = await B.pg.evaluate(() => window.__DB.users.u1); assert.strictEqual(u.zone, "factory", "ไปได้แค่โรงงาน: " + u.zone); await B.br.close();
+  // 4) เจ้าของเปิดเกมแล้วตารางถนนในฐานข้อมูลว่าง/ไม่ตรง → ซิงก์ให้เอง (28 รายการ) • ผู้เล่นปกติไม่เขียน
+  B = await boot({ faction: "human", role: "owner", seed: { tune: { travel_roads: 0 } } }); await B.pg.waitForTimeout(3500);
+  const cfg = await B.pg.evaluate(() => window.__DB.config && window.__DB.config.roads); assert(cfg && Object.keys(cfg).length === 28 && cfg.safe_factory === 5 && cfg.factory_safe === 5 && cfg.hospital_base === 7, "owner auto-sync: " + JSON.stringify(cfg)); await B.br.close();
+  B = await boot({ faction: "human", role: "player", seed: { tune: { travel_roads: 0 } } }); await B.pg.waitForTimeout(3500);
+  assert.strictEqual(await B.pg.evaluate(() => !!(window.__DB.config && window.__DB.config.roads)), false, "ผู้เล่นปกติไม่ซิงก์"); await B.br.close();
   console.log("uiwalk OK");
 })().catch((e) => { console.error(e); process.exit(1); });
