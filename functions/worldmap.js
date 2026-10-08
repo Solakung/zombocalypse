@@ -5,7 +5,7 @@
 // พิกัด: x 0–100 (ตะวันตก→ตะวันออก) × y 0–130 (เหนือ→ใต้) — ทะเลอยู่ตะวันตก ภูเขาอยู่เหนือ/ตะวันออกเฉียงเหนือ แม่น้ำไหลจากตะวันออกลงทะเลคั่นเมืองเหนือ/ใต้ (สะพานโรงพยาบาลเป็นทางข้ามเดียว)
 // ถนน [จาก, ถึง, ชนิด, จุดโค้ง?] • พลังงานต่อถนน = round(ความยาว ÷ unit × ตัวคูณชนิดถนน × ตัวคูณพาหนะ) ขั้นต่ำ 2 • risk = ตัวคูณโอกาสซุ่ม (เตรียมไว้ ยังไม่ใช้) • modes = พาหนะ (เตรียมรองรับอัปเดตรถยนต์/จักรยาน — on:false = ยังไม่เปิด)
 const WORLD = {
-  w: 100, h: 130, unit: 5.6, km: 0.25,
+  w: 100, h: 130, unit: 5.6, km: 0.25, sec: 7,
   nodes: { safe: [52, 106], ruins: [24, 108], forest: [82, 108], factory: [52, 80], port: [18, 82], mall: [82, 82], hospital: [50, 54], casino: [20, 52], base: [24, 22], police: [52, 16], tunnel: [80, 24], lab: [86, 52] },
   roads: [["safe", "ruins", "street", [[38, 110]]], ["safe", "forest", "trail", [[68, 100]]], ["safe", "factory", "main"], ["ruins", "port", "street", [[16, 96]]], ["factory", "port", "street", [[34, 84]]], ["factory", "mall", "street", [[67, 78]]], ["forest", "mall", "trail", [[86, 95]]],
     ["factory", "hospital", "bridge", [[51, 67]]], ["hospital", "casino", "street", [[35, 50]]], ["hospital", "base", "street", [[36, 40]]], ["hospital", "police", "main"], ["hospital", "tunnel", "main", [[66, 44]]], ["hospital", "lab", "street", [[70, 57]]], ["tunnel", "lab", "tunnel", [[88, 38]]]],
@@ -15,6 +15,8 @@ const WORLD = {
 const worldPts = (r) => [WORLD.nodes[r[0]], ...(r[3] || []), WORLD.nodes[r[1]]];
 const worldLen = (r) => { const p = worldPts(r); let t = 0; for (let i = 1; i < p.length; i++) t += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return t; };
 const worldCost = (r, mode = "foot") => { const m = WORLD.modes[mode]; return m && m.roads.includes(r[2]) ? Math.max(2, Math.round((worldLen(r) / WORLD.unit) * WORLD.classes[r[2]].mul * m.mul)) : null; };
+// เวลาเดินต่อถนน (วินาที) = ระยะ/หน่วย × ตัวคูณชนิดถนน × ตัวคูณพาหนะ × WORLD.sec — เป็นคูลดาวน์ก่อนออกเดินตามถนนนั้น (rules อ่านจาก config/roadt)
+const worldSecs = (r, mode = "foot") => { const m = WORLD.modes[mode]; return m && m.roads.includes(r[2]) ? Math.max(10, Math.round((worldLen(r) / WORLD.unit) * WORLD.classes[r[2]].mul * m.mul * WORLD.sec)) : null; };
 function worldRoute(a, b, mode = "foot") {   // เส้นทางพลังงานน้อยที่สุด (Dijkstra) → { path:[โซน], roads:[ดัชนีถนน], energy, steps, km } หรือ null ถ้าไปไม่ได้ด้วยพาหนะนี้
   if (!WORLD.nodes[a] || !WORLD.nodes[b]) return null;
   const dist = { [a]: 0 }, prev = {}, done = new Set();
@@ -32,4 +34,4 @@ function worldRisk(q, danger, presence) {
   s = Math.round(s * 100) / 100; return { score: s, level: s < 1.2 ? 0 : s < 2.4 ? 1 : 2 };
 }
 
-module.exports = { WORLD, worldPts, worldLen, worldCost, worldRoute, worldRisk };
+module.exports = { WORLD, worldPts, worldLen, worldCost, worldSecs, worldRoute, worldRisk };
