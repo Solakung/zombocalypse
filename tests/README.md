@@ -31,6 +31,7 @@ curl -X PUT -H "Authorization: Bearer owner" --data-binary @database_rules.json 
 | `packrules.js` | rules ของแรปเตอร์ (`evo/p`, ฉายา evo4, `attacks/pkd`) เทียบ main เดิม 36 กรณี — ใช้ `NODE_PATH=/tmp/fbt/rut/node_modules` |
 | `ground.js` | เคลียร์ของบนพื้น (`functions/ground.js`): จดเวลาเห็นครั้งแรก, ลบเมื่อครบ TTL, ไม่แตะม้วนสกิล/ของ GM, กันกวาดถี่, tune |
 | `cook.js` | พ่อครัว (`functions/cook.js`): ตัดสินจังหวะ/คุณภาพ→บัฟ, ตารางจังหวะ, วัตถุดิบ, ขั้นฝีมือ, กระเป๋าเต็ม, ใช้ครั้งเดียว, กินผ่าน use.js |
+| `tests/ui/uichatav.js` | รูปโปรไฟล์วงกลมหน้าชื่อในแชท: ไอคอนฝ่ายก่อน → ขอแบบรวมกลุ่ม → อวาตาร์/กรอบ/รูป, แคช, ล้มเหลวเงียบ, ปิดด้วย tune, ต่อกับแชทจริง |
 | `tests/ui/uipack.js` | สายแรปเตอร์ฝั่งเกม: โบนัสสเตตัส, การ์ดวิวัฒนาการ, ลูกฝูงใน PvP, ซื้อ/รีเซ็ต |
 | `tests/ui/uicook.js` | ปุ่มเข้าครัว/เมนู/เล่นมินิเกม/ผลลัพธ์ (Playwright 360px) |
 | `tests/ui/uijail.js` | แถบคุก/ซิงก์โซน/จับ/แหกคุก/ประกัน (Playwright 360px) |

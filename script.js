@@ -1399,7 +1399,8 @@ function addChat(key, m) {
     el.append(b);
   } else { 
     el = mk("div", isMe ? "msg self" : "msg"); 
-    const sender = mk("div", "sender " + m.faction, `${FACTION[m.faction]?.icon || ""} ${m.name}`);
+    const sender = mk("div", "sender " + m.faction);
+    if (chatAvOn()) sender.append(chatAvEl(m.uid, m.faction), document.createTextNode(m.name)); else sender.append(document.createTextNode(`${FACTION[m.faction]?.icon || ""} ${m.name}`));   // 🖼️ รูปโปรไฟล์วงกลมหน้าชื่อ
     const bubble = mk("div", "bubble", m.text);
     sender.append(" ", achBadge(m.uid));
     el.append(sender, bubble); 
@@ -10649,6 +10650,33 @@ function profCardEl(card, uid, small) {
   if (card.hid) w.append(Object.assign(mk("div", "muted", "🚩 รูปนี้ถูกซ่อนชั่วคราว (รอตรวจสอบ)"), { style: "padding:0 12px 10px;font-size:12px" }));
   return w;
 }
+// ---- 🖼️ รูปโปรไฟล์ในแชท — วงกลมหน้าชื่อผู้ส่ง (functions/profile.js a:"mini": ขอทีละหลายคนรวมกัน + แคชในเครื่อง 10 นาที) • ไม่มีรูป/อวาตาร์ = ไอคอนฝ่ายเดิม • ปิดได้ด้วย tune chat_av_on = 0
+const chatAvOn = () => T("chat_av_on", 1) === 1;
+const CAV = { cache: new Map(), want: new Map(), tm: 0, busy: false, TTL: 600000, BATCH: 25 };   // cache: uid → {t, d|null} • want: uid → [element]
+const cavFrColor = (fr) => { const m = /#[0-9a-fA-F]{3,8}/.exec(FR_CSS[fr] || ""); return m ? m[0] : "transparent"; };
+function cavPaint(el, uid, d, fac) {
+  const icon = d && d.avic ? d.avic : (FACTION[fac]?.icon || "🧑");
+  el.textContent = icon; el.style.background = d && d.avic ? avBg(uid) : "rgba(255,255,255,.08)"; el.style.borderColor = d ? cavFrColor(d.fr) : "transparent";
+  if (d && d.upv) profImgUrl(uid, d.upv).then((u) => { const im = document.createElement("img"); im.src = u; im.alt = ""; el.textContent = ""; el.append(im); }).catch(() => { /* ใช้อวาตาร์เกมแทน */ });
+}
+function chatAvEl(uid, fac) {
+  const el = mk("span", "cav"); el.setAttribute("aria-hidden", "true"); cavPaint(el, uid, null, fac); el.dataset.fac = fac || "";
+  if (!chatAvOn() || !uid) return el;
+  const c = CAV.cache.get(uid), now = Date.now();
+  if (c && now - c.t < CAV.TTL) { if (c.d) cavPaint(el, uid, c.d, fac); return el; }
+  (CAV.want.get(uid) || CAV.want.set(uid, []).get(uid)).push(el); clearTimeout(CAV.tm); CAV.tm = setTimeout(cavFlush, 350);
+  return el;
+}
+async function cavFlush() {
+  if (CAV.busy || !CAV.want.size) return; CAV.busy = true;
+  const ids = [...CAV.want.keys()].slice(0, CAV.BATCH), els = new Map(ids.map((id) => [id, CAV.want.get(id)])); ids.forEach((id) => CAV.want.delete(id));
+  try {
+    const r = await profCall({ a: "mini", uids: ids }), list = (r && r.list) || {}, now = Date.now();
+    ids.forEach((id) => { const d = list[id] || null; CAV.cache.set(id, { t: now, d }); if (d) (els.get(id) || []).forEach((el) => cavPaint(el, id, d, el.dataset.fac)); });
+  } catch { const now = Date.now(); ids.forEach((id) => CAV.cache.set(id, { t: now - CAV.TTL + 120000, d: null })); }   // ล้มเหลว (เช่นยังไม่ deploy ฟังก์ชัน): ใช้ไอคอนฝ่าย ลองใหม่อีก 2 นาที
+  finally { CAV.busy = false; if (CAV.want.size) { clearTimeout(CAV.tm); CAV.tm = setTimeout(cavFlush, 350); } }
+}
+// ---- /รูปโปรไฟล์ในแชท
 // ---- หน้าต่างตกแต่งโปรไฟล์ของตัวเอง ----
 async function profGo(a, x, ok) {
   if (state.profBusy) return; state.profBusy = true;
@@ -11833,6 +11861,7 @@ function tuneDefs() {
   rows.push(["bty_decay", "ค่าหัวลดต่อวัน (% ของแต้ม — 0 = ไม่ลดเลย)", 3, 0, 50, "💰 ค่าหัวใหม่"]);
   rows.push(["bty_fee", "ค่าธรรมเนียมตอนจ่ายค่าหัวให้ผู้ล่า (% — เป็นตัวดูดทรัพยากรออกจากเกม)", 20, 0, 100, "💰 ค่าหัวใหม่"]);
   rows.push(["tut_on", "🎓 บทสอนผู้เล่นใหม่ (1 = เปิด, 0 = ปิด) — แสดงเฉพาะบัญชีที่สร้างหลังวันตัดบัญชีและอายุไม่เกิน 24 ชม. • ทุกคนดูซ้ำได้ด้วย /tutorial", 1, 0, 1, "🎓 บทสอนผู้เล่นใหม่"]);
+  rows.push(["chat_av_on", "🖼️ แสดงรูปโปรไฟล์วงกลมหน้าชื่อในแชท (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน profAct เพื่อให้เห็นรูป ถ้ายังไม่ deploy จะแสดงไอคอนฝ่ายเหมือนเดิม)", 1, 0, 1, "🖼️ รูปโปรไฟล์ในแชท"]);
   rows.push(["ground_ttl_h", "🧹 ของที่ผู้เล่นวางทิ้งบนพื้นโซนจะถูกเคลียร์เมื่อครบกี่ชั่วโมง (0 = ปิด • ต้อง deploy ฟังก์ชัน groundAct ก่อน)", 6, 0, 168, "🧹 เคลียร์ของบนพื้น (ชม.)"]);
   rows.push(["cook_on", "🍳 พ่อครัว: มินิเกมทำอาหารที่ Safe Zone (1 = เปิด, 0 = ปิด • ต้อง deploy ฟังก์ชัน cookAct ก่อน)", 1, 0, 1, "🍳 พ่อครัว"]);
   rows.push(["jail_on", "⛓️ คุก: คนส้มที่ถูกล้มโดยคนที่ไม่ใช่ส้มติดคุก (1 = เปิด, 0 = ปิด • ต้องเปิดระบบส้ม crim_on ด้วย • ต้อง deploy ฟังก์ชัน jailAct และเผยแพร่ rules ก่อน)", 0, 0, 1, "⛓️ คุก"]);

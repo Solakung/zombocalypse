@@ -85,6 +85,17 @@ function makeProfile(db, bucketFn) {
   async function run(uid, data, now = Date.now(), deps = {}) {
     if (!uid) fail("unauthenticated", "ต้องล็อกอินก่อน");
     const a = (data && data.a) || "state";
+    if (a === "mini") {   // รูปโปรไฟล์ย่อสำหรับแชท: รับ uid ได้ครั้งละ ≤ 25 → {uid: {avic, fr, upv}} เฉพาะคนที่มีอวาตาร์/รูป (ไม่มี = ไคลเอนต์ใช้ไอคอนฝ่าย) • รูปที่ถูกซ่อน/บัญชีแบนไม่ส่ง
+      await load(uid);
+      const ids = [...new Set((Array.isArray(data.uids) ? data.uids : []).map(String).filter((x) => /^[A-Za-z0-9_-]{1,64}$/.test(x)))].slice(0, 25), list = {};
+      await Promise.all(ids.map(async (id) => {
+        const [pS, uS] = await Promise.all([db.ref(`prof/${id}`).get(), db.ref(`users/${id}/banned`).get()]);
+        if (uS.val() === true || !pS.exists()) return;
+        const pf = col(pS.val()), c = pub(pf, "", "human"), upv = c.up && c.uu !== false ? c.up.v : null;
+        if (c.avic || upv || (c.fr && c.fr !== "fr_none")) list[id] = { avic: c.avic, fr: c.fr, upv };
+      }));
+      return { ok: true, list };
+    }
     if (a === "visit") {   // ดูการ์ดโปรไฟล์ผู้อื่น (สาธารณะ)
       await load(uid);
       const to = String(data.uid || ""), t = (await db.ref(`users/${to}`).get()).val();
