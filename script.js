@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1545";
+const APP_VERSION = "2026-10-19.1604";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -12063,8 +12063,8 @@ function tuneDefs() {
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
-  rows.push(["sc_on", "ฉากค้นลึกแบบ Doom (1 = เปิด, 0 = ปิด → ค้นลึกแบบเดิม • ฝั่งเกมล้วน ไม่ต้อง deploy อะไร)", 1, 0, 1, "🕹️ ฉากค้นลึก"]);
-  rows.push(["town_on", "เดินในค่ายแบบ Doom ที่ Safe Zone (1 = เปิด, 0 = ปิด • ฝั่งเกมล้วน)", 1, 0, 1, "🏘️ เมืองค่าย"]);
+  rows.push(["sc_on", "ฉากค้นลึกแบบเดินในทางเดิน (1 = เปิด, 0 = ปิด → ค้นลึกแบบเดิม • ฝั่งเกมล้วน ไม่ต้อง deploy อะไร)", 1, 0, 1, "🕹️ ฉากค้นลึก"]);
+  rows.push(["town_on", "เดินในค่ายที่ Safe Zone (1 = เปิด, 0 = ปิด • ฝั่งเกมล้วน)", 1, 0, 1, "🏘️ เมืองค่าย"]);
   rows.push(["px_on", "อวาตาร์พิกเซลที่ผู้เล่นวาดเอง (1 = เปิด, 0 = ปิด • ต้อง deploy rules pxav ก่อนถึงจะบันทึกได้)", 1, 0, 1, "🎨 อวาตาร์พิกเซล"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
@@ -12745,10 +12745,10 @@ function sceneBossCue() {
 }
 function sceneBtnInit() {
   if ($("btn-sc") || !$("btn-deep")) return;
-  const b = btn("🕹️", () => { fxSet("sc_off", fxGet("sc_off", 0) ? 0 : 1); sceneBtnSync(); toast(fxGet("sc_off", 0) ? "ปิดฉากค้นลึกแบบ Doom ในเครื่องนี้แล้ว" : "เปิดฉากค้นลึกแบบ Doom แล้ว"); }, "btn ghost mini");
+  const b = btn("🕹️", () => { fxSet("sc_off", fxGet("sc_off", 0) ? 0 : 1); sceneBtnSync(); toast(fxGet("sc_off", 0) ? "ปิดฉากค้นลึกแบบเดินในเครื่องนี้แล้ว" : "เปิดฉากค้นลึกแบบเดินแล้ว"); }, "btn ghost mini");
   b.id = "btn-sc"; $("btn-deep").after(b); sceneBtnSync();
 }
-function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("sc_on", 1) !== 1; const on = !fxGet("sc_off", 0); b.classList.toggle("active", on); b.style.opacity = on ? "1" : "0.5"; b.title = on ? "ฉากค้นลึกแบบ Doom: เปิด (กดเพื่อปิดเฉพาะเครื่องนี้)" : "ฉากค้นลึกแบบ Doom: ปิด (กดเพื่อเปิด)"; }
+function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("sc_on", 1) !== 1; const on = !fxGet("sc_off", 0); b.classList.toggle("active", on); b.style.opacity = on ? "1" : "0.5"; b.title = on ? "ฉากค้นลึกแบบเดิน: เปิด (กดเพื่อปิดเฉพาะเครื่องนี้)" : "ฉากค้นลึกแบบเดิน: ปิด (กดเพื่อเปิด)"; }
 // ---- /ฉากค้นลึก
 
 
@@ -13374,7 +13374,7 @@ function twSync() {   // ปุ่ม "เดินในค่าย" ใต้
   let b = $("btn-town");
   if (!b) {
     if (!$("zone-list")) return;
-    b = btn("🏘️ เดินในค่าย (มุมมอง Doom)", () => twOpen(), "btn primary wide"); b.id = "btn-town"; b.style.margin = "8px 0";
+    b = btn("🏘️ เดินในค่าย", () => twOpen(), "btn primary wide"); b.id = "btn-town"; b.style.margin = "8px 0";
     const nb = $("npc-box"); if (nb) nb.before(b); else $("zone-list").after(b);
   }
   b.classList.toggle("hidden", !show);
