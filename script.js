@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1647";
+const APP_VERSION = "2026-10-19.1702";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -12768,6 +12768,7 @@ function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("s
 
 
 
+
 // ---- 🏘️ เมืองค่ายแบบ Doom + อวาตาร์พิกเซล
 /* =========================================================
    53) 🎨 อวาตาร์พิกเซล (วาดเอง 16×24 • จานสี 16 สี) — ใช้ในเมืองค่ายแบบ Doom (หัวข้อ 54) และวงกลมรูปในแชท
@@ -12969,6 +12970,7 @@ function pxaProfBtn(body) {   // แถวในหน้าต่างตก�
      • เป็นภาพประกอบล้วน ไม่มีผลต่อการตัดสินการต่อสู้ (ผลมาจาก attack()/resolveAttack() เดิม)
    - ถ้า rules ยังไม่ deploy: เดินคนเดียวได้ปกติ (ส่งตำแหน่งไม่ได้ 3 ครั้งแล้วหยุดลอง) • ข้อความแชท/บรรทัดผลค้นหาขึ้นแถบล่างของฉาก (hook townChat/twSys)
    ========================================================= */
+const TW_EMO = [["👋", "โบกมือ"], ["😂", "หัวเราะ"], ["💀", "ทำท่าตาย"], ["🙏", "พนมมือ"], ["👍", "ชูนิ้วโป้ง"]];
 const TW_W = 160, TW_H = 136, TW_SKY_W = 256, TW_SKY_H = 80, TW_NOGO = ["jail", "casino"], TW_SPEED = 2.3;
 const TW_DOORS = {
   G: { label: "🚪 ประตูค่าย — ออกไปข้างนอก", act: "gate" }, M: { label: "🏪 ตลาด", act: "btn-market" }, Q: { label: "📜 กระดานภารกิจ", act: "btn-quests" }, H: { label: "🏠 ที่พัก", act: "btn-base" },
@@ -13179,8 +13181,10 @@ function twNewPlayer(uid, tx, ty) {
 const twSolid = (W, x, y) => twCell(W, Math.floor(x), Math.floor(y)) !== ".";
 function twEntTick(dt, now) {
   const S = TW, pl = state.players || {}, tn = performance.now();
+  if (S.ents.some((c) => c.type === "corpse" && c.until < Date.now())) S.ents = S.ents.filter((c) => c.type !== "corpse" || c.until > Date.now());
   for (const e of S.ents) {
     if (e.type !== "player") continue;
+    e.lift = e.hopT && e.hopT > tn && !scnReduce() ? Math.abs(Math.sin((e.hopT - tn) / 110)) * 0.12 : undefined;
     const p = pl[e.uid]; e.hide = !p || Date.now() - e.seen > 45000; e.nm = p?.name || "";
     if (p && !e.facSet) { e.facSet = true; e.fac = p.faction; if (!e.custom) e.img = pxaImg(pxaDefault(e.uid, p.faction)); }
     // ต่อเส้นทางจากข้อความล่าสุด: กำลังเดิน (m=1) → เดินต่อไปตามทิศ h ไม่เกิน 3.5 วินาที แล้วค่อยค่อยหยุด • ไม่ทะลุกำแพง
@@ -13230,9 +13234,14 @@ function twTarget() {
 }
 const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? t.def.label : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `🧍 ${t.e.nm || "ผู้เล่น"}`);
 function S_keysOff() { TW.keys.f = TW.keys.b = TW.keys.l = TW.keys.r = 0; document.querySelectorAll("#tw-root .tw-dp button.on").forEach((b) => b.classList.remove("on")); }
-function twPop(hide) { const p = $("tw-pop"); if (p) { p.classList.toggle("hidden", !!hide); if (hide) p.textContent = ""; } }
+function twPop(hide) { const p = $("tw-pop"); if (p) { p.classList.toggle("hidden", !!hide); if (hide) { p.textContent = ""; p.dataset.keep = ""; } } }
+function twEmoMenu() {   // เมนูท่าทาง: ส่ง /me เดิม (ใช้คูลดาวน์แชทเดิม) • คนอื่นเห็นไอคอนลอยเหนือหัว+ตัวกระโดด
+  const p = $("tw-pop"); if (!p) return; if (!p.classList.contains("hidden") && p.dataset.keep) return twPop(true);
+  p.textContent = ""; p.dataset.keep = "1"; p.classList.remove("hidden");
+  TW_EMO.forEach(([i, l]) => { const b = btn(i, () => { twPop(true); sendChat("/me " + i + " " + l).catch((er) => toast(errMsg(er))); }, "btn ghost mini tw-emo"); b.title = l; b.setAttribute("aria-label", l); p.append(b); });
+}
 function twPlayerMenu(e) {   // กด ✋ ที่ผู้เล่นอื่น: โจมตี (ตรวจเงื่อนไขใน attack() เดิม) / ทักทาย / (สตาฟ) ลบอวาตาร์
-  const p = $("tw-pop"); if (!p) return; p.textContent = ""; p.classList.remove("hidden");
+  const p = $("tw-pop"); if (!p) return; p.textContent = ""; p.dataset.keep = ""; p.classList.remove("hidden");
   p.append(mk("b", "", `${e.fac === "zombie" ? "🧟" : "🧍"} ${e.nm || "ผู้เล่น"}`));
   const canFight = state.zone !== "safe" || (typeof wallBroken === "function" && wallBroken());
   if (canFight) { const left = Math.ceil(attackCooldownLeft() / 1000), b = btn(left > 0 ? `⚔️ โจมตี (พัก ${left})` : "⚔️ โจมตี", () => { twPop(true); attack(e.uid, e.nm || "เป้าหมาย"); }, "btn danger mini"); b.disabled = left > 0; p.append(b); }
@@ -13352,7 +13361,7 @@ function twMiniMap() {
   x.clearRect(0, 0, cv.width, cv.height);
   const col = { "#": "#5a5448", b: "#96605a", p: "#8a8478", d: "#d8a050", t: "#78825a", c: "#7a5428", G: "#e2b828", M: "#d83c30", Q: "#c8a064", H: "#e8c870", m: "#e8ece4", r: "#8cd8c0", X: "#50e078" };
   for (let j = 0; j < WD.mh; j++) for (let i = 0; i < WD.mw; i++) { const c = WD.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
-  for (const e of S.ents) { if (e.hide) continue; if (e.type === "fire") { x.fillStyle = "#ff9a2a"; } else x.fillStyle = e.type === "npc" ? "#ffe14a" : e.fac === "zombie" ? "#9fd070" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
+  for (const e of S.ents) { if (e.hide || e.type === "corpse") continue; if (e.type === "fire") { x.fillStyle = "#ff9a2a"; } else x.fillStyle = e.type === "npc" ? "#ffe14a" : e.fac === "zombie" ? "#9fd070" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
   x.fillStyle = "#fff"; x.fillRect(Math.round(S.x * C) - 1, Math.round(S.y * C) - 1, 3, 3);
   x.strokeStyle = "#fff"; x.beginPath(); x.moveTo(S.x * C, S.y * C); x.lineTo(S.x * C + Math.cos(S.a) * 6, S.y * C + Math.sin(S.a) * 6); x.stroke();
 }
@@ -13364,9 +13373,9 @@ function twLabels() {
     let el = S.lbl.get(key);
     if (!el) { el = mk("div", "tw-nm"); const bb0 = mk("span", "tw-bb"); bb0.style.display = "none"; el.append(bb0, mk("b", "")); ov.append(el); S.lbl.set(key, el); }
     el.style.left = (p.fx * 100).toFixed(2) + "%"; el.style.top = (p.fy * 100 - 1).toFixed(2) + "%";
-    const b = el.lastChild, bb = el.firstChild, nm = (e.icon ? e.icon + " " : "") + e.nm; if (b.textContent !== nm) b.textContent = nm;
+    const bty = e.type === "player" && bountyActive(state.bounty?.[e.uid]), b = el.lastChild, bb = el.firstChild, nm = (e.icon ? e.icon + " " : "") + e.nm + (bty ? " 💰" : ""); if (b.textContent !== nm) b.textContent = nm;
     const t = e.bub || ""; if (bb.textContent !== t) { bb.textContent = t; bb.style.display = t ? "" : "none"; }
-    b.className = e.type === "npc" ? "npc" : e.fac === "zombie" ? "zombie" : "human";
+    b.className = e.type === "npc" ? "npc" : e.type === "corpse" ? "corpse" : bty ? "bty" : e.fac === "zombie" ? "zombie" : "human";
   }
   for (const [k, el] of S.lbl) if (!seen.has(k)) { el.remove(); S.lbl.delete(k); }
 }
@@ -13374,7 +13383,7 @@ function twPrompt() {
   const S = TW, t = twTarget(), lab = twTgtLabel(t), p = $("tw-prompt"), a = $("tw-act");
   if (p && p.textContent !== lab) { p.textContent = lab; p.classList.toggle("hidden", !lab); }
   if (a) { const txt = t ? "✋ " + (t.kind === "door" ? "เข้า/ใช้" : t.e.type === "npc" ? "คุย" : "เลือก") : "✋ ใช้"; if (a.textContent !== txt) a.textContent = txt; a.classList.toggle("ready", !!t); }
-  if (!t) twPop(true);
+  if (!t && !(($("tw-pop") || {}).dataset || {}).keep) twPop(true);
   S.tgt = t;
 }
 function twInfo() {
@@ -13388,7 +13397,7 @@ function twLoop(ts) {
   const dt = Math.min(0.1, (ts - S.last) / 1000); S.last = ts; S.now = ts;
   try {
     twStep(dt); twDraw(S); twLabels();
-    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twInfo(); twNpcSync(); }
+    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twInfo(); twNpcSync(); twAmbSync(); }
   } catch (e) { console.warn("town", e); S.broken = true; twClose(); }
 }
 // ---------- 55) ผู้เล่นอื่น: ตำแหน่งแบบประหยัดแบนด์วิท ----------
@@ -13454,12 +13463,37 @@ function twSys(text, cls) {   // เรียกจาก logLine: บรรท�
   const el = mk("div", "tw-ln sys", String(text).slice(0, 140)); log.append(el);
   while (log.children.length > 4) log.firstChild.remove();
 }
-function townChat(m) {   // เรียกจาก addChat
-  if (!TW.on || !m || m.type === "combat") return;
-  if (typeof m.ts === "number" && serverNow() - m.ts > 25000) return;
-  twLogAdd(m);
-  if (m.uid !== state.uid) { const e = TW.ents.find((q) => q.type === "player" && q.uid === m.uid); if (e) { e.bub = String(m.text).slice(0, 70); e.bubT = performance.now() + 6000; } }
+function twLieImg(img) {   // หมุนสไปรต์ 90° → ตัวนอนกับพื้น
+  const w = img.h, h = img.w, px = new Uint32Array(w * h);
+  for (let y = 0; y < img.h; y++) for (let x = 0; x < img.w; x++) px[x * w + (img.h - 1 - y)] = img.px[y * img.w + x];
+  return { w, h, px };
 }
+function twCorpse(m) {   // ข้อความ combat "… X ล้มลง!" → กองศพของ X ค้างในฉาก 90 วินาที (เฉพาะภาพ ไม่เขียนฐานข้อมูล)
+  const mt = /— (.+?) ล้มลง/.exec(String(m.text || "")); if (!mt) return;
+  const e = TW.ents.find((q) => q.type === "player" && q.nm === mt[1]); if (!e) return;
+  TW.ents = TW.ents.filter((q) => q.id !== "c" + e.uid);
+  const cs = TW.ents.filter((q) => q.type === "corpse"); if (cs.length >= 6) TW.ents.splice(TW.ents.indexOf(cs[0]), 1);
+  TW.ents.push({ type: "corpse", id: "c" + e.uid, x: e.x, y: e.y, img: twLieImg(e.img), h: 0.3, r: 0.2, nm: "💀 " + e.nm, until: Date.now() + 90000 });
+  e.hopT = 0;
+}
+function townChat(m) {   // เรียกจาก addChat
+  if (!TW.on || !m) return;
+  if (typeof m.ts === "number" && serverNow() - m.ts > 25000) return;
+  if (m.type === "combat") return twCorpse(m);
+  twLogAdd(m);
+  if (m.uid !== state.uid) {
+    const e = TW.ents.find((q) => q.type === "player" && q.uid === m.uid); if (!e) return;
+    const emo = m.type === "emote" && TW_EMO.find(([i]) => String(m.text).startsWith(i));
+    if (emo) { e.bub = emo[0]; e.bubT = performance.now() + 3500; e.hopT = performance.now() + 700; }
+    else { e.bub = String(m.text).slice(0, 70); e.bubT = performance.now() + 6000; }
+  }
+}
+function twAmbSet(type) {   // บรรยากาศตามเหตุการณ์ใหญ่ของโซน (ใช้ข้อมูล evt เดิม ไม่ใช้แบนด์วิทเพิ่ม)
+  const a = $("tw-amb"), b = $("tw-evt"); if (!a || !b) return; TW.amb = type || "";
+  a.className = "tw-amb" + (type ? " " + type : "");
+  const d = type && typeof EVT_TYPES !== "undefined" ? EVT_TYPES[type] : null; b.textContent = d ? `${d.icon} ${d.name}` : ""; b.classList.toggle("hidden", !d);
+}
+function twAmbSync() { let t = ""; try { const e = evtHere(TW.zone); t = e ? e.type : ""; } catch { /* ข้าม */ } if (t !== (TW.amb || "")) twAmbSet(t); }
 // ---------- หน้าจอ ----------
 function twBuild() {
   if ($("tw-root")) return;
@@ -13470,14 +13504,16 @@ function twBuild() {
   const paint = btn("🎨", () => { S_keysOff(); pxaOpen(); }, "btn ghost mini"); paint.title = "วาดอวาตาร์พิกเซลของคุณ"; paint.id = "tw-paint";
   const pvb = btn("⚔️", () => { try { pvToggle(); } catch { /* ข้าม */ } }, "btn ghost mini"); pvb.id = "tw-pv"; pvb.title = "ฉากปะทะตอนต่อสู้: เปิด/ปิดในเครื่องนี้";
   const x = btn("✕ ออก", () => twClose(), "btn ghost mini"); x.id = "tw-x";
-  top.append(me, tt, pvb, paint, x);
+  const emb = btn("😀", () => twEmoMenu(), "btn ghost mini"); emb.id = "tw-emob"; emb.title = "ท่าทาง"; emb.setAttribute("aria-label", "ท่าทาง");
+  top.append(me, tt, emb, pvb, paint, x);
   const view = mk("div", "tw-view"); view.id = "tw-view";
   const cv = mk("canvas"); cv.id = "tw-cv"; cv.width = TW_W; cv.height = TW_H;
   const ov = mk("div", "tw-ov"); ov.id = "tw-ov";
   const mm = mk("canvas", "tw-mm"); mm.id = "tw-mm"; mm.width = 72; mm.height = 60;
   const pr = mk("div", "tw-prompt hidden"); pr.id = "tw-prompt";
   const pop = mk("div", "tw-pop hidden"); pop.id = "tw-pop";
-  view.append(cv, ov, mm, pr, pop);
+  const amb = mk("div", "tw-amb"); amb.id = "tw-amb"; const evb = mk("div", "tw-evt hidden"); evb.id = "tw-evt";
+  view.append(cv, amb, ov, mm, evb, pr, pop);
   const pad = mk("div", "tw-pad"), dp = mk("div", "tw-dp");
   const hold = (lab, key, cls, tip) => { const b = mk("button", "btn ghost " + cls, lab); b.type = "button"; b.title = tip; b.setAttribute("aria-label", tip); const on = (e) => { e.preventDefault(); TW.keys[key] = 1; b.classList.add("on"); }, off = () => { TW.keys[key] = 0; b.classList.remove("on"); }; b.addEventListener("pointerdown", on); ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, off)); b.addEventListener("contextmenu", (e) => e.preventDefault()); dp.append(b); return b; };
   hold("◀", "l", "dl", "หันซ้าย"); hold("▲", "f", "df", "เดินหน้า"); hold("▶", "r", "dr", "หันขวา"); hold("▼", "b", "db", "ถอยหลัง");
@@ -13524,7 +13560,7 @@ function twOpen() {
   S.on = true; S.now = performance.now(); S.last = 0;
   S.fireT = setInterval(() => { const fe = S.ents.find((q) => q.type === "fire"); if (fe) fe.img = fe.frames[Math.floor(performance.now() / 110) % 3]; }, 110);
   $("tw-ttl").textContent = S.W.camp ? "🏘️ ค่ายพักพิง" : `${ZONES[S.zone].icon} ${ZONES[S.zone].name}`;
-  $("tw-log").textContent = ""; twPop(true); S_keysOff();
+  $("tw-log").textContent = ""; twPop(true); S_keysOff(); twAmbSet(""); twAmbSync();
   try { const b = $("tw-pv"); if (b) b.style.opacity = pvOn() ? "1" : "0.5"; } catch { /* ข้าม */ }
   $("tw-root").classList.remove("hidden"); try { $("tw-root").focus({ preventScroll: true }); } catch { /* ข้าม */ }
   twSelfImg(); twPresStart();
@@ -13666,7 +13702,7 @@ function pvChat(m) {   // เรียกจาก addChat: ฝั่งผู�
   if (t.includes("โจมตีโดน!") || t.includes("ฟาดเข้าเป้า")) k = "hit"; else if (t.includes("หลบได้")) k = "dodge"; else if (t.includes("รับแทน")) k = "block"; else if (t.includes("เสมอ")) k = "tie";
   pvResult({ k, dmg: dm ? +dm[1] : null, dead: t.includes("ล้มลง"), ar: rl ? +rl[1] : null, dr: rl ? +rl[2] : null });
 }
-try { Object.defineProperty(window, "__town", { value: { TW, PV, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled, twWorld, twGenMap, twReach, twPresIn, pvBegin, pvResult, pvChat, twDraw, TW_ZSTYLE } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
+try { Object.defineProperty(window, "__town", { value: { TW, PV, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled, twWorld, twAmbSet, twCorpse, twGenMap, twReach, twPresIn, pvBegin, pvResult, pvChat, twDraw, TW_ZSTYLE } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
 // ---- /เมืองค่าย
 
 if (HAS_DOM) initNpcUi();
