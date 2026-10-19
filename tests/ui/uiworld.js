@@ -24,20 +24,20 @@ const colors = (pg, id) => pg.evaluate((i) => { const c = document.getElementByI
     const W = window.__town, out = {};
     for (const z of ["ruins", "mall", "hospital", "police", "forest", "factory", "port", "base", "tunnel", "lab", "zzz"]) {
       const m1 = W.twGenMap(z).join("|"), m2 = W.twGenMap(z).join("|"), w = W.twWorld(z), sp = w.spawn;
-      const seen = W.twReach(w, Math.floor(sp.x), Math.floor(sp.y)); let free = 0, exitOk = false, crates = 0, crateOk = 0;
+      const seen = W.twReach(w, Math.floor(sp.x), Math.floor(sp.y)); let free = 0, doors = 0, doorOk = 0, crates = 0, crateOk = 0;
       for (let y = 0; y < w.mh; y++) for (let x = 0; x < w.mw; x++) {
         const c = w.map[y][x];
         if (c === ".") free++;
-        if (c === "X" || c === "c") { const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has(x + dx + "," + (y + dy))); if (c === "X") exitOk = near; else { crates++; if (near) crateOk++; } }
+        if (/\d/.test(c) || c === "c") { const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has(x + dx + "," + (y + dy))); if (c !== "c") { doors++; if (near) doorOk++; } else { crates++; if (near) crateOk++; } }
       }
-      out[z] = { same: m1 === m2, free, reach: seen.size, exitOk, crates, crateOk, rows: w.map.length, cols: w.map[0].length, spawnFree: w.map[Math.floor(sp.y)][Math.floor(sp.x)] === "." };
+      out[z] = { same: m1 === m2, free, reach: seen.size, doors, doorOk, nb: w.exits.length, crates, crateOk, rows: w.map.length, cols: w.map[0].length, spawnFree: w.map[Math.floor(sp.y)][Math.floor(sp.x)] === "." };
     }
     return out;
   });
   for (const [z, r] of Object.entries(rep)) {
     assert(r.same && r.rows === 22 && r.cols === 28 && r.spawnFree, `${z}: แผนที่คงที่/ขนาด/จุดเกิดว่าง ${JSON.stringify(r)}`);
     assert(r.reach === r.free, `${z}: ช่องว่างเดินถึงกันหมด ${r.reach}/${r.free}`);
-    assert(r.exitOk, `${z}: ทางออกเดินถึง`); assert(r.crates >= 3 && r.crateOk === r.crates, `${z}: ลังเข้าถึงได้ทุกลัง ${r.crateOk}/${r.crates}`);
+    assert(r.doors === r.nb && r.doorOk === r.doors && (z === "zzz" || r.doors >= 1), `${z}: ประตูทางออกครบตามถนน/เดินถึงทุกบาน ${JSON.stringify(r)}`); assert(r.crates >= 3 && r.crateOk === r.crates, `${z}: ลังเข้าถึงได้ทุกลัง ${r.crateOk}/${r.crates}`);
   }
   assert(await pg.evaluate(() => window.__town.twGenMap("ruins").join() !== window.__town.twGenMap("mall").join()), "คนละโซน → คนละแผนที่");
   assert.deepStrictEqual(errs(B), []); await B.br.close(); console.log("1 แผนที่สร้างอัตโนมัติ ✓");
