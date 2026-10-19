@@ -966,7 +966,7 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 #zone-list.zmap .zroad.walk .zcase { stroke: #123a66; }
 
 /* ===== 52) ฉากค้นลึกแบบ Doom (หัวข้อ 52 ใน script.js) — ทับเกม ใต้หน้าต่างบอส/ช้อยส์ (.modal z 40/45) ===== */
-.sc-root { position: fixed; inset: 0; z-index: 36; background: #060504; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; outline: none; }
+.sc-root { position: fixed; inset: 0; z-index: 37; background: #060504; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; outline: none; }
 .sc-root.hidden { display: none; }
 .sc-box { width: 100%; max-width: 520px; padding: 8px 10px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
 .sc-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: #e8e0c8; font-family: Kanit, sans-serif; }
@@ -1037,3 +1037,21 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .pxa-act .primary { flex: 1; min-height: 44px; }
 .pxa-mini canvas { border-radius: 4px; background: #26303a; display: block; }
 @media (prefers-reduced-motion: reduce) { .tw-view { cursor: default; } }
+
+/* ===== 54-56) โลกเดินได้ทุกโซน + ฉากปะทะ ===== */
+.tw-tt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.tw-ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-pop { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); z-index: 4; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center; max-width: 94%; padding: 8px 10px; background: rgba(10, 8, 6, .88); border: 1px solid #5a4630; border-radius: 10px; color: #fff; }
+.tw-pop.hidden { display: none; }
+.tw-ln.sys { opacity: .85; font-style: italic; }
+.pv-root { position: fixed; inset: 0; z-index: 38; background: #060504; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; outline: none; -webkit-user-select: none; user-select: none; }
+.pv-root.hidden { display: none; }
+.pv-box { width: min(100%, 560px); padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 8px; box-sizing: border-box; }
+.pv-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; color: #fff; }
+.pv-vs { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pv-view { position: relative; width: min(100%, calc(52vh * 160 / 136)); aspect-ratio: 160 / 136; margin: 0 auto; background: #000; border: 2px solid #3a2c1c; border-radius: 6px; overflow: hidden; }
+#pv-cv { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+.pv-flash { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.pv-ov { position: absolute; inset: 0; pointer-events: none; }
+.pv-fl { position: absolute; left: 50%; top: 38%; font: 800 clamp(26px, 9vw, 44px) / 1 system-ui, sans-serif; text-shadow: 0 2px 0 #000, 0 0 8px #000; }
+.pv-cap { min-height: 2.6em; color: #f1e6d0; text-align: center; font-size: 14px; line-height: 1.35; }
