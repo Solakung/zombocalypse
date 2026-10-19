@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1727";
+const APP_VERSION = "2026-10-19.1748";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -8756,7 +8756,7 @@ const BENCH = {
 const DECO = [
   ["d0", "🪴", "กระถางต้นไม้", 10], ["d1", "🕯️", "เทียนไข", 10], ["d2", "🧸", "ตุ๊กตาผ้า", 15], ["d3", "📻", "วิทยุเก่า", 15],
   ["d4", "🖼️", "รูปถ่ายครอบครัว", 20], ["d5", "🪑", "เก้าอี้โยก", 25], ["d6", "🏺", "แจกันโบราณ", 30], ["d7", "🎸", "กีตาร์เก่า", 40],
-  ["d8", "🔭", "กล้องโทรทรรศน์", 50], ["d9", "🏆", "ถ้วยรางวัล", 60], ["d10", "🛋️", "โซฟานุ่ม", 80], ["d11", "🌌", "โคมไฟดวงดาว", 100]
+  ["d8", "🔭", "กล้องโทรทรรศน์", 50], ["d9", "🏆", "ถ้วยรางวัล", 60], ["d10", "🛋️", "โซฟานุ่ม", 80], ["d11", "🌌", "โคมไฟดวงดาว", 90]
 ];
 const benchSlots = () => (baseLv() >= 2 ? 2 : 1);
 const benchLeft = (rec, now = serverNow()) => (rec && BENCH[rec.r] && typeof rec.t === "number" ? rec.t + BENCH[rec.r].ms - now : 1e15);
