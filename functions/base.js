@@ -11,7 +11,7 @@ const BENCH = {                                             // r: [วัตถ�
   5: ["canned_food", 2, "army_meal", 1, 14400000],
   6: ["rotten_meat", 4, "bandage", 1, 10800000]
 };
-const DECO_COST = { d0: 10, d1: 10, d2: 15, d3: 15, d4: 20, d5: 25, d6: 30, d7: 40, d8: 50, d9: 60, d10: 80, d11: 100 };
+const DECO_COST = { d0: 10, d1: 10, d2: 15, d3: 15, d4: 20, d5: 25, d6: 30, d7: 40, d8: 50, d9: 60, d10: 80, d11: 90 };
 
 const { fail, withLock, takeItem, addItem } = require("./lib");
 
