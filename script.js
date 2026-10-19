@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1702";
+const APP_VERSION = "2026-10-19.1727";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2088,9 +2088,11 @@ async function scavengeOnce() {
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
     if (state.deep && !starving) { table = deepTable(table, isZombie); try { table = mgTable(table, mgT, isZombie); } catch { /* ข้าม */ } }
     try { table = wgTable(table); } catch { /* ข้าม */ }   // 🍀 โชคประจำวัน (หัวข้อ 43)
-    table = evtTable(table, isZombie);   // เหตุการณ์ใหญ่ประจำโซน (เครื่องบินทิ้งเสบียง/ฝูงบุก)
+    table = evtTable(table, isZombie);   // เหตุการณ์ใหญ่ประจำโซน
+    try { table = twSecretTable(table, isZombie); } catch { /* ข้าม */ }   // 🔎 หีบลับในฉากเดิน (หัวข้อ 54-58) (เครื่องบินทิ้งเสบียง/ฝูงบุก)
     table = gearTable(table);   // เครื่องราง/หน้ากาก/จมูกกลายพันธุ์ ปรับน้ำหนักตาราง   // ค้นลึก: ของหายาก ×2, ซอมบี้ ×1.5, ว่างเปล่า ×0.5
     let found = rollDrop(table);
+    if (state.forceZ > Date.now() && !isZombie) { found = "zombie"; state.forceZ = 0; }   // 🧟 ซอมบี้ในฉากเดินตะครุบ
     if (found === "boss" && bossCooldownLeft() > 0) found = null;   // เพิ่งเจอบอสไป ยังไม่เกิดซ้ำ
     const scrapIgnored = isZombie && (found === "scrap" || found === "chem");
     if (scrapIgnored) found = null;
@@ -6768,6 +6770,7 @@ const RD_WALL = {
 };
 function radioBulletin(slot) {
   const rnd = bmRng(rdHash("rd", slot)), o = [], now = serverNow();
+  try { const sz = twSecSlotZone(slot); if (sz) return rdPick(rnd, [`ข่าวลือจากผู้รอดชีวิต: มีคนเห็นรอยแตกประหลาดบนผนังตึกที่${ZONES[sz].name} เหมือนมีห้องลับซ่อนอยู่ ใครผ่านไปลองเดินสำรวจดู`, `มีรายงานว่าผนังบางจุดที่${ZONES[sz].name}ผุพังเผยช่องลับ ข้างในอาจมีของดี… แต่ช่องนั้นจะปิดเร็ว ๆ นี้`, `สัญญาณแปลกจากหอเฝ้าระวัง: โครงสร้างลึกลับที่${ZONES[sz].name}เผยตัว สำรวจกำแพงให้ดี ๆ`]); } catch { /* ข้าม */ }
   o.push([4, rdPick(rnd, RD_AMBIENT)]);
   o.push([2, rdFill(rdPick(rnd, RD_TIPS), { npc: NPC_IDS.map((id) => NPC_META[id].name).join(" และ ") })]);
   try {
@@ -12769,6 +12772,9 @@ function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("s
 
 
 
+
+
+
 // ---- 🏘️ เมืองค่ายแบบ Doom + อวาตาร์พิกเซล
 /* =========================================================
    53) 🎨 อวาตาร์พิกเซล (วาดเอง 16×24 • จานสี 16 สี) — ใช้ในเมืองค่ายแบบ Doom (หัวข้อ 54) และวงกลมรูปในแชท
@@ -12976,7 +12982,9 @@ const TW_DOORS = {
   G: { label: "🚪 ประตูค่าย — ออกไปข้างนอก", act: "gate" }, M: { label: "🏪 ตลาด", act: "btn-market" }, Q: { label: "📜 กระดานภารกิจ", act: "btn-quests" }, H: { label: "🏠 ที่พัก", act: "btn-base" },
   m: { label: "⚕️ เต็นท์พยาบาล", act: "npc:mira" }, r: { label: "🧪 เต็นท์วิจัย", act: "npc:tara" }
 };
-const TW_ZDOORS = { X: { label: "🚪 ทางออก — กลับไปเลือกโซน", act: "gate" }, c: { label: "📦 ค้นหาที่นี่", act: "btn-scavenge" } };
+const TW_DOORP = [[11, 0, 0, 1], [20, 0, 0, 1], [11, 21, 0, -1], [20, 21, 0, -1], [0, 8, 1, 0], [0, 14, 1, 0], [27, 8, -1, 0], [27, 14, -1, 0]];   // [x,y,ทิศก้าวเข้าด้านใน x, y] ช่องประตูทางออกบนกำแพงรอบ (อยู่ตรงถนนเสมอ)
+const TW_CRATE_MS = 15 * 60000;   // ลังที่ค้นแล้วในเครื่องนี้ ปิดตัว 15 นาที (ภาพประกอบ — ปุ่มค้นหาเดิมยังใช้ได้ตามปกติ)
+const twNb = (z) => { const o = []; try { for (const r of WORLD.roads) { const n = r[0] === z ? r[1] : r[1] === z ? r[0] : null; if (n && ZONES[n] && !TW_NOGO.includes(n) && !o.includes(n)) o.push(n); } } catch { /* ข้าม */ } return o.slice(0, 8); };
 // ธีมต่อโซน: out = นอกอาคาร (ท้องฟ้า) / ไม่ใช่ = ในอาคาร (เพดาน) • sky = [บน, กลาง, ขอบฟ้า] • light = สีแสงโคมในอาคาร
 const TW_ZSTYLE = {
   ruins: { out: true, sky: [[44, 36, 70], [196, 100, 74], [240, 170, 100]], sil: [34, 26, 34], win: true },
@@ -13016,7 +13024,8 @@ function twGenMap(zone) {
   const MW = 28, MH = 22, R = twRngMk(pxaHash("zw:" + zone)), g = Array.from({ length: MH }, () => Array(MW).fill("."));
   for (let x = 0; x < MW; x++) { g[0][x] = "#"; g[MH - 1][x] = "#"; }
   for (let y = 0; y < MH; y++) { g[y][0] = "#"; g[y][MW - 1] = "#"; }
-  for (let x = 10; x <= 12; x++) g[0][x] = "X";
+  const nb = twNb(zone), noCrate = new Set(), DP = TW_DOORP.slice(0, nb.length);
+  DP.forEach(([x, y, dx, dy], i) => { g[y][x] = String(i); g[y + dy][x + dx] = "."; noCrate.add((x + dx) + "," + (y + dy)); });
   const cols = [[4, 9], [13, 18], [22, 25]], rows = [[3, 6], [9, 12], [15, 18]];
   for (const [y0, y1] of rows) for (const [x0, x1] of cols) {
     const k = R(), put = (x, y, c) => { g[y][x] = c; };
@@ -13036,7 +13045,7 @@ function twGenMap(zone) {
   // ลังริมทาง: ติดผนังเท่านั้น และห่างกัน ≥ 2 ช่อง (ไม่ปิดทาง) • เว้นจุดเกิด/ทางออก
   const crates = [], cand = [];
   for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) {
-    if (g[y][x] !== "." || (x >= 9 && x <= 13 && ((y >= 6 && y <= 9) || y <= 2))) continue;
+    if (g[y][x] !== "." || noCrate.has(x + "," + y) || (x >= 9 && x <= 13 && ((y >= 6 && y <= 9) || y <= 2))) continue;
     const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => "#bp".includes(g[y + dy][x + dx])); if (near) cand.push([x, y]);
   }
   for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
@@ -13049,7 +13058,9 @@ function twGenMap(zone) {
     if (c === "." && !seen.has(x + "," + y)) g[y][x] = "b";
     else if (c === "c" && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has(x + dx + "," + (y + dy)))) g[y][x] = "b";
   }
-  return g.map((r) => r.join(""));
+  const sc = []; for (let y = 2; y < MH - 2; y++) for (let x = 2; x < MW - 2; x++) if (g[y][x] === "b" && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has((x + dx) + "," + (y + dy)))) sc.push([x, y]);
+  const out = g.map((r) => r.join("")); out.sec = sc.length ? sc[Math.floor(R() * sc.length)] : null; out.nb = nb;
+  return out;
 }
 function twReach(W, sx, sy) {   // ช่องว่างที่เดินถึงจากจุดเกิด (BFS) — ใช้ตรวจแผนที่ในเทสต์
   const seen = new Set([sx + "," + sy]), q = [[sx, sy]];
@@ -13110,6 +13121,29 @@ const twExitTex = () => scnTex((x, y) => {
   if (x < 2 || x > 29) return [50, 50, 56]; if (y < 3) return [60, 150, 70];
   const d = Math.abs(x - 15.5); return y > 6 && y < 28 && (y + d * 0.9) % 12 < 3 ? [90, 230, 120] : scnMul([14, 26, 18], 0.8 + 0.4 * scnNz(x, y, 81));
 });
+function twOpenCrateTex(base) {   // ลังที่ค้นแล้ว: มืดลง ฝาเปิดเป็นช่องดำด้านบน
+  const a = new Uint32Array(base.length);
+  for (let y = 0; y < SCN_T; y++) for (let x = 0; x < SCN_T; x++) {
+    const c = base[y * SCN_T + x]; let r = (c & 255) * 0.55, g = ((c >> 8) & 255) * 0.55, b = ((c >> 16) & 255) * 0.55;
+    if (y >= 3 && y <= 11 && x >= 4 && x <= 27) { r = 14; g = 10; b = 8; }
+    a[y * SCN_T + x] = scnPack(r, g, b);
+  }
+  return a;
+}
+function twCrackTex(base) {   // ผนังเดิม + รอยแตกซิกแซก (ใบ้ว่ามีห้องลับ)
+  const a = base.slice();
+  for (let y = 2; y < 30; y++) { const x = 15 + Math.round(Math.sin(y * 0.9) * 2.4); for (const dx of [0, 1]) a[y * SCN_T + x + dx] = scnPack(18, 14, 12); if (y % 5 === 0) a[y * SCN_T + x - 2] = scnPack(30, 24, 20); }
+  return a;
+}
+function twChestTex(open) {
+  return scnTex((x, y) => {
+    if (y < 4 || y > 29 || x < 2 || x > 29) return [40, 28, 16];
+    if (y >= 12 && y <= 15) return open ? [20, 12, 8] : [230, 190, 70];
+    if (open && y < 12) return [24, 16, 10];
+    if (x === 15 || x === 16) return [230, 190, 70];
+    return scnMul([140, 88, 44], 0.85 + 0.2 * scnNz(x, y, 90));
+  });
+}
 const twSkyCache = {};
 function twSkyBuild(key, cols, sil, o) {
   if (twSkyCache[key]) return twSkyCache[key];
@@ -13118,10 +13152,10 @@ function twSkyBuild(key, cols, sil, o) {
   const [top, mid, low] = cols;
   for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
     const t = y / (SH - 1); let c = t < 0.62 ? lerp(top, mid, t / 0.62) : lerp(mid, low, (t - 0.62) / 0.38);
-    if (y < 30 && nz(x, y, s0 + 72) > 0.985) c = [235, 235, 255];
-    if (y > 16 && y < 46 && nz(x >> 3, y >> 2, s0 + 75) > 0.72) c = lerp(c, [255, 190, 140], 0.45);
+    if (y < (o && o.stars ? 44 : 30) && nz(x, y, s0 + 72) > ((o && o.stars) || 0.985)) c = [235, 235, 255];
+    if (!(o && o.noCloud) && y > 16 && y < 46 && nz(x >> 3, y >> 2, s0 + 75) > 0.72) c = lerp(c, (o && o.cloud) || [255, 190, 140], 0.45);
     const h = o && o.trees ? 8 + Math.floor(7 * Math.abs(Math.sin(x * 0.42 + nz(x >> 2, 1, s0) * 6))) + (nz(x >> 4, 9, s0 + 77) > 0.7 ? 4 : 0) : 5 + Math.floor(14 * nz(x >> 3, 5, s0 + 76)) + (nz(x >> 4, 9, s0 + 77) > 0.7 ? 8 : 0);
-    if (y >= SH - 1 - h) { c = sil; if (o && o.win && (x & 3) === 1 && (y & 3) === 1 && nz(x, y, s0 + 78) > 0.82) c = [250, 200, 90]; }
+    if (y >= SH - 1 - h) { c = sil; if (o && o.win && (x & 3) === 1 && (y & 3) === 1 && nz(x, y, s0 + 78) > ((o && o.winT) || 0.82)) c = [250, 200, 90]; }
     a[y * SW + x] = scnPack(c[0], c[1], c[2]);
   }
   return (twSkyCache[key] = a);
@@ -13140,23 +13174,133 @@ function twFireImg(f) {
   for (let y = 12; y < 16; y++) for (let x = 1; x < 11; x++) { const e = x === 1 || x === 10 || y === 15; px[y * w + x] = e ? scnPack(40, 26, 12) : scnPack(98 + (x & 1) * 18, 62, 30); }
   return { w, h, px };
 }
+// ---------- 9) วัน/คืน (เวลาจริงของผู้เล่น) ----------
+function twTod() { const h = new Date(serverNow()).getHours(); return h >= 19 || h < 5 ? "night" : (h >= 17 && h < 19) || (h >= 5 && h < 7) ? "dusk" : "day"; }
+const TW_TOD = {
+  day: { cols: [[62, 122, 204], [140, 186, 234], [214, 226, 224]], sil: [52, 62, 58], o: { cloud: [255, 255, 255], winT: 2 }, fog: [150, 172, 176], fall: 0.032, minSh: 0.46 },
+  night: { cols: [[4, 6, 20], [12, 16, 44], [34, 32, 66]], sil: [8, 8, 14], o: { stars: 0.955, noCloud: true, winT: 0.62 }, fog: [10, 12, 26], fall: 0.075, minSh: 0.12 }
+};
+function twApplyTod(W) {   // โซนกลางแจ้งเท่านั้น: เปลี่ยนท้องฟ้า/หมอก/ความมืดตามเวลาจริง (พลบค่ำ = ภาพเดิมของฉาก)
+  if (!W || !W.out || !W.nat) return; const ph = twTod(); if (W.tod === ph) return; W.tod = ph;
+  const n = ph === "dusk" ? W.nat : TW_TOD[ph], o = { ...(W.nat.o || {}), ...(ph === "dusk" ? {} : n.o) };
+  W.sky = twSkyBuild("tod:" + W.id + ":" + ph, n.cols || W.nat.cols, n.sil || W.nat.sil, o); W.fog = n.fog || W.nat.fog; W.fall = n.fall ?? W.nat.fall; W.minSh = n.minSh ?? W.nat.minSh;
+}
+// ---------- 1,3) ลังค้นหา + ห้องลับตามประกาศวิทยุ ----------
+function twSetCell(W, x, y, ch) { const r = W.map[y]; if (r[x] !== ch) W.map[y] = r.slice(0, x) + ch + r.slice(x + 1); }
+const twCrateKey = (W, x, y) => `zbc:${state.uid}:${W.id}:${x}:${y}`;
+function twSecSlotZone(slot) {   // ช่วงวิทยุ (20 นาที) ที่มีข่าวลือห้องลับ → โซนไหน (ทุกเครื่องได้ผลเดียวกัน ไม่ใช้ฐานข้อมูล) • radioBulletin() ประกาศข่าวลือในช่วงนี้เสมอ
+  const h = rdHash("secret", slot); if (h % 100 >= 35) return null;
+  const zs = Object.keys(ZONES).filter((z) => z !== "safe" && !TW_NOGO.includes(z)); return zs[(h >>> 8) % zs.length];
+}
+const twSecKey = () => `zbs:${state.uid}:${Math.floor(serverNow() / RADIO_SLOT)}`;
+const twSecretOn = (zone) => { try { return twSecSlotZone(Math.floor(serverNow() / RADIO_SLOT)) === zone && localStorage.getItem(twSecKey()) !== "1"; } catch { return false; } };
+function twWorldSync() {   // ปรับช่องบนแผนที่ตามสถานะในเครื่อง: ลังที่ค้นแล้ว (o) + ผนังห้องลับ (S) + วัน/คืน
+  const S = TW, W = S.W; if (!W || S.sec) return; twApplyTod(W); if (W.camp) return;
+  const now = Date.now();
+  for (let y = 0; y < W.mh; y++) for (let x = 0; x < W.mw; x++) {
+    if (W.map0[y][x] !== "c") continue; let t = 0; try { t = +localStorage.getItem(twCrateKey(W, x, y)) || 0; } catch { /* ข้าม */ }
+    twSetCell(W, x, y, now - t < TW_CRATE_MS ? "o" : "c");
+  }
+  if (W.sec) twSetCell(W, W.sec[0], W.sec[1], twSecretOn(W.id) ? "S" : W.map0[W.sec[1]][W.sec[0]]);
+}
+function twCanSearch() { const b = $("btn-scavenge"); return !!b && !b.disabled && state.profile && state.profile.hp > 0 && !state.busy; }
+function twCrate(mx, my) {
+  const W = TW.W; if (!twCanSearch()) return toast("ตอนนี้ค้นหาไม่ได้ (พลังงานไม่พอ / มึนงง / หิว)");
+  try { localStorage.setItem(twCrateKey(W, mx, my), String(Date.now())); } catch { /* ข้าม */ }
+  twSetCell(W, mx, my, "o"); $("btn-scavenge").click();
+}
+const SEC_MAP = ["#########", "#.......#", "#.......#", "#...K...#", "#.......#", "#.......#", "####E####"];
+function twSecretWorld() {
+  const base = TW.W; if (base.secW) return base.secW; const tx = scnTexs(base.id), th = tx.th;
+  const gen = { brick: scnBrick, tile: scnTile, panel: scnPanel, stone: scnStone }[th.w[0]] || scnPanel;
+  const tex = { "#": gen(scnMul(th.w[1], 0.7), th.w[2], 5), K: twChestTex(), k: twChestTex(true), E: twExitTex() };
+  return (base.secW = { id: base.id + "_sec", camp: false, secret: true, map: SEC_MAP.slice(), mw: 9, mh: 7, tex, floorTex: tx.floor, floor: null, sky: null, ceil: tx.ceil, fog: [14, 10, 6], fall: 0.12, minSh: 0.16, lights: [{ x: 4.5, y: 3.5, r2: 30, c: [120, 84, 24] }, { x: 4.5, y: 5.5, r2: 18, c: [60, 40, 12] }], out: false,
+    doors: { K: { label: "💰 หีบลับ — ✋ เปิด", act: "chest" }, k: { label: "หีบว่างเปล่าแล้ว", act: "none" }, E: { label: "🚪 ออกจากห้องลับ", act: "back" } }, spawn: { x: 4.5, y: 5.4, a: -Math.PI / 2 } });
+}
+function twEnterSecret() {
+  const S = TW; if (S.sec) return; const W = S.W, sw = twSecretWorld();
+  S.secBack = { x: S.x, y: S.y, a: S.a + Math.PI }; S.entsHold = S.ents; S.ents = []; S.wMain = W; S.W = sw; sw.map = SEC_MAP.slice(); S.sec = true;
+  S.x = sw.spawn.x; S.y = sw.spawn.y; S.a = sw.spawn.a; S_keysOff(); twPop(true); twAmbSet(""); toast("🔎 คุณงัดผนังเข้าไป… มีห้องลับซ่อนอยู่!");
+}
+function twLeaveSecret() {
+  const S = TW; if (!S.sec) return; S.W = S.wMain; S.ents = S.entsHold || []; S.sec = false; const b = S.secBack; S.x = b.x; S.y = b.y; S.a = b.a; S_keysOff(); twWorldSync();
+}
+function twChest() {
+  if (!twCanSearch()) return toast("ตอนนี้ค้นหาไม่ได้ (พลังงานไม่พอ / มึนงง / หิว)");
+  try { localStorage.setItem(twSecKey(), "1"); } catch { /* ข้าม */ }
+  twSetCell(TW.W, 4, 3, "k"); state.secBoost = Date.now() + 10000; toast("💰 คุณเปิดหีบลับ!"); $("btn-scavenge").click();
+}
+function twSecretTable(table, isZombie) {   // hook ใน scavengeOnce: ค้นหีบลับ = ไม่มี "ไม่เจออะไร"/ซอมบี้/บอส และของหายาก ×3 (ยังจ่ายพลังงานค้นหาเดิม)
+  if (!(state.secBoost > Date.now())) return table; state.secBoost = 0;
+  const t = table.filter((d) => d.id !== null && d.id !== "zombie" && d.id !== "boss").map((d) => (d.w <= 5 ? { ...d, w: d.w * 3 } : d));
+  return t.length ? t : table;
+}
+// ---------- 4) ทางเดินเชื่อมโซน (ตามถนนจริง • ใช้ enterZone เดิม = คูลดาวน์/พลังงาน/เงื่อนไขเดิมทุกอย่าง) ----------
+function twGoLabel(z) {
+  let cost = null; try { cost = roadsOn() && WORLD.nodes[state.zone] && WORLD.nodes[z] ? hopCost(state.zone, z) : travelCost(z); } catch { /* ข้าม */ }
+  let cd = 0; try { cd = Math.ceil(travelCooldownLeft(z) / 1000); } catch { /* ข้าม */ }
+  return `🚪 ไป${ZONES[z]?.icon || ""}${ZONES[z]?.name || z}${cost != null ? ` • ⚡${cost}` : ""}${cd > 0 ? ` • ⏳${cd}วิ` : ""}`;
+}
+async function twGo(z) {
+  const S = TW, from = state.zone; S_keysOff(); twClose();
+  try { await enterZone(z); } catch (e) { toast(errMsg(e)); }
+  S.hint = { from: state.zone === z ? from : null };   // มาถึงแล้ว → ยืนหน้าประตูที่ต่อกับโซนเดิม
+  setTimeout(() => { try { if (twWanted()) twOpen(); } catch { /* ข้าม */ } }, 350);
+}
+function twDoorSpawn(W, from) {
+  const i = W.exits ? W.exits.indexOf(from) : -1; if (i < 0) return null; const [x, y, dx, dy] = TW_DOORP[i];
+  return { x: x + dx + 0.5, y: y + dy + 0.5, a: Math.atan2(dy, dx) };
+}
+// ---------- 2) ซอมบี้เดินเพ่นพ่านในฉาก (ฝั่งเครื่องเรา) → ชนแล้วเข้าระบบเจอซอมบี้เดิม ----------
+function twZmbN() { const d = ZONES[TW.zone]?.danger || 0; return state.profile?.faction !== "human" || TW.W.camp || TW.W.secret ? 0 : d >= 8 ? 3 : d >= 4 ? 2 : d >= 1 ? 1 : 0; }
+function twZmbSpawn() {
+  const S = TW, W = S.W; if (!W || W.camp) return; const want = twZmbN(), have = S.ents.filter((e) => e.type === "zmb").length; if (have >= want) return;
+  const cells = [...twReach(W, Math.floor(W.spawn.x), Math.floor(W.spawn.y))].map((k) => k.split(",").map(Number)).filter(([x, y]) => Math.hypot(x + 0.5 - S.x, y + 0.5 - S.y) > 8);
+  for (let n = have; n < want && cells.length; n++) {
+    const [x, y] = cells.splice(Math.floor(Math.random() * cells.length), 1)[0], id = "z" + Math.floor(Math.random() * 1e6);
+    S.ents.push({ type: "zmb", id, x: x + 0.5, y: y + 0.5, img: pxaImg(pxaDefault(id, "zombie")), h: 0.84, r: 0.3, act: "zmb", nm: "ซอมบี้", icon: "🧟", fac: "zombie", dir: Math.random() * 6.28, nextT: 0, idle: false });
+  }
+}
+function twZmbTick(e, dt, tn) {
+  const S = TW, dx = S.x - e.x, dy = S.y - e.y, d = Math.hypot(dx, dy);
+  const can = state.profile && state.profile.hp > 0 && !state.busy && !state.boss && !state.hb && !S.ambushing && curStamina() >= searchCost() && !effActive("stun");
+  let ang = e.dir, sp = 0.5;
+  if (d < 6.5 && can) { ang = Math.atan2(dy, dx); sp = 1.05; e.idle = false; }
+  else if (tn > e.nextT) { e.dir = Math.random() * 6.28; e.nextT = tn + 1500 + Math.random() * 2500; e.idle = Math.random() < 0.35; ang = e.dir; }
+  e.moving = false;
+  if (!e.idle || sp > 0.6) {
+    const vx = Math.cos(ang) * sp * dt, vy = Math.sin(ang) * sp * dt; let mv = false;
+    if (!twSolid(S.W, e.x + vx * 3, e.y)) { e.x += vx; mv = true; } else e.nextT = 0;
+    if (!twSolid(S.W, e.x, e.y + vy * 3)) { e.y += vy; mv = true; } else e.nextT = 0;
+    e.moving = mv; e.flip = Math.cos(ang) < 0;
+  }
+  if (d < 0.85 && can) twAmbush(e);
+}
+function twAmbush(e) {   // ซอมบี้ตะครุบ/ผู้เล่นเลือกสู้ → ค้นหา 1 ครั้งที่บังคับให้เจอซอมบี้ (จ่ายพลังงาน/หิวเหมือนค้นหาปกติ ผลต่อสู้ใช้ zombieEncounter เดิม)
+  const S = TW; if (S.ambushing || !twCanSearch() || state.boss || state.hb) return toast("ตอนนี้สู้ไม่ได้ (พลังงานไม่พอ / มึนงง / ติดธุระอื่น)");
+  S.ambushing = true; S.ents = S.ents.filter((q) => q !== e); S.zmbRe = Date.now() + 120000; S_keysOff(); twPop(true);
+  toast("🧟 ซอมบี้ตะครุบคุณ!"); state.forceZ = Date.now() + 8000;
+  scavengeClick().catch(() => {}).finally(() => { S.ambushing = false; state.forceZ = 0; });
+}
 // ---------- สร้าง "โลก" ----------
 function twWorld(zone) {
   if (TW.worlds[zone]) return TW.worlds[zone];
   if (zone === "safe") {
     const t = twCampTex();
-    return (TW.worlds.safe = { id: "safe", camp: true, map: twMapBuild(), mw: 24, mh: 20, tex: t, floorTex: null, floor: (fx, fy) => (Math.abs(fx - 12) < 4.2 && Math.abs(fy - 10) < 3.6 ? t.plaza : t.dirt), sky: twSkyBuild("camp", [[34, 34, 86], [198, 92, 80], [250, 170, 96]], [30, 22, 38], { win: true }), ceil: null, fog: [120, 84, 70], fall: 0.05, minSh: 0.3, lights: [{ x: 12, y: 10, r2: 40, c: [130, 72, 18], fire: true }], doors: TW_DOORS, spawn: { x: 12, y: 13.2, a: -Math.PI / 2 } });
+    return (TW.worlds.safe = { id: "safe", camp: true, map: twMapBuild(), mw: 24, mh: 20, tex: t, floorTex: null, floor: (fx, fy) => (Math.abs(fx - 12) < 4.2 && Math.abs(fy - 10) < 3.6 ? t.plaza : t.dirt), sky: twSkyBuild("camp", [[34, 34, 86], [198, 92, 80], [250, 170, 96]], [30, 22, 38], { win: true }), ceil: null, out: true, tod: "dusk", nat: { cols: [[34, 34, 86], [198, 92, 80], [250, 170, 96]], sil: [30, 22, 38], o: { win: true }, fog: [120, 84, 70], fall: 0.05, minSh: 0.3 }, fog: [120, 84, 70], fall: 0.05, minSh: 0.3, lights: [{ x: 12, y: 10, r2: 40, c: [130, 72, 18], fire: true }], doors: TW_DOORS, spawn: { x: 12, y: 13.2, a: -Math.PI / 2 } });
   }
   const st = TW_ZSTYLE[zone] || TW_ZSTYLE._, tx = scnTexs(zone), th = tx.th, seed = pxaHash(zone) & 255;
   const gen = { brick: scnBrick, tile: scnTile, panel: scnPanel, stone: scnStone }[th.w[0]] || scnPanel;
-  const tex = { "#": tx.wall, b: gen(scnMul(th.w[1], 0.8), th.w[2], seed + 11), p: scnStone([112, 108, 100], [40, 38, 36], seed + 3), c: tx.crate, d: tx.door, X: twExitTex() };
-  const map = twGenMap(zone), lows = st.sky ? st.sky[2] : [90, 90, 90];
+  const tex = { "#": tx.wall, b: gen(scnMul(th.w[1], 0.8), th.w[2], seed + 11), p: scnStone([112, 108, 100], [40, 38, 36], seed + 3), c: tx.crate, o: twOpenCrateTex(tx.crate), d: tx.door, S: twCrackTex(gen(scnMul(th.w[1], 0.8), th.w[2], seed + 11)), K: twChestTex(), k: twChestTex(true) };
+  const nb = twNb(zone); nb.forEach((_, i) => { tex[String(i)] = twExitTex(); });
+  const map = twGenMap(zone), lows = st.sky ? st.sky[2] : [90, 90, 90], doors = { c: { label: "📦 ค้นหาที่นี่", act: "crate" }, o: { label: "📦 ลังนี้ค้นไปแล้ว (รอสักพักถึงจะมีของใหม่)", act: "none" }, S: { label: "🔎 รอยแตกบนผนัง — ลองสำรวจ", act: "secret" } };
+  nb.forEach((z, i) => { doors[String(i)] = { label: () => twGoLabel(z), act: "go:" + z }; });
   return (TW.worlds[zone] = {
     id: zone, camp: false, map, mw: 28, mh: 22, tex, floorTex: tx.floor, floor: null,
     sky: st.out ? twSkyBuild("z:" + zone, st.sky, st.sil, { win: st.win, trees: st.trees }) : null, ceil: st.out ? null : tx.ceil,
     fog: st.out ? [lows[0] * 0.6 | 0, lows[1] * 0.55 | 0, lows[2] * 0.55 | 0] : th.fog, fall: st.out ? 0.045 : 0.085, minSh: st.out ? 0.3 : 0.18,
     lights: st.out ? [] : [[11, 8], [2, 14], [20, 14]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5, r2: 34, c: st.light || [70, 60, 40] })),
-    doors: TW_ZDOORS, spawn: { x: 11.5, y: 7.9, a: -Math.PI / 2 }
+    doors, exits: nb, sec: map.sec, map0: map.slice(), out: !!st.out, nat: st.out ? { cols: st.sky, sil: st.sil, o: { win: st.win, trees: st.trees }, fog: [lows[0] * 0.6 | 0, lows[1] * 0.55 | 0, lows[2] * 0.55 | 0], fall: 0.045, minSh: 0.3 } : null, tod: "dusk", spawn: { x: 11.5, y: 7.9, a: -Math.PI / 2 }
   });
 }
 // ---------- ตัวละครในฉาก ----------
@@ -13183,8 +13327,10 @@ function twEntTick(dt, now) {
   const S = TW, pl = state.players || {}, tn = performance.now();
   if (S.ents.some((c) => c.type === "corpse" && c.until < Date.now())) S.ents = S.ents.filter((c) => c.type !== "corpse" || c.until > Date.now());
   for (const e of S.ents) {
+    if (e.type === "zmb") { twZmbTick(e, dt, tn); continue; }
     if (e.type !== "player") continue;
-    e.lift = e.hopT && e.hopT > tn && !scnReduce() ? Math.abs(Math.sin((e.hopT - tn) / 110)) * 0.12 : undefined;
+    e.sq = e.sit ? 0.72 : undefined;
+    e.lift = e.hopT && e.hopT > tn && !e.sit && !scnReduce() ? Math.abs(Math.sin((e.hopT - tn) / 110)) * 0.12 : undefined;
     const p = pl[e.uid]; e.hide = !p || Date.now() - e.seen > 45000; e.nm = p?.name || "";
     if (p && !e.facSet) { e.facSet = true; e.fac = p.faction; if (!e.custom) e.img = pxaImg(pxaDefault(e.uid, p.faction)); }
     // ต่อเส้นทางจากข้อความล่าสุด: กำลังเดิน (m=1) → เดินต่อไปตามทิศ h ไม่เกิน 3.5 วินาที แล้วค่อยค่อยหยุด • ไม่ทะลุกำแพง
@@ -13193,7 +13339,7 @@ function twEntTick(dt, now) {
       const ang = (e.hd * Math.PI) / 12, st = 12, sx = Math.cos(ang) * TW_SPEED * age / st, sy = Math.sin(ang) * TW_SPEED * age / st;
       for (let i = 0; i < st; i++) { if (!twSolid(S.W, gx + sx, gy)) gx += sx; if (!twSolid(S.W, gx, gy + sy)) gy += sy; }
     }
-    e.moving = !!e.mv && age < 3.5;
+    e.moving = !!e.mv && age < 3.5 && !e.sit;
     const dx = gx - e.x, dy = gy - e.y, d = Math.hypot(dx, dy);
     if (d > 4) { e.x = gx; e.y = gy; } else if (d > 0.01) { const k = Math.min(1, dt * 8); e.x += dx * k; e.y += dy * k; }
     if (e.bub && now > e.bubT) e.bub = "";
@@ -13210,10 +13356,12 @@ function twMove(dx, dy) { const S = TW; if (!twBlocked(S.x + dx, S.y)) S.x += dx
 function twStep(dt) {
   const S = TW, k = S.keys, red = scnReduce();
   S.a += (k.r - k.l) * 2.3 * dt + S.dragTurn; S.dragTurn = 0;
-  const mv = k.f - k.b, x0 = S.x, y0 = S.y;
+  if (S.sit && (k.f || k.b)) S.sit = false;
+  const mv = S.sit ? 0 : k.f - k.b, x0 = S.x, y0 = S.y;
   if (mv) { const sp = TW_SPEED * dt * mv * (mv < 0 ? 0.7 : 1); twMove(Math.cos(S.a) * sp, Math.sin(S.a) * sp); S.bob += dt * 9; S.bobAmp = Math.min(1, S.bobAmp + dt * 6); } else S.bobAmp = Math.max(0, S.bobAmp - dt * 5);
   S.mv = mv && Math.hypot(S.x - x0, S.y - y0) > 0.0005 ? mv : 0;   // ชนผนังจนขยับไม่ได้ = ไม่นับว่าเดิน
-  S.bobY = red ? 0 : Math.sin(S.bob * 2) * 1.6 * S.bobAmp;
+  S.sitK = (S.sitK || 0) + ((S.sit ? 1 : 0) - (S.sitK || 0)) * Math.min(1, dt * 7);
+  S.bobY = (red ? 0 : Math.sin(S.bob * 2) * 1.6 * S.bobAmp) + S.sitK * 7;
   twEntTick(dt, S.now); twPresTick();
 }
 // ---------- เป้าหมายที่กด "ใช้" ได้ ----------
@@ -13227,12 +13375,12 @@ function twTarget() {
   }
   if (best) return best;
   for (let t = 0.3; t <= 1.7; t += 0.1) {
-    const c = twCell(S.W, Math.floor(S.x + dx * t), Math.floor(S.y + dy * t));
-    if (c !== ".") { const D = S.W.doors[c]; if (D) return { kind: "door", c, def: D, d: t }; break; }
+    const mx = Math.floor(S.x + dx * t), my = Math.floor(S.y + dy * t), c = twCell(S.W, mx, my);
+    if (c !== ".") { const D = S.W.doors[c]; if (D) return { kind: "door", c, def: D, d: t, mx, my }; break; }
   }
   return null;
 }
-const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? t.def.label : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `🧍 ${t.e.nm || "ผู้เล่น"}`);
+const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? (typeof t.def.label === "function" ? t.def.label() : t.def.label) : t.e.type === "fire" ? (TW.sit ? "🔥 ลุกขึ้นยืน" : "🔥 นั่งรอบกองไฟ") : t.e.type === "zmb" ? "🧟 ซอมบี้ — กดเพื่อสู้" : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `🧍 ${t.e.nm || "ผู้เล่น"}`);
 function S_keysOff() { TW.keys.f = TW.keys.b = TW.keys.l = TW.keys.r = 0; document.querySelectorAll("#tw-root .tw-dp button.on").forEach((b) => b.classList.remove("on")); }
 function twPop(hide) { const p = $("tw-pop"); if (p) { p.classList.toggle("hidden", !!hide); if (hide) { p.textContent = ""; p.dataset.keep = ""; } } }
 function twEmoMenu() {   // เมนูท่าทาง: ส่ง /me เดิม (ใช้คูลดาวน์แชทเดิม) • คนอื่นเห็นไอคอนลอยเหนือหัว+ตัวกระโดด
@@ -13253,8 +13401,19 @@ function twAct() {
   const pop = $("tw-pop"); if (pop && !pop.classList.contains("hidden")) return twPop(true);
   const t = twTarget(); if (!t) return toast("เดินไปหาประตู คน หรือป้าย แล้วกดอีกครั้ง");
   S_keysOff();
-  if (t.kind === "ent") { if (t.e.type === "npc") return npcOpen(t.e.id); return twPlayerMenu(t.e); }
+  if (t.kind === "ent") {
+    if (t.e.type === "npc") return npcOpen(t.e.id);
+    if (t.e.type === "zmb") return twAmbush(t.e);
+    if (t.e.type === "fire") { TW.sit = !TW.sit; if (TW.sit) { TW.a = Math.atan2(t.e.y - TW.y, t.e.x - TW.x); toast("🔥 คุณนั่งลงข้างกองไฟ (กดเดินเพื่อลุก)"); } return; }
+    return twPlayerMenu(t.e);
+  }
   const a = t.def.act;
+  if (a === "none") return toast(typeof t.def.label === "function" ? t.def.label() : t.def.label);
+  if (a === "crate") return twCrate(t.mx, t.my);
+  if (a === "secret") return twEnterSecret();
+  if (a === "chest") return twChest();
+  if (a === "back") return twLeaveSecret();
+  if (a.startsWith("go:")) return twGo(a.slice(3));
   if (a === "gate") { twClose(); setTab("map"); return toast("เลือกโซนปลายทางจากรายการโซน"); }
   if (a.startsWith("npc:")) { const id = a.slice(4); if (id === HC_ID && !hcFound()) return toast("เต็นท์นี้ว่างเปล่า… ยังไม่มีใครอยู่"); return npcOpen(id); }
   const b = $(a); if (b && !b.hidden && !b.classList.contains("hidden")) b.click(); else toast("ฟีเจอร์นี้ยังไม่เปิดใช้งาน");
@@ -13360,8 +13519,8 @@ function twMiniMap() {
   if (cv.width !== WD.mw * C) { cv.width = WD.mw * C; cv.height = WD.mh * C; cv.style.width = WD.mw * C + "px"; cv.style.height = WD.mh * C + "px"; }
   x.clearRect(0, 0, cv.width, cv.height);
   const col = { "#": "#5a5448", b: "#96605a", p: "#8a8478", d: "#d8a050", t: "#78825a", c: "#7a5428", G: "#e2b828", M: "#d83c30", Q: "#c8a064", H: "#e8c870", m: "#e8ece4", r: "#8cd8c0", X: "#50e078" };
-  for (let j = 0; j < WD.mh; j++) for (let i = 0; i < WD.mw; i++) { const c = WD.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
-  for (const e of S.ents) { if (e.hide || e.type === "corpse") continue; if (e.type === "fire") { x.fillStyle = "#ff9a2a"; } else x.fillStyle = e.type === "npc" ? "#ffe14a" : e.fac === "zombie" ? "#9fd070" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
+  for (let j = 0; j < WD.mh; j++) for (let i = 0; i < WD.mw; i++) { const c = WD.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : /\d/.test(c) ? "#50e078" : c === "S" ? col.b : c === "o" ? "#4a3418" : c === "K" ? "#e8c040" : c === "E" ? "#50e078" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
+  for (const e of S.ents) { if (e.hide || e.type === "corpse") continue; if (e.type === "fire") { x.fillStyle = "#ff9a2a"; } else if (e.type === "zmb") { x.fillStyle = "#e04040"; } else x.fillStyle = e.type === "npc" ? "#ffe14a" : e.fac === "zombie" ? "#9fd070" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
   x.fillStyle = "#fff"; x.fillRect(Math.round(S.x * C) - 1, Math.round(S.y * C) - 1, 3, 3);
   x.strokeStyle = "#fff"; x.beginPath(); x.moveTo(S.x * C, S.y * C); x.lineTo(S.x * C + Math.cos(S.a) * 6, S.y * C + Math.sin(S.a) * 6); x.stroke();
 }
@@ -13397,7 +13556,7 @@ function twLoop(ts) {
   const dt = Math.min(0.1, (ts - S.last) / 1000); S.last = ts; S.now = ts;
   try {
     twStep(dt); twDraw(S); twLabels();
-    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twInfo(); twNpcSync(); twAmbSync(); }
+    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twInfo(); twNpcSync(); twAmbSync(); if (S.zmbRe && Date.now() > S.zmbRe) { S.zmbRe = 0; twZmbSpawn(); } if (ts - (S.syncT || 0) > 4000) { S.syncT = ts; twWorldSync(); } }
   } catch (e) { console.warn("town", e); S.broken = true; twClose(); }
 }
 // ---------- 55) ผู้เล่นอื่น: ตำแหน่งแบบประหยัดแบนด์วิท ----------
@@ -13416,6 +13575,7 @@ function twPresStop() {
   TW.ents = TW.ents.filter((e) => e.type !== "player");
 }
 function twPresIn(obj) {
+  if (TW.sec) return;   // อยู่ในห้องลับ: ไม่ยุ่งกับรายชื่อผู้เล่น (กลับออกมาแล้วข้อมูลใหม่มาเอง)
   const S = TW, now = Date.now(), tn = performance.now(), keep = new Set();
   for (const [uid, v] of Object.entries(obj)) {
     if (uid === state.uid || typeof v !== "string") continue;
@@ -13423,19 +13583,20 @@ function twPresIn(obj) {
     const tx = +m[1] / 10, ty = +m[2] / 10; let e = S.ents.find((q) => q.type === "player" && q.uid === uid);
     if (!e) { if (S.ents.filter((q) => q.type === "player").length >= 24) continue; e = twNewPlayer(uid, tx, ty); S.ents.push(e); }
     keep.add(uid);
-    if (e.raw !== v) { e.raw = v; e.tx = tx; e.ty = ty; e.hd = +m[3] % 24; e.mv = +m[4]; e.t0 = tn; e.seen = now; }
+    if (e.raw !== v) { e.raw = v; e.tx = tx; e.ty = ty; e.hd = +m[3] % 24; e.sit = +m[3] >= 24; e.mv = +m[4]; e.t0 = tn; e.seen = now; }
   }
   S.ents = S.ents.filter((e) => e.type !== "player" || keep.has(e.uid));
 }
 function twPresTick() {
-  const P = TW.pres, S = TW; if (!P.started || P.paused || P.fail >= 3 || !state.uid) return;
+  const P = TW.pres, S = TW; if (!P.started || P.paused || P.fail >= 3 || !state.uid || S.sec) return;
   const alone = Object.keys(state.players || {}).filter((u) => u !== state.uid).length === 0;   // ไม่มีใครอยู่โซนนี้ = ไม่ต้องส่งเลย
   if (alone) { P.alone = true; return; }
-  const now = performance.now(), mv = S.mv ? 1 : 0, ang = S.a + (S.mv < 0 ? Math.PI : 0), hd = Math.round((((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 12)) % 24;
+  const now = performance.now(), mv = S.mv ? 1 : 0, ang = S.a + (S.mv < 0 ? Math.PI : 0), hd = Math.round((((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 12)) % 24 + (S.sit ? 24 : 0);   // ≥24 = นั่งอยู่
   const hz = Math.max(200, T("town_hz", 800)), since = now - P.lastT;
   let due = false;
   if (P.alone) due = true;                                   // เพิ่งมีคนเข้าโซน → ส่งตำแหน่งปัจจุบันให้เขาเห็นทันที
   else if (mv !== P.mv) due = since >= 250;                  // เริ่มเดิน / หยุด
+  else if ((hd >= 24) !== (P.hd >= 24)) due = since >= 250;  // นั่ง/ลุก
   else if (mv && hd !== P.hd) due = since >= hz;             // เลี้ยวระหว่างเดิน
   else if (mv) due = since >= 3000;                          // เดินตรงนาน ๆ: ปรับแก้ตำแหน่ง
   else due = since >= 20000;                                 // ยืนนิ่ง: หัวใจ (กันถูกมองว่าหายไป)
@@ -13503,7 +13664,7 @@ function twBuild() {
   const tt = mk("div", "tw-tt"); tt.append(ttl, cnt);
   const paint = btn("🎨", () => { S_keysOff(); pxaOpen(); }, "btn ghost mini"); paint.title = "วาดอวาตาร์พิกเซลของคุณ"; paint.id = "tw-paint";
   const pvb = btn("⚔️", () => { try { pvToggle(); } catch { /* ข้าม */ } }, "btn ghost mini"); pvb.id = "tw-pv"; pvb.title = "ฉากปะทะตอนต่อสู้: เปิด/ปิดในเครื่องนี้";
-  const x = btn("✕ ออก", () => twClose(), "btn ghost mini"); x.id = "tw-x";
+  const x = btn("✕", () => twClose(), "btn ghost mini"); x.id = "tw-x"; x.title = "ออกจากฉาก"; x.setAttribute("aria-label", "ออกจากฉาก");
   const emb = btn("😀", () => twEmoMenu(), "btn ghost mini"); emb.id = "tw-emob"; emb.title = "ท่าทาง"; emb.setAttribute("aria-label", "ท่าทาง");
   top.append(me, tt, emb, pvb, paint, x);
   const view = mk("div", "tw-view"); view.id = "tw-view";
@@ -13553,9 +13714,11 @@ function twOpen() {
     S.zone = state.zone; S.W = twWorld(S.zone);
     S.colAng = new Float32Array(TW_W); for (let x = 0; x < TW_W; x++) S.colAng[x] = Math.atan(((2 * x) / TW_W - 1) * 0.66);
     const cv = $("tw-cv"); S.ctx = cv.getContext("2d"); S.id = S.ctx.createImageData(TW_W, TW_H); S.buf = new Uint32Array(S.id.data.buffer); S.zb = new Float32Array(TW_W);
-    S.x = S.W.spawn.x; S.y = S.W.spawn.y; S.a = S.W.spawn.a; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.dragTurn = 0; S.mv = 0; S.proj = []; S.npcSig = ""; S.ents = [];
-    if (S.W.camp) { const f = [0, 1, 2].map((i) => twFireImg(i)); S.ents.push({ type: "fire", x: 12, y: 10, img: f[0], frames: f, h: 0.5, solid: 0.4, nm: "" }); }
-    twNpcSync();
+    S.sec = false; S.sit = false; S.sitK = 0; S.ambushing = false; S.zmbRe = 0; S.wMain = null;
+    const hs = S.hint && S.hint.from ? twDoorSpawn(S.W, S.hint.from) : null; S.hint = null; const sp = hs || S.W.spawn;
+    S.x = sp.x; S.y = sp.y; S.a = sp.a; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.dragTurn = 0; S.mv = 0; S.proj = []; S.npcSig = ""; S.ents = [];
+    if (S.W.camp) { const f = [0, 1, 2].map((i) => twFireImg(i)); S.ents.push({ type: "fire", x: 12, y: 10, img: f[0], frames: f, h: 0.5, solid: 0.4, nm: "", act: "fire" }); }
+    twNpcSync(); S.W.tod = ""; twWorldSync(); twZmbSpawn();
   } catch (e) { console.warn("town build", e); S.broken = true; return toast("เปิดฉากไม่สำเร็จ"); }
   S.on = true; S.now = performance.now(); S.last = 0;
   S.fireT = setInterval(() => { const fe = S.ents.find((q) => q.type === "fire"); if (fe) fe.img = fe.frames[Math.floor(performance.now() / 110) % 3]; }, 110);
@@ -13569,7 +13732,8 @@ function twOpen() {
 }
 function twClose() {
   const S = TW; if (!S.on) return;
-  S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearInterval(S.fireT); clearTimeout(S.pres.hidT); S_keysOff(); twPresStop();
+  if (S.sec) { S.W = S.wMain || S.W; S.sec = false; }
+  S.sit = false; S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearInterval(S.fireT); clearTimeout(S.pres.hidT); S_keysOff(); twPresStop();
   for (const el of S.lbl.values()) el.remove(); S.lbl.clear();
   const r = $("tw-root"); if (r) r.classList.add("hidden");
 }
@@ -13702,7 +13866,7 @@ function pvChat(m) {   // เรียกจาก addChat: ฝั่งผู�
   if (t.includes("โจมตีโดน!") || t.includes("ฟาดเข้าเป้า")) k = "hit"; else if (t.includes("หลบได้")) k = "dodge"; else if (t.includes("รับแทน")) k = "block"; else if (t.includes("เสมอ")) k = "tie";
   pvResult({ k, dmg: dm ? +dm[1] : null, dead: t.includes("ล้มลง"), ar: rl ? +rl[1] : null, dr: rl ? +rl[2] : null });
 }
-try { Object.defineProperty(window, "__town", { value: { TW, PV, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled, twWorld, twAmbSet, twCorpse, twGenMap, twReach, twPresIn, pvBegin, pvResult, pvChat, twDraw, TW_ZSTYLE } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
+try { Object.defineProperty(window, "__town", { value: { TW, PV, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled, twWorld, twAmbSet, twCorpse, twSecSlotZone, twSecretOn, twSetCell, twGoLabel, twWorldSync, twApplyTod, twTod, twZmbSpawn, twAmbush, twGo, twEnterSecret, twLeaveSecret, twCrate, twSecretTable, twDoorSpawn, twGenMap, twReach, twPresIn, pvBegin, pvResult, pvChat, twDraw, TW_ZSTYLE } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
 // ---- /เมืองค่าย
 
 if (HAS_DOM) initNpcUi();
