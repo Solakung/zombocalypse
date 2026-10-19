@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-08.1138";
+const APP_VERSION = "2026-10-19.1438";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -2080,6 +2080,7 @@ async function scavengeOnce() {
   if (starving && p.hp <= STARVE_HP) return toast(`HP ต่ำเกินไปที่จะฝืนค้นหาตอนหิว (เสีย ${STARVE_HP} HP ต่อครั้ง) กินหรือดื่มก่อน`);
   if (!starving && cur < searchCost()) return toast("พลังงานไม่พอ");
   {
+    try { sceneBegin(); } catch { /* ข้าม: ฉากค้นลึก (หัวข้อ 52) ต้องไม่กระทบการค้นหา */ }
     const isZombie = p.faction === "zombie";
     let table = isZombie ? zombieDrops(state.zone) : humanDrops(state.zone);
     if (state.deep && !starving) { table = deepTable(table, isZombie); try { table = mgTable(table, mgT, isZombie); } catch { /* ข้าม */ } }
@@ -2109,24 +2110,29 @@ async function scavengeOnce() {
     ambient();
     if (hcFind) {
       await hcRescue(u, isZombie);
+      try { sceneOutcome({ k: "special" }); } catch { /* ข้าม */ }
     } else if (found === "zombie") {
       if (isZombie) {
         await update(ref(db), u);
         logLine("🧟 ซอมบี้ตัวหนึ่งเดินผ่านมา… มันดมกลิ่นคุณแล้วเมินไป (พวกเดียวกัน)", "info");
+        try { sceneOutcome({ k: "friend", text: "ซอมบี้ตัวหนึ่งเดินผ่านมา… มันดมกลิ่นคุณแล้วเมินไป" }); } catch { /* ข้าม */ }
       } else {
         await zombieEncounter(u, newHp);
       }
     } else if (found === "boss") {
+      try { await sceneHold(); await sceneBossCue(); } catch { /* ข้าม: ให้หน้าต่างบอสเปิดตามเดิม */ }
       await startBoss(u);
     } else if (found) {
       invAddUpdate(u, found, 1);
       await update(ref(db), u);
       stat("found"); logLine(`${srchLead()} เจอ ${ITEMS[found].icon} ${ITEMS[found].name}`, "info");
+      try { sceneOutcome({ k: "item", id: found }); } catch { /* ข้าม */ }
       try { siteAfter(found); } catch { /* ข้าม */ }
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     } else {
       await update(ref(db), u);
       logLine(scrapIgnored ? "คุณเจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร… จึงทิ้งไว้" : srchEmpty(), "info");
+      try { sceneOutcome({ k: "none", text: scrapIgnored ? "เจอเศษผ้ากับวัสดุ แต่ซอมบี้ไม่รู้จะเอาไปทำอะไร" : "" }); } catch { /* ข้าม */ }
       if (starving) logLine(`คำเตือน: คุณฝืนร่างกายค้นหาของจนเสียเลือด ${STARVE_HP} HP`, "system");
     }
     questBump("search"); stat("search");
@@ -2137,7 +2143,9 @@ async function scavengeOnce() {
   }
 }
 
-$("btn-scavenge").addEventListener("click", async () => {
+// ค้นลึก + เปิดฉากแบบ Doom (หัวข้อ 52) → กดค้นหา = เปิดฉาก แล้วกด 🦶 เดินหน้าในฉาก (เรียก scavengeClick เดิม) • ไม่ใช่ค้นลึก/ปิดฉาก = ค้นตามเดิม
+$("btn-scavenge").addEventListener("click", () => { let w = false; try { w = sceneWanted(); } catch { /* ข้าม */ } return w ? sceneOpen() : scavengeClick(); });
+async function scavengeClick() {
   if (state.busy) return;
   state.busy = true;
   try {
@@ -2154,7 +2162,7 @@ $("btn-scavenge").addEventListener("click", async () => {
     console.error("scavenge denied", e?.code, { payload: state.lastPayload, profile: state.profile, inv: state.inv, stamina: curStamina(), offset: state.offset });
     toast(errMsg(e));
   } finally { state.busy = false; state.mgKeep = null; }
-});
+}
 
 // เจอซอมบี้ตอนค้นหา: ทอย d6 + โบนัสอาวุธ (ทอยได้ 1 คือพลาดหนักเสมอ)
 async function zombieEncounter(u, hpNow) {
@@ -2188,6 +2196,7 @@ async function zombieEncounter(u, hpNow) {
   await update(ref(db), u);
   stat("zombie"); if (won) { stat("zwin"); try { achBump("hw" + state.zone); if (acs.hunt?.acc && !acs.hunt.got && acs.hunt.zone === state.zone) toast(`🎯 ค่าหัว ${Math.min(acs.hunt.n, acs.hunt.v + 1)}/${acs.hunt.n}`); } catch { /* ข้าม */ } } if (dmg > 0) stat("dmg", dmg);
   logLine(`🧟 ${rollTxt} — ${verdict}`, "combat");
+  try { sceneOutcome({ k: "zombie", won, dmg, total, hp: newHp, loot, text: `${rollTxt} — ${verdict}` }); } catch { /* ข้าม */ }
   if (newHp === 0) logLine("คุณบาดเจ็บสาหัสจนล้มลง…", "system");
 }
 
@@ -5557,7 +5566,7 @@ function deepInit() {
   if (state.deepOn) return; state.deepOn = true; state.deep = false;
   const b = btn("🔦 โหมดค้น: ปกติ", () => { state.deep = !state.deep; deepSync(); }, "btn ghost mini"); b.id = "btn-deep";
   b.title = "ค้นลึก: เสียพลังงาน ×2 • ของหายากออกง่ายขึ้น ×2 • แต่เจอซอมบี้มากขึ้น 50% (ซอมบี้: เนื้อเน่าออกง่ายขึ้น ×2)";
-  $("btn-scavenge").after(b); deepSync(); dailyNews(); try { mgBtnInit(); } catch { /* ข้าม */ }
+  $("btn-scavenge").after(b); deepSync(); dailyNews(); try { mgBtnInit(); } catch { /* ข้าม */ } try { sceneBtnInit(); } catch { /* ข้าม */ }
 }
 
 
@@ -11955,6 +11964,7 @@ function tuneListen() {
     const m = T("ach_mult", 100); if (m !== last) { last = m; achApplyTune(); }
     { const tr = T("travel_roads", 0); if (tr !== state.roadsEn) { const first = state.roadsEn === undefined; state.roadsEn = tr; if (!first) { try { walkAbort(); renderTravelState(); } catch { /* ข้าม */ } } } }
     { const me = T("map_energy", 0); if (me !== state.zmapEn) { const first = state.zmapEn === undefined; state.zmapEn = me; if (!first || me) { try { buildZoneList(); } catch { /* ข้าม */ } } } }   // เปิด/ปิดป้ายพลังงานต่อถนนบนแผนที่ทันที
+    try { sceneBtnSync(); } catch { /* ข้าม: ซ่อน/แสดงปุ่ม 🕹️ ตาม sc_on (หัวข้อ 52) */ }
     try { worldRefresh(); const am = $("admin-modal"); if (am && !am.classList.contains("hidden") && state.admTab === "tune" && !(document.activeElement && ["INPUT", "SELECT"].includes(document.activeElement.tagName))) admTab("tune"); } catch { /* ข้าม */ }
   }, (er) => console.warn("tune", er?.code || er));
 }
@@ -12047,6 +12057,7 @@ function tuneDefs() {
   rows.push(["wb_on", "สรุปตอนกลับมา เมื่อห่างไป ≥ 3 ชม. (1 = เปิด, 0 = ปิด)", 1, 0, 1, "🔥 เช็กอิน/กลับมา"]);
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
+  rows.push(["sc_on", "ฉากค้นลึกแบบ Doom (1 = เปิด, 0 = ปิด → ค้นลึกแบบเดิม • ฝั่งเกมล้วน ไม่ต้อง deploy อะไร)", 1, 0, 1, "🕹️ ฉากค้นลึก"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
     rows.push(["ds_on", "สรุปจบวัน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
@@ -12195,5 +12206,541 @@ async function econRender(box) {
     const row = mk("div", "row"); row.append(btn("รีเฟรชข้อมูล", () => { state.econCache = null; admTab("econ"); }, "btn ghost mini")); box.append(row);
   } catch (e) { box.textContent = ""; box.append(mk("p", "muted", "โหลดแดชบอร์ดไม่สำเร็จ ลองใหม่อีกครั้ง")); console.error("econ", e); }
 }
+
+
+
+
+// ---- 🕹️ ฉากค้นลึก (Doom-style)
+/* =========================================================
+   52) 🕹️ ฉากค้นลึกแบบ Doom — แสดงผลฝั่ง client ล้วน (ไม่แตะ rules / Cloud Functions)
+   - เปิดเฉพาะตอน state.deep เปิดอยู่: กดค้นหา → เข้าฉากทางเดินพิกเซล (raycasting 160×120) + มือ 2 ข้าง + ปุ่ม 🦶 เดินหน้า
+   - ปุ่มเดิน = เรียก scavengeClick() เดิมทุกอย่าง (หักพลังงาน/ทอย/เขียนข้อมูล/ล็อก เหมือนเดิมเป๊ะ) ฉากแค่เล่นอนิเมชันตามผล
+   - hook ใน scavengeOnce: sceneBegin() = ผ่านเงื่อนไขแล้ว เริ่มก้าวเดิน • sceneOutcome({k,...}) = รู้ผลแล้ว (item/none/zombie/friend/boss/special)
+     • sceneHold()/sceneBossCue() = หน่วงก่อนเปิดหน้าต่างบอสให้เดินจบก่อน
+   - ช้อยส์สถานการณ์ (eventAct → enc-modal) และบอส (boss-modal) ใช้หน้าต่างเดิมเปิดทับฉาก (ฉากนี้ไม่ใช้คลาส .modal เพื่อไม่ให้ encShow ถูกบล็อก)
+   - ปิดด้วย tune sc_on = 0 หรือปุ่ม 🕹️ ในเครื่อง (fxGet "sc_off") → ค้นลึกแบบเดิม • ภาพทั้งหมดวาดด้วยโค้ด ไม่มีไฟล์ภาพเพิ่ม
+   ========================================================= */
+const SCN_W = 160, SCN_H = 136, SCN_T = 32;
+const SCN = { on: false, tc: {}, A: null, walking: false, pending: null, rv: null, spr: [], waiters: [], log: [], bob: 0, bobAmp: 0, hands: { punch: 0, reach: 0 }, cam: { x: 1.5, y: 0.5 }, now: 0, last: 0, seed: 1, faceUntil: 0, faceKind: "", capT: 0, hudT: 0, gotOut: false, zone: "", faction: "human" };
+
+// ---------- ตัวช่วยพื้นฐาน ----------
+const scnRng = (a, b) => { let h = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };   // 0..1 คงที่ตามเลขเข้า
+const scnHexRGB = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const scnPack = (r, g, b) => (0xff000000 | (Math.max(0, Math.min(255, b)) << 16) | (Math.max(0, Math.min(255, g)) << 8) | Math.max(0, Math.min(255, r))) >>> 0;
+const scnHexC = (h) => { const c = scnHexRGB(h); return scnPack(c[0], c[1], c[2]); };
+const scnEase = (p) => p * p * (3 - 2 * p);
+const scnReduce = () => { try { return !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches; } catch { return false; } };
+
+// ---------- ผืนพิกเซล: ระบายด้วย "ชุดสี" (เข้ม/กลาง/สว่าง) แล้วอบเงาขอบให้เอง + เส้นขอบ ----------
+const SCN_R = {
+  skin: ["#8a5a3a", "#d9a07a", "#f2c9a0"], zskin: ["#3f5d2e", "#6f9150", "#a0c272"],
+  hair: ["#1c150e", "#3a2b1c", "#5c4630"], shirt: ["#2c3a50", "#4c6280", "#7088a6"],
+  pants: ["#2a2118", "#4a3b2c", "#6c5740"], shoe: ["#0e0c0a", "#241d17", "#3c3128"],
+  steel: ["#69717b", "#acb4bd", "#e4eaf0"], wood: ["#46301a", "#7d5629", "#a97c46"],
+  cloth: ["#27331f", "#44572f", "#6a8349"], zcloth: ["#262826", "#464a44", "#6a6f66"],
+  crate: ["#46290f", "#7d5428", "#b08846"], band: ["#222226", "#53545a", "#898a92"],
+  gold: ["#8a6a10", "#d4aa22", "#f6e070"]
+};
+class ScnPx {
+  constructor(w, h) { this.w = w; this.h = h; this.m = new Array(w * h).fill(null); this.d = new Array(w * h).fill(null); }
+  set(x, y, r) { if (x >= 0 && y >= 0 && x < this.w && y < this.h) { this.m[y * this.w + x] = r; this.d[y * this.w + x] = null; } return this; }
+  rect(x, y, w, h, r) { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.set(x + i, y + j, r); return this; }
+  ell(cx, cy, rx, ry, r) { for (let j = Math.floor(cy - ry); j <= Math.ceil(cy + ry); j++) for (let i = Math.floor(cx - rx); i <= Math.ceil(cx + rx); i++) { const dx = (i + 0.5 - cx) / rx, dy = (j + 0.5 - cy) / ry; if (dx * dx + dy * dy <= 1) this.set(i, j, r); } return this; }
+  dot(x, y, hex) { if (x >= 0 && y >= 0 && x < this.w && y < this.h) this.d[y * this.w + x] = hex; return this; }
+  cut(x, y) { if (x >= 0 && y >= 0 && x < this.w && y < this.h) { this.m[y * this.w + x] = null; this.d[y * this.w + x] = null; } return this; }
+  bake(ol) {
+    const { w, h, m, d } = this, out = new Uint32Array(w * h), at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? null : m[y * w + x]);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const k = y * w + x, r = m[k];
+      if (d[k]) { out[k] = scnHexC(d[k]); continue; }
+      if (!r) continue;
+      const rp = SCN_R[r], isL = at(x - 1, y) !== r, isT = at(x, y - 1) !== r, isR = at(x + 1, y) !== r, isB = at(x, y + 1) !== r;
+      out[k] = scnHexC(isR || isB ? rp[0] : isL || isT ? rp[2] : rp[1]);
+    }
+    if (ol) {
+      const oc = scnHexC(ol), add = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (out[y * w + x]) continue;
+        const s = (a, b) => a >= 0 && b >= 0 && a < w && b < h && out[b * w + a] !== 0;
+        if (s(x - 1, y) || s(x + 1, y) || s(x, y - 1) || s(x, y + 1)) add.push(y * w + x);
+      }
+      add.forEach((k) => { out[k] = oc; });
+    }
+    return { w, h, px: out };
+  }
+}
+const scnFlip = (img) => { const { w, h, px } = img, o = new Uint32Array(w * h); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) o[y * w + x] = px[y * w + (w - 1 - x)]; return { w, h, px: o }; };
+const SCN_OL = "#140e0a";
+
+// ---------- สไปรต์ ----------
+function scnZombieImg(frame) {   // ซอมบี้ 24×40 (2 เฟรมก้าวสลับขา)
+  const p = new ScnPx(24, 40), a = frame ? 1 : 0, b = frame ? 0 : 1;
+  p.rect(7, 27, 4, 10 + a, "pants").rect(13, 27, 4, 10 + b, "pants").rect(6, 36 + a, 5, 2, "shoe").rect(13, 36 + b, 5, 2, "shoe");
+  p.rect(6, 13, 12, 15, "shirt").rect(5, 13, 14, 3, "shirt").rect(3, 14, 3, 8, "shirt").rect(18, 14, 3, 8, "shirt");
+  p.ell(6.5, 19.5, 2.1, 3.4, "zskin").ell(17.5, 19.5, 2.1, 3.4, "zskin").ell(8.6, 16, 2.3, 2.3, "zskin").ell(15.4, 16, 2.3, 2.3, "zskin");   // แขนยื่นมาข้างหน้า
+  p.rect(10, 12, 4, 2, "zskin").ell(12, 7, 5.2, 6, "zskin");
+  p.rect(7, 1, 10, 3, "hair").rect(6, 3, 2, 4, "hair").rect(16, 3, 2, 3, "hair");
+  [[8, 6], [9, 6], [10, 6], [8, 7], [9, 7], [10, 7], [13, 6], [14, 6], [15, 6], [13, 7], [14, 7], [15, 7]].forEach(([x, y]) => p.dot(x, y, "#0b0806"));
+  p.dot(9, 7, "#f2d21c").dot(14, 7, "#f2d21c").dot(9, 6, "#fff3a0").dot(14, 6, "#fff3a0");   // ตาเรือง
+  for (let x = 9; x <= 14; x++) { p.dot(x, 10, "#2a0808"); p.dot(x, 11, "#2a0808"); }
+  p.dot(10, 10, "#e6dfc0").dot(12, 10, "#e6dfc0").dot(13, 11, "#e6dfc0").dot(11, 11, "#e6dfc0");
+  [[10, 12], [10, 13], [13, 12], [8, 9]].forEach(([x, y]) => p.dot(x, y, "#a82222"));
+  [[8, 18], [9, 19], [15, 22], [14, 23], [11, 24], [12, 21]].forEach(([x, y]) => p.dot(x, y, "#8c1c1c"));
+  [[8, 23], [9, 23], [9, 24], [8, 24]].forEach(([x, y]) => p.dot(x, y, "#6f9150"));
+  p.cut(8, 27).cut(11, 27).cut(15, 27).cut(12, 26);   // ชายเสื้อขาด
+  return p.bake(SCN_OL);
+}
+function scnFistImg(zombie, mirror) {   // กำปั้น 34×34 มองจากด้านหลังมือ
+  const p = new ScnPx(34, 34), S = zombie ? "zskin" : "skin", C = zombie ? "zcloth" : "cloth";
+  p.rect(10, 22, 14, 12, S).rect(8, 27, 18, 7, C).ell(17, 15, 12, 9, S);
+  [[8, 7], [13, 5], [19, 5], [24, 7]].forEach(([x, y]) => p.ell(x, y, 3.4, 3.2, S));
+  p.ell(5.5, 16, 3, 5.5, S);
+  const dk = zombie ? "#3a5429" : "#7a4a2c", lt = zombie ? "#b4d482" : "#ffe2c0";
+  [11, 16, 21].forEach((x) => { for (let y = 7; y <= 13; y++) p.dot(x, y, dk); });
+  [[8, 5], [13, 3], [19, 3], [24, 5], [7, 6], [12, 4], [18, 4], [23, 6]].forEach(([x, y]) => p.dot(x, y, lt));
+  if (zombie) { [[8, 2], [13, 0], [19, 0], [24, 2]].forEach(([x, y]) => { p.dot(x, y, "#ece6cc"); p.dot(x, y + 1, "#d2cba8"); }); p.dot(14, 29, "#8c1c1c").dot(20, 31, "#8c1c1c"); }
+  const im = p.bake(SCN_OL); return mirror ? scnFlip(im) : im;
+}
+function scnBladeImg() { const p = new ScnPx(10, 46); p.rect(3, 3, 4, 29, "steel").rect(4, 1, 2, 2, "steel").rect(1, 32, 8, 2, "gold").rect(3, 34, 4, 12, "wood"); for (let y = 3; y < 30; y++) p.dot(5, y, "#f6fafe"); return p.bake(SCN_OL); }
+function scnClubImg() { const p = new ScnPx(12, 52); for (let y = 0; y < 46; y++) { const w = Math.max(3, Math.round(8 - (5 * y) / 46)); p.rect(6 - Math.floor(w / 2), y, w, 1, "wood"); } p.rect(4, 46, 5, 3, "wood"); [[3, 6], [9, 10], [3, 14], [9, 3]].forEach(([x, y]) => p.dot(x, y, "#b8bcc2")); return p.bake(SCN_OL); }
+function scnBarImg() { const p = new ScnPx(12, 52); p.rect(5, 6, 3, 44, "steel").rect(5, 2, 6, 3, "steel").rect(9, 4, 3, 4, "steel").rect(3, 0, 3, 3, "steel"); return p.bake(SCN_OL); }
+function scnAxeImg() { const p = new ScnPx(22, 52); p.rect(9, 10, 3, 42, "wood").rect(9, 4, 11, 13, "steel").rect(18, 3, 3, 15, "band"); for (let y = 5; y < 16; y++) p.dot(19, y, "#f6fafe"); return p.bake(SCN_OL); }
+function scnGunImg() {   // ปืนมองจากด้านหลังแบบ Doom: ลำกล้องพุ่งขึ้นกลางจอ + มือกำด้าม (48×58)
+  const p = new ScnPx(48, 58);
+  p.rect(19, 0, 10, 14, "band").rect(15, 14, 18, 16, "steel").rect(16, 30, 16, 8, "band");
+  for (let y = 16; y < 29; y += 3) for (let x = 17; x < 31; x += 2) p.dot(x, y, "#454a52");
+  for (let y = 0; y < 3; y++) for (let x = 22; x < 26; x++) p.dot(x, y, "#050505");
+  p.dot(23, 14, "#f6fafe").dot(24, 14, "#f6fafe");
+  p.ell(24, 48, 11, 9, "skin").ell(13.5, 41, 4, 6, "skin").rect(16, 37, 16, 4, "skin");
+  [[18, 44], [23, 44], [28, 44]].forEach(([x, y]) => { p.dot(x, y, "#8a5a3a"); p.dot(x, y + 1, "#8a5a3a"); p.dot(x, y + 2, "#8a5a3a"); });
+  p.rect(14, 52, 20, 6, "cloth");
+  return p.bake(SCN_OL);
+}
+function scnCrateImg() { const p = new ScnPx(16, 14); p.rect(1, 3, 14, 10, "crate").rect(1, 2, 14, 2, "band").rect(4, 3, 2, 10, "band").rect(10, 3, 2, 10, "band").rect(7, 7, 2, 2, "gold"); return p.bake(SCN_OL); }
+function scnFaceImg(zombie, kind) {   // หน้าในแถบสถานะ 16×16: ok / hurt / bad / grin / ouch / dead
+  const p = new ScnPx(16, 16), S = zombie ? "zskin" : "skin";
+  p.ell(8, 8.5, 6.4, 7, S);
+  if (!zombie) p.rect(3, 1, 10, 3, "hair").rect(2, 3, 2, 3, "hair").rect(12, 3, 2, 3, "hair"); else p.rect(4, 1, 8, 2, "hair");
+  const ey = kind === "dead" ? "#0b0806" : "#0b0806";
+  if (kind === "dead") { [[4, 6], [6, 8], [6, 6], [4, 8], [9, 6], [11, 8], [11, 6], [9, 8]].forEach(([x, y]) => p.dot(x, y, ey)); }
+  else if (kind === "ouch") { p.dot(4, 7, ey).dot(5, 7, ey).dot(10, 7, ey).dot(11, 7, ey).dot(4, 6, ey).dot(11, 6, ey); }
+  else { p.dot(5, 7, ey).dot(5, 8, ey).dot(10, 7, ey).dot(10, 8, ey); if (kind === "bad" || kind === "hurt") { p.dot(4, 5, ey).dot(5, 5, ey).dot(10, 5, ey).dot(11, 5, ey); } }
+  if (kind === "grin") { for (let x = 5; x <= 10; x++) p.dot(x, 12, "#2a0808"); p.dot(4, 11, "#2a0808").dot(11, 11, "#2a0808"); for (let x = 6; x <= 9; x++) p.dot(x, 12, "#f4efe0"); }
+  else if (kind === "ouch" || kind === "dead") { p.dot(7, 11, "#2a0808").dot(8, 11, "#2a0808").dot(7, 12, "#2a0808").dot(8, 12, "#2a0808").dot(7, 13, "#2a0808").dot(8, 13, "#2a0808"); }
+  else { for (let x = 6; x <= 9; x++) p.dot(x, 12, "#3a1410"); }
+  const bl = "#b02020";
+  if (kind === "hurt" || kind === "bad" || kind === "ouch") { [[3, 4], [3, 5], [12, 9], [13, 10]].forEach(([x, y]) => p.dot(x, y, bl)); }
+  if (kind === "bad" || kind === "dead") { [[6, 3], [7, 3], [7, 4], [4, 10], [4, 11], [11, 12], [12, 12]].forEach(([x, y]) => p.dot(x, y, bl)); }
+  return p.bake(SCN_OL);
+}
+function scnAssets(zombie) {
+  return {
+    z: [scnZombieImg(0), scnZombieImg(1)], fL: scnFistImg(zombie, false), fR: scnFistImg(zombie, true), crate: scnCrateImg(),
+    w: { blade: scnBladeImg(), club: scnClubImg(), bar: scnBarImg(), axe: scnAxeImg(), gun: scnGunImg() },
+    face: Object.fromEntries(["ok", "hurt", "bad", "grin", "ouch", "dead"].map((k) => [k, scnFaceImg(zombie, k)]))
+  };
+}
+function scnWeaponKind(id) {
+  if (!id) return null;
+  if (/knife|katana|sword|blade|scalpel|machete/i.test(id)) return "blade";
+  if (/pistol|gun|rifle|shotgun|crossbow|revolver/i.test(id)) return "gun";
+  if (/crowbar|pipe|wrench/i.test(id)) return "bar";
+  if (/axe/i.test(id)) return "axe";
+  return "club";
+}
+
+// ---------- พื้นผิว (32×32 สร้างด้วยโค้ด) ตามธีมโซน ----------
+const scnTex = (fn) => { const a = new Uint32Array(SCN_T * SCN_T); for (let y = 0; y < SCN_T; y++) for (let x = 0; x < SCN_T; x++) { const c = fn(x, y); a[y * SCN_T + x] = scnPack(c[0], c[1], c[2]); } return a; };
+const scnNz = (x, y, s) => scnRng(x * 31 + s, y * 17 + s * 3);
+const scnMul = (c, k) => [c[0] * k, c[1] * k, c[2] * k];
+function scnBrick(base, mort, s) {
+  return scnTex((x, y) => {
+    const row = y >> 3, xx = (x + (row & 1 ? 8 : 0)) & 31, bx = xx >> 4, my = y & 7, mx = xx & 15;
+    if (my === 0 || mx === 0) return scnMul(mort, 0.85 + 0.3 * scnNz(x, y, s));
+    const t = 0.78 + 0.34 * scnRng(row * 5 + bx, s) + 0.14 * (scnNz(x, y, s + 5) - 0.5);
+    return scnMul(base, t * (my === 1 ? 1.15 : my === 7 ? 0.8 : 1) * (mx === 1 ? 1.08 : mx === 15 ? 0.85 : 1));
+  });
+}
+function scnTile(base, grout, s) {
+  return scnTex((x, y) => {
+    const mx = x & 7, my = y & 7;
+    if (mx === 0 || my === 0) return scnMul(grout, 0.9 + 0.2 * scnNz(x, y, s));
+    return scnMul(base, (0.9 + 0.2 * scnRng((x >> 3) + (y >> 3) * 7, s) + 0.1 * (scnNz(x, y, s + 2) - 0.5)) * (mx === 1 || my === 1 ? 1.08 : 1));
+  });
+}
+function scnPanel(base, edge, s) {
+  return scnTex((x, y) => {
+    const mx = x & 15, my = y & 15;
+    if (mx === 0 || my === 0) return scnMul(edge, 1);
+    if (mx === 1 || my === 1) return scnMul(base, 1.2);
+    if (mx === 15 || my === 15) return scnMul(base, 0.7);
+    if ([[3, 3], [12, 3], [3, 12], [12, 12]].some(([a, b]) => (mx - a) * (mx - a) + (my - b) * (my - b) <= 1)) return scnMul(base, 1.35);
+    return scnMul(base, 0.88 + 0.2 * scnNz(x, y, s));
+  });
+}
+function scnStone(base, mort, s) {
+  const b = scnBrick(scnMul(base, 0.95), mort, s);
+  for (let i = 0; i < b.length; i++) {
+    const x = i & 31, y = i >> 5, m = scnNz(x >> 1, y >> 1, s + 9);
+    if (m > 0.7) { const c = b[i], r = c & 255, g = (c >> 8) & 255, bl = (c >> 16) & 255, k = Math.min(1, (m - 0.7) * 3.2); b[i] = scnPack(r * (1 - k) + 50 * k, g * (1 - k) + 120 * k, bl * (1 - k) + 40 * k); }
+  }
+  return b;
+}
+function scnDoor(col) {
+  return scnTex((x, y) => {
+    if (x < 2 || x > 29 || y < 2 || y > 29) return scnMul(col, 0.5);
+    if ((x & 7) === 0) return scnMul(col, 0.55);
+    if (y >= 8 && y <= 10) return scnMul([96, 96, 104], y === 8 ? 1.2 : 0.9);
+    if (y >= 22 && y <= 24) return scnMul([96, 96, 104], y === 22 ? 1.2 : 0.9);
+    if (x >= 24 && x <= 26 && y >= 15 && y <= 17) return [222, 192, 84];
+    return scnMul(col, 0.85 + 0.25 * scnRng(x >> 3, 3) + 0.08 * (scnNz(x, y, 4) - 0.5));
+  });
+}
+function scnCrateTex() {
+  return scnTex((x, y) => {
+    if (x < 3 || x > 28 || y < 3 || y > 28) return [88, 58, 28];
+    if (Math.abs(x - y) < 2 || Math.abs(x + y - 31) < 2) return [70, 44, 20];
+    if (y % 8 === 0) return [60, 38, 16];
+    return scnMul([140, 98, 52], 0.85 + 0.3 * scnNz(x, y, 11));
+  });
+}
+const scnConc = (base, dirt) => scnTex((x, y) => scnMul(base, (x & 15) === 0 || (y & 15) === 0 ? 0.6 : 0.85 + 0.3 * scnNz(x, y, 21) + (dirt ? 0.1 * scnNz(x >> 1, y >> 1, 22) : 0)));
+const scnCheck = (a, b) => scnTex((x, y) => scnMul(((x >> 4) + (y >> 4)) & 1 ? a : b, (x & 15) === 0 || (y & 15) === 0 ? 0.7 : 0.9 + 0.2 * scnNz(x, y, 31)));
+const scnCeil = (base) => scnTex((x, y) => (x >= 9 && x <= 22 && y >= 11 && y <= 20 ? [232, 226, 172] : scnMul(base, (x & 15) === 0 || (y & 15) === 0 ? 0.6 : 0.85 + 0.25 * scnNz(x, y, 41))));
+// ธีม: w = [ชนิดผนัง, สีหลัก, สีปูน/ขอบ] • f = [ชนิดพื้น, สี, (สีที่สอง)] • c = สีเพดาน • fog = สีหมอก/ความมืดไกล ๆ • door = สีประตู
+const SCN_TH = {
+  ruins: { w: ["brick", [150, 92, 70], [60, 52, 48]], f: ["conc", [84, 80, 76]], c: [52, 48, 46], fog: [16, 10, 10], door: [96, 70, 50] },
+  mall: { w: ["tile", [196, 176, 146], [120, 105, 90]], f: ["check", [150, 140, 125], [110, 100, 88]], c: [74, 66, 58], fog: [18, 12, 10], door: [70, 100, 130] },
+  hospital: { w: ["tile", [150, 192, 172], [90, 120, 105]], f: ["check", [172, 188, 182], [120, 140, 135]], c: [112, 128, 122], fog: [8, 18, 15], door: [130, 150, 150] },
+  police: { w: ["brick", [70, 90, 130], [40, 46, 60]], f: ["conc", [70, 74, 84]], c: [40, 44, 56], fog: [8, 10, 20], door: [40, 60, 110] },
+  forest: { w: ["stone", [92, 104, 72], [40, 50, 36]], f: ["dirt", [70, 56, 38]], c: [24, 42, 28], fog: [6, 16, 8], door: [80, 60, 36] },
+  factory: { w: ["panel", [132, 122, 102], [60, 56, 50]], f: ["conc", [80, 76, 70]], c: [48, 44, 40], fog: [16, 10, 6], door: [150, 100, 30] },
+  port: { w: ["panel", [70, 112, 132], [30, 48, 60]], f: ["conc", [84, 90, 96]], c: [40, 56, 70], fog: [6, 12, 20], door: [150, 60, 40] },
+  base: { w: ["panel", [92, 112, 82], [40, 52, 36]], f: ["conc", [70, 80, 64]], c: [40, 50, 36], fog: [8, 14, 8], door: [70, 90, 60] },
+  tunnel: { w: ["stone", [102, 98, 94], [40, 38, 36]], f: ["dirt", [64, 60, 56]], c: [30, 28, 28], fog: [4, 4, 8], door: [90, 70, 50] },
+  lab: { w: ["tile", [182, 202, 212], [100, 120, 140]], f: ["check", [160, 182, 192], [110, 130, 145]], c: [92, 112, 126], fog: [4, 12, 18], door: [60, 160, 150] },
+  _: { w: ["panel", [112, 112, 112], [50, 50, 50]], f: ["conc", [80, 80, 80]], c: [46, 46, 46], fog: [8, 8, 10], door: [100, 80, 60] }
+};
+function scnTexs(zone) {
+  const key = SCN_TH[zone] ? zone : "_";
+  if (SCN.tc[key]) return SCN.tc[key];
+  const th = SCN_TH[key], s = key.length * 7 + key.charCodeAt(0), g = { brick: scnBrick, tile: scnTile, panel: scnPanel, stone: scnStone }[th.w[0]];
+  return (SCN.tc[key] = { th, fog: th.fog, wall: g(th.w[1], th.w[2], s), door: scnDoor(th.door), crate: scnCrateTex(), floor: th.f[0] === "check" ? scnCheck(th.f[1], th.f[2]) : scnConc(th.f[1], th.f[0] === "dirt"), ceil: scnCeil(th.c) });
+}
+
+// ---------- แผนที่ทางเดิน (สร้างตามพิกัด ไม่จำกัดความยาว) ----------
+// 0 = ว่าง • 1 = ผนัง • 2 = ประตู • 3 = เสา • 4 = ผนังสุดทาง (ขยับตามกล้อง) • 5 = ลังริมทาง
+function scnWall(mx, my) {
+  if (my >= SCN.endY) return 4;
+  if (mx >= 0 && mx <= 2) {
+    const h = scnRng(my, SCN.seed + 3);
+    if (mx !== 1 && h < 0.07) return 3;
+    if (mx === 0 && h > 0.94) return 5;
+    return 0;
+  }
+  const side = mx < 0 ? 0 : 1, depth = mx < 0 ? -mx : mx - 2, h = scnRng(my >> 1, SCN.seed + 7 + side);
+  if (depth === 1) return h > 0.84 ? 0 : h > 0.74 ? 2 : 1;   // ช่องเว้า / ประตู / ผนัง
+  return 1;
+}
+const scnSh = (d) => Math.max(0.04, Math.min(1, 1.25 - d * 0.105));
+
+// ---------- เรนเดอร์ ----------
+function scnDraw() {
+  const S = SCN, W = SCN_W, H = SCN_H, TX = S.T, buf = S.buf, zb = S.zb, flick = 0.95 + 0.05 * Math.sin(S.now / 140) * Math.sin(S.now / 370);
+  const dirX = 0, dirY = 1, plX = 0.66, plY = 0, px = S.cam.x, py = S.cam.y, hor = (H >> 1) + Math.round(S.bobY || 0);
+  const fr = TX.fog[0], fg = TX.fog[1], fb = TX.fog[2];
+  S.endY = Math.floor(py) + 13;
+  // พื้น/เพดาน
+  for (let y = 0; y < H; y++) {
+    const isFloor = y > hor, p = isFloor ? y - hor : hor - y;
+    if (p === 0) { for (let x = 0; x < W; x++) buf[y * W + x] = scnPack(fr, fg, fb); continue; }
+    const rd = (0.5 * H) / p, sh = scnSh(rd) * flick, tex = isFloor ? TX.floor : TX.ceil, rx0 = dirX - plX, ry0 = dirY - plY, rx1 = dirX + plX, ry1 = dirY + plY;
+    let fx = px + rd * rx0, fy = py + rd * ry0; const sx = (rd * (rx1 - rx0)) / W, sy = (rd * (ry1 - ry0)) / W;
+    for (let x = 0; x < W; x++) {
+      const c = tex[(((fy * SCN_T) | 0) & 31) * SCN_T + (((fx * SCN_T) | 0) & 31)], r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255;
+      buf[y * W + x] = 0xff000000 | ((fb + (b - fb) * sh) << 16) | ((fg + (g - fg) * sh) << 8) | (fr + (r - fr) * sh);
+      fx += sx; fy += sy;
+    }
+  }
+  // ผนัง
+  for (let x = 0; x < W; x++) {
+    const cx = (2 * x) / W - 1, rdx = dirX + plX * cx, rdy = dirY + plY * cx;
+    let mx = Math.floor(px), my = Math.floor(py);
+    const ddx = rdx === 0 ? 1e30 : Math.abs(1 / rdx), ddy = rdy === 0 ? 1e30 : Math.abs(1 / rdy);
+    let stepX, stepY, sdx, sdy;
+    if (rdx < 0) { stepX = -1; sdx = (px - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - px) * ddx; }
+    if (rdy < 0) { stepY = -1; sdy = (py - my) * ddy; } else { stepY = 1; sdy = (my + 1 - py) * ddy; }
+    let hit = 0, side = 0, guard = 0;
+    while (!hit && guard++ < 48) { if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; } hit = scnWall(mx, my); }
+    const perp = Math.max(0.05, side === 0 ? sdx - ddx : sdy - ddy);
+    zb[x] = perp;
+    const lineH = (H / perp) | 0, ds = Math.max(0, hor - (lineH >> 1)), de = Math.min(H - 1, hor + (lineH >> 1));
+    let wx = side === 0 ? py + perp * rdy : px + perp * rdx; wx -= Math.floor(wx);
+    let tx = (wx * SCN_T) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = SCN_T - 1 - tx;
+    const tex = hit === 2 ? TX.door : hit === 5 ? TX.crate : TX.wall, sh = scnSh(perp) * (side ? 0.8 : 1) * flick, step = SCN_T / lineH;
+    let tp = (ds - hor + lineH / 2) * step;
+    for (let y = ds; y <= de; y++) {
+      const c = tex[(tp & 31) * SCN_T + tx]; tp += step;
+      const r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255;
+      buf[y * W + x] = 0xff000000 | ((fb + (b - fb) * sh) << 16) | ((fg + (g - fg) * sh) << 8) | (fr + (r - fr) * sh);
+    }
+  }
+  // สไปรต์ (ไกล → ใกล้)
+  const inv = 1 / (plX * dirY - dirX * plY), list = [];
+  for (const s of S.spr) { const sx = s.x - px, sy = s.y - py, ty = inv * (-plY * sx + plX * sy); if (ty > 0.15 && s.a > 0.02) list.push([s, inv * (dirY * sx - dirX * sy), ty]); }
+  list.sort((a, b) => b[2] - a[2]);
+  for (const [s, tx, ty] of list) {
+    const img = s.img, sq = s.sq ?? 1, hh = (H / ty) * s.h, sh = hh * sq, sw = hh * (img.w / img.h) * (s.sx || 1), cxs = (W / 2) * (1 + tx / ty);
+    const floorY = hor + H / ty / 2 - (s.lift || 0) * (H / ty), top = floorY - sh, left = cxs - sw / 2;
+    const x0 = Math.max(0, Math.floor(left)), x1 = Math.min(W - 1, Math.ceil(left + sw)), y0 = Math.max(0, Math.floor(top)), y1 = Math.min(H - 1, Math.ceil(floorY));
+    const shd = Math.min(1, Math.max(0.18, scnSh(ty) * 1.05) * flick), fl = s.fl || 0, tint = s.tint || [255, 255, 255];
+    for (let x = x0; x <= x1; x++) {
+      if (ty >= zb[x]) continue;
+      let ix = ((x - left) / sw * img.w) | 0; if (ix < 0 || ix >= img.w) continue; if (s.flip) ix = img.w - 1 - ix;
+      for (let y = y0; y <= y1; y++) {
+        const iy = ((y - top) / sh * img.h) | 0; if (iy < 0 || iy >= img.h) continue;
+        const c = img.px[iy * img.w + ix]; if (!c) continue;
+        if (s.a < 1 && SCN_BAYER[(x & 3) + ((y & 3) << 2)] >= s.a * 16) continue;
+        let r = c & 255, g = (c >> 8) & 255, b = (c >> 16) & 255;
+        r = fr + (r - fr) * shd; g = fg + (g - fg) * shd; b = fb + (b - fb) * shd;
+        if (fl > 0) { r += (tint[0] - r) * fl; g += (tint[1] - g) * fl; b += (tint[2] - b) * fl; }
+        buf[y * W + x] = 0xff000000 | (b << 16) | (g << 8) | r;
+      }
+    }
+  }
+  // ประกายของที่เก็บได้
+  for (const s of S.spr) if (s.glint && s.a > 0.3) { const k = Math.floor(S.now / 90); for (let i = 0; i < 6; i++) { const ang = scnRng(k + i, 5) * 6.28 + i, rr = 4 + scnRng(i, k) * 9, gx = ((W / 2) + Math.cos(ang) * rr * 1.4 + (s.gx || 0)) | 0, gy = ((H >> 1) + 12 + Math.sin(ang) * rr * 0.8) | 0; if (gx >= 0 && gx < W && gy >= 0 && gy < H) buf[gy * W + gx] = 0xff66ecff; } }
+  scnHands();
+  S.ctx.putImageData(S.id, 0, 0);
+}
+const SCN_BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+function scnBlit(img, ox, oy) {
+  const { w, h, px } = img, W = SCN_W, H = SCN_H, buf = SCN.buf; ox |= 0; oy |= 0;
+  for (let y = 0; y < h; y++) { const yy = oy + y; if (yy < 0 || yy >= H) continue; for (let x = 0; x < w; x++) { const xx = ox + x; if (xx < 0 || xx >= W) continue; const c = px[y * w + x]; if (c) buf[yy * W + xx] = c; } }
+}
+function scnHands() {
+  const S = SCN, A = S.A, h = S.hands, t = S.now, bx = Math.sin(S.bob) * 3 * S.bobAmp, by = Math.abs(Math.cos(S.bob)) * 3 * S.bobAmp, ix = Math.sin(t / 900) * 1.2, iy = Math.sin(t / 700) * 1.6;
+  const reach = h.reach, pu = h.punch, base = SCN_H - 31;
+  const lx = 20 + bx + ix + 10 * reach, ly = base + by + iy - 10 * reach;
+  let rx = 106 + bx + ix - 10 * reach, ry = base + by + iy - 10 * reach;
+  rx += (-30) * pu; ry += -26 * pu;
+  const wk = S.wkind;
+  if (wk === "gun") {
+    scnBlit(A.fL, lx, ly);
+    scnBlit(A.w.gun, 80 - 24 + 22 + bx * 0.6 - 14 * pu, SCN_H - 56 + by + iy - 16 * pu);
+    return;
+  }
+  if (wk) { const wi = A.w[wk]; scnBlit(wi, rx + 12 - (wi.w >> 2), ry - wi.h + 18 - 6 * pu); }
+  scnBlit(A.fL, lx, ly); scnBlit(A.fR, rx, ry);
+}
+
+// ---------- ผลการค้น → อนิเมชัน (timeline) ----------
+function scnTl(at, dur, fn) { SCN.rv.q.push({ at, dur, fn, d: false }); }
+function sceneSay(text, kind) {
+  const S = SCN; if (!S.on || !text) return;
+  S.log.push({ t: text, k: kind || "" }); if (S.log.length > 6) S.log.shift();
+  const lg = $("sc-log"); if (lg) { lg.textContent = ""; S.log.slice(-4).forEach((l, i, a) => { const d = mk("div", "sc-l" + (i === a.length - 1 ? " new" : ""), l.t); lg.append(d); }); }
+  const cap = $("sc-cap"); if (cap) { cap.textContent = text; cap.classList.add("on"); clearTimeout(S.capT); S.capT = setTimeout(() => cap.classList.remove("on"), 2600); }
+}
+function scnFlash(color, alpha, ms) { const f = document.querySelector("#sc-root .sc-flash"); if (!f || !f.animate) return; try { f.style.background = color; f.animate([{ opacity: scnReduce() ? alpha * 0.4 : alpha }, { opacity: 0 }], { duration: ms, easing: "ease-out" }); } catch { /* ข้าม */ } }
+function scnShake(a, ms) { if (scnReduce()) return; const v = document.querySelector("#sc-root .sc-view"); if (!v || !v.animate) return; try { v.animate([{ transform: "translate(0,0)" }, { transform: `translate(${a}px,${-a}px)` }, { transform: `translate(${-a}px,${a / 2}px)` }, { transform: `translate(${a / 2}px,${a / 2}px)` }, { transform: "translate(0,0)" }], { duration: ms }); } catch { /* ข้าม */ } }
+function scnSnd(kind) {
+  if (!SFX.on) return;
+  try {
+    SFX.ac = SFX.ac || new (window.AudioContext || window.webkitAudioContext)(); SFX.ac.resume?.();
+    if (kind === "step") tone(70, 0, 0.07, "triangle", 0.06);
+    else if (kind === "find") { tone(660, 0, 0.08, "square", 0.04); tone(880, 0.09, 0.1, "square", 0.04); }
+    else if (kind === "punch") tone(110, 0, 0.1, "sawtooth", 0.07);
+    else if (kind === "growl") { tone(95, 0, 0.3, "sawtooth", 0.05); tone(80, 0.1, 0.3, "sawtooth", 0.04); }
+  } catch { /* ถูกบล็อกจนกว่าจะแตะหน้าจอ */ }
+}
+function scnFace(kind, ms) { SCN.faceKind = kind; SCN.faceUntil = SCN.now + ms; }
+function scnSpawn(o) { const s = Object.assign({ a: 1, h: 0.8, fl: 0, sq: 1 }, o); SCN.spr.push(s); return s; }
+function scnDrop(s) { const i = SCN.spr.indexOf(s); if (i >= 0) SCN.spr.splice(i, 1); }
+
+function scnReveal(o) {
+  const S = SCN, A = S.A, k = o.k, y0 = S.cam.y, cx = S.cam.x;
+  S.pending = null; S.rv = { k, t0: S.now, q: [] };
+  if (k === "item") {
+    const it = ITEMS[o.id] || { icon: "📦", name: o.id }, cr = scnSpawn({ img: A.crate, x: cx + (Math.random() - 0.5) * 0.5, y: y0 + 2.6, h: 0.3, a: 0, glint: true });
+    scnTl(0, 220, (p) => { cr.a = p; });
+    scnTl(120, 620, (p) => { S.cam.y = y0 + 1.7 * scnEase(p); S.bobAmp = 0.8; });
+    scnTl(740, 0, () => { scnFlash("#ffd54a", 0.45, 260); scnSnd("find"); scnFace("grin", 1400); S.hands.reach = 1; scnDrop(cr); sceneSay(`เจอ ${it.icon} ${it.name}`, "info"); });
+    scnTl(740, 420, (p) => { S.hands.reach = 1 - p; });
+  } else if (k === "zombie" || k === "friend") {
+    const side = Math.random() < 0.5 ? -1 : 1, z = scnSpawn({ img: A.z[0], x: cx + side * 0.25, y: y0 + 4.4, h: 0.84, a: 0, frames: true });
+    if (k === "friend") {
+      scnTl(0, 1900, (p) => { z.a = Math.min(1, p * 5, (1 - p) * 5); z.y = y0 + 2.6; z.x = cx + side * 1.1 - side * 2.2 * p; z.flip = side > 0; });
+      scnTl(900, 0, () => { sceneSay(o.text, "info"); });
+      scnTl(1900, 0, () => { scnDrop(z); });
+    } else {
+      scnTl(0, 260, (p) => { z.a = p; });
+      scnTl(0, 980, (p) => { z.y = y0 + 4.4 - 3.2 * scnEase(p); z.x = cx + side * 0.25 * (1 - p) + Math.sin(p * 11) * 0.1; });
+      scnTl(380, 0, () => { scnSnd("growl"); });
+      const t1 = 1000;
+      if (o.won) {
+        scnTl(t1, 300, (p) => { S.hands.punch = Math.sin(p * Math.PI); });
+        scnTl(t1 + 150, 0, () => { z.fl = 1; scnSnd("punch"); scnShake(4, 220); sceneSay(o.text, "combat"); });
+        scnTl(t1 + 150, 220, (p) => { z.fl = 1 - p; });
+        scnTl(t1 + 380, 520, (p) => { z.sq = 1 - 0.88 * scnEase(p); z.a = 1 - p; z.y = y0 + 1.25 + 0.15 * p; });
+        let lc = null;
+        scnTl(t1 + 420, 0, () => { scnFace("grin", 1200); if (o.loot) lc = scnSpawn({ img: A.crate, x: z.x, y: y0 + 1.3, h: 0.22, glint: true }); });
+        scnTl(t1 + 900, 0, () => { scnDrop(z); });
+        scnTl(t1 + 1100, 420, (p) => { if (lc) { lc.a = 1 - p; if (p >= 1) scnDrop(lc); } });
+      } else if (o.dmg > 0) {
+        scnTl(t1, 170, (p) => { z.y = y0 + 1.25 - 0.6 * p; z.x += (cx - z.x) * 0.3; });
+        scnTl(t1 + 170, 0, () => { scnFlash("#d8201a", 0.6, 380); scnShake(o.dmg >= 20 ? 8 : 5, 320); scnFace(o.hp <= 0 ? "dead" : "ouch", 1500); sceneSay(o.text, "combat"); });
+        scnTl(t1 + 700, 520, (p) => { z.y = y0 + 0.65 + 2.8 * p; z.a = 1 - p; });
+        scnTl(t1 + 1220, 0, () => { scnDrop(z); });
+      } else {
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        scnTl(t1, 520, (p) => { z.x = cx + dir * 1.8 * scnEase(p); z.y = y0 + 1.25 - 0.7 * p; z.a = p > 0.65 ? 1 - (p - 0.65) / 0.35 : 1; });
+        scnTl(t1 + 120, 0, () => { sceneSay(o.text, "combat"); });
+        scnTl(t1 + 560, 0, () => { scnDrop(z); });
+      }
+    }
+  } else if (k === "none") {
+    scnTl(0, 0, () => { S.bobAmp = 0; sceneSay(o.text || scnPick(["ฝุ่นคลุ้ง… ไม่เจออะไรเลย", "ค้นไปทั่วแต่มีแต่ซาก", "เงียบสนิท ไม่มีอะไรให้เก็บ"]), "info"); });
+    scnTl(600, 0, () => {});
+  } else {
+    scnTl(0, 0, () => { if (o.text) sceneSay(o.text, "info"); });
+    scnTl(500, 0, () => {});
+  }
+}
+const scnPick = (a) => a[Math.floor(Math.random() * a.length)];
+
+// ---------- ลูปหลัก ----------
+function scnStep(dt) {
+  const S = SCN;
+  S.bobAmp += ((S.walking ? 1 : 0) - S.bobAmp) * Math.min(1, dt * (S.walking ? 10 : 6));
+  const rm = scnReduce();
+  if (S.walking) {
+    const p = Math.min(1, (S.now - S.walkT0) / S.walkDur);
+    S.cam.y = S.walkFrom + 1.5 * scnEase(p);
+    const prev = S.bob; S.bob += dt * 11;
+    if (Math.floor(prev / Math.PI) !== Math.floor(S.bob / Math.PI)) scnSnd("step");
+    if (p >= 1) {
+      S.walking = false; S.walkDone = true;
+      const w = S.waiters.splice(0); w.forEach((f) => f());
+      if (S.pending) scnReveal(S.pending);
+    }
+  }
+  S.bobY = rm ? 0 : Math.sin(S.bob) * 2.2 * S.bobAmp;
+  const rv = S.rv;
+  if (rv) {
+    const t = S.now - rv.t0; let all = true;
+    for (const it of rv.q) { if (it.d) continue; if (t >= it.at) { const p = it.dur ? Math.min(1, (t - it.at) / it.dur) : 1; it.fn(p); if (p >= 1) it.d = true; else all = false; } else all = false; }
+    if (all) { S.rv = null; sceneIdle(); }
+  }
+  for (const s of S.spr) if (s.frames) s.img = S.A.z[(Math.floor(S.now / 170) & 1)];
+}
+function sceneIdle() { SCN.hands.punch = 0; if (!SCN.walking) SCN.bobAmp = 0; scnHud(true); }
+function scnLoop(ts) {
+  const S = SCN; if (!S.on) return;
+  S.raf = requestAnimationFrame(scnLoop);
+  if (ts - S.last < 33) return;
+  const dt = Math.min(0.1, (ts - S.last) / 1000); S.last = ts; S.now = ts;
+  try { scnStep(dt); scnDraw(); } catch (e) { console.warn("scene", e); sceneClose(); return; }
+  if (ts - S.hudT > 250) { S.hudT = ts; scnHud(); }
+}
+
+// ---------- HUD / ปุ่ม ----------
+function scnHud(force) {
+  const p = state.profile; if (!p) return;
+  const set = (id, v) => { const e = $(id); if (e && e.textContent !== String(v)) e.textContent = v; };
+  set("sc-hp", Math.max(0, Math.round(p.hp)) + "/" + maxHp()); set("sc-st", Math.floor(curStamina()) + "/" + maxStamina());
+  set("sc-fw", `🍖 ${Math.floor(curFood())}  💧 ${Math.floor(curWater())}`);
+  const w = $("sc-walk"); if (w) { const lab = `🦶 เดินหน้า (−${searchCost()} พลังงาน)`; if (w.textContent !== lab) w.textContent = lab; w.disabled = !!(state.busy || SCN.walking || SCN.rv || state.boss || state.hb); }
+  const ratio = p.hp / maxHp(); let kind = SCN.now < SCN.faceUntil ? SCN.faceKind : p.hp <= 0 ? "dead" : ratio < 0.33 ? "bad" : ratio < 0.66 ? "hurt" : "ok";
+  if (kind !== SCN.faceShown || force) { SCN.faceShown = kind; const cv = $("sc-face"); if (cv) { const im = SCN.A.face[kind], id = cv.getContext("2d").createImageData(16, 16); new Uint32Array(id.data.buffer).set(im.px); cv.getContext("2d").putImageData(id, 0, 0); } }
+}
+function sceneWanted() {
+  return !!(state.deep && T("sc_on", 1) === 1 && !fxGet("sc_off", 0) && state.profile && state.profile.hp > 0 && !state.boss && !state.hb && state.zone && !["jail", "casino"].includes(state.zone) && typeof HTMLCanvasElement !== "undefined" && !SCN.broken);
+}
+function scnBuild() {
+  if ($("sc-root")) return;
+  const root = mk("div", "sc-root hidden"); root.id = "sc-root"; root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "ค้นลึก");
+  const box = mk("div", "sc-box"), top = mk("div", "sc-top"), ttl = mk("b", "", ""); ttl.id = "sc-zone";
+  const x = btn("✕ ออก", () => sceneClose(), "btn ghost mini"); x.id = "sc-x";
+  top.append(ttl, x);
+  const view = mk("div", "sc-view"), cv = mk("canvas"); cv.id = "sc-cv"; cv.width = SCN_W; cv.height = SCN_H;
+  view.append(cv, mk("div", "sc-flash"), (() => { const c = mk("div", "sc-cap"); c.id = "sc-cap"; c.setAttribute("aria-live", "polite"); return c; })());
+  const hud = mk("div", "sc-hud");
+  const cell = (lab, id) => { const c = mk("div", "sc-cell"), b = mk("b", "", "–"); b.id = id; c.append(mk("small", "", lab), b); return c; };
+  const face = mk("canvas"); face.id = "sc-face"; face.width = 16; face.height = 16;
+  const mid = mk("div", "sc-mid"), fw = mk("small", "", ""); fw.id = "sc-fw"; mid.append(face, fw);
+  hud.append(cell("HP", "sc-hp"), mid, cell("พลังงาน", "sc-st"));
+  const walk = btn("🦶 เดินหน้า", () => sceneWalk(), "btn primary wide"); walk.id = "sc-walk";
+  const lg = mk("div", "sc-log"); lg.id = "sc-log";
+  box.append(top, view, hud, walk, lg); root.append(box); document.body.append(root);
+  root.addEventListener("keydown", (e) => { if (e.key === "Escape") sceneClose(); else if ((e.key === " " || e.key === "ArrowUp" || e.key === "w") && e.target === root) { e.preventDefault(); sceneWalk(); } });
+  root.tabIndex = -1;
+}
+function sceneOpen() {
+  const S = SCN; if (S.on) return;
+  try {
+    scnBuild();
+    const z = state.zone, zombie = state.profile?.faction === "zombie";
+    S.zone = z; S.faction = state.profile?.faction; S.T = scnTexs(z); S.A = scnAssets(zombie); S.seed = (Date.now() & 0xffff) + 1;
+    const cv = $("sc-cv"); S.ctx = cv.getContext("2d"); S.id = S.ctx.createImageData(SCN_W, SCN_H); S.buf = new Uint32Array(S.id.data.buffer); S.zb = new Float32Array(SCN_W);
+    S.spr = []; S.rv = null; S.pending = null; S.walking = false; S.waiters = []; S.log = []; S.cam = { x: 1.5, y: 0.5 }; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.hands = { punch: 0, reach: 0 }; S.faceUntil = 0; S.faceShown = ""; S.badT = 0;
+    S.endY = 14;
+  } catch (e) { console.warn("scene build", e); SCN.broken = true; return scavengeClick(); }
+  S.on = true; S.now = performance.now(); S.last = 0;
+  $("sc-zone").textContent = `${ZONES[S.zone]?.icon || "🔦"} ค้นลึก — ${ZONES[S.zone]?.name || ""}`;
+  $("sc-log").textContent = "";
+  $("sc-root").classList.remove("hidden"); try { $("sc-root").focus({ preventScroll: true }); } catch { /* ข้าม */ }
+  scnWeaponSync(); scnHud(true);
+  sceneSay(S.faction === "zombie" ? "ความมืดส่งกลิ่นเหยื่อมาตามลม… กดเดินหน้าเพื่อล่า" : "ทางเดินมืดทอดยาวไปข้างหน้า… กดเดินหน้าเพื่อค้นต่อ", "info");
+  S.watch = setInterval(() => {   // ล้ม/ถูกแบน/ย้ายโซน/ปิดค้นลึก → ปิดฉาก (รอให้อนิเมชันผลที่กำลังเล่นจบก่อน ไม่เกิน 4.5 วินาที)
+    const p = state.profile, bad = !p || p.hp <= 0 || p.banned || state.zone !== S.zone || !state.deep;
+    if (bad) { S.badT = S.badT || Date.now(); if ((!S.rv && !S.walking) || Date.now() - S.badT > 4500) sceneClose(); }
+    else { S.badT = 0; scnWeaponSync(); }
+  }, 400);
+  S.raf = requestAnimationFrame(scnLoop);
+}
+function scnWeaponSync() { const w = SCN.faction === "zombie" ? null : equippedWeapon(); SCN.wkind = w ? (scnWeaponKind(w.it.id === "custom" ? "" : w.it.id) || "club") : null; }
+function sceneClose() {
+  const S = SCN; if (!S.on) return;
+  S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearTimeout(S.capT);
+  S.waiters.splice(0).forEach((f) => f()); S.rv = null; S.pending = null; S.walking = false; S.spr = [];
+  const r = $("sc-root"); if (r) r.classList.add("hidden");
+}
+async function sceneWalk() {
+  const S = SCN; if (!S.on || S.walking || S.rv || state.busy) return;
+  S.gotOut = false; S.walkDone = false;
+  await scavengeClick();
+  if (!S.on) return;
+  if (S.walking && !S.gotOut) S.pending = { k: "none", text: "…" };   // ไม่มีผลส่งมา (เกิดข้อผิดพลาด) → จบก้าวเงียบ ๆ
+  scnHud(true);
+}
+// เรียกจาก scavengeOnce ตอนผ่านเงื่อนไขทั้งหมดแล้ว (หักพลังงานแน่นอน) → เริ่มก้าวเดิน
+function sceneBegin() {
+  const S = SCN; if (!S.on || S.walking) return;
+  S.walking = true; S.walkT0 = S.now || performance.now(); S.walkDur = scnReduce() ? 600 : 950; S.walkFrom = S.cam.y; S.pending = null; S.gotOut = false;
+}
+function sceneOutcome(o) {
+  const S = SCN; if (!S.on) return;
+  S.gotOut = true; S.pending = o;
+  if (!S.walking && !S.rv) scnReveal(o);   // ก้าวเดินจบไปแล้ว → เล่นผลเลย (ถ้ายังเดินอยู่ scnStep จะเล่นตอนจบก้าว)
+}
+function sceneHold() {
+  const S = SCN; if (!S.on || !S.walking) return Promise.resolve();
+  return new Promise((res) => { S.waiters.push(res); setTimeout(res, 2500); });
+}
+function sceneBossCue() {
+  const S = SCN; if (!S.on) return Promise.resolve();
+  const z = scnSpawn({ img: S.A.z[0], x: S.cam.x, y: S.cam.y + 3.2, h: 1.1, a: 1, frames: true });
+  scnFlash("#d8201a", 0.5, 500); scnSnd("growl"); sceneSay("‼️ บางอย่างตัวใหญ่พุ่งเข้ามา!", "combat");
+  const t0 = performance.now(), y0 = S.cam.y;
+  return new Promise((res) => { const iv = setInterval(() => { const p = Math.min(1, (performance.now() - t0) / 520); z.y = y0 + 3.2 - 2.1 * scnEase(p); if (p >= 1) { clearInterval(iv); scnDrop(z); res(); } }, 30); });
+}
+function sceneBtnInit() {
+  if ($("btn-sc") || !$("btn-deep")) return;
+  const b = btn("🕹️", () => { fxSet("sc_off", fxGet("sc_off", 0) ? 0 : 1); sceneBtnSync(); toast(fxGet("sc_off", 0) ? "ปิดฉากค้นลึกแบบ Doom ในเครื่องนี้แล้ว" : "เปิดฉากค้นลึกแบบ Doom แล้ว"); }, "btn ghost mini");
+  b.id = "btn-sc"; $("btn-deep").after(b); sceneBtnSync();
+}
+function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("sc_on", 1) !== 1; const on = !fxGet("sc_off", 0); b.classList.toggle("active", on); b.style.opacity = on ? "1" : "0.5"; b.title = on ? "ฉากค้นลึกแบบ Doom: เปิด (กดเพื่อปิดเฉพาะเครื่องนี้)" : "ฉากค้นลึกแบบ Doom: ปิด (กดเพื่อเปิด)"; }
+// ---- /ฉากค้นลึก
 
 if (HAS_DOM) initNpcUi();
