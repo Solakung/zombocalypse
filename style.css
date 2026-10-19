@@ -990,3 +990,50 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 #sc-walk { min-height: 52px; font-size: 17px; }
 #sc-walk:disabled { opacity: .55; }
 @media (prefers-reduced-motion: reduce) { .sc-cap { transition: none; } }
+
+/* ===== 53-55) เมืองค่ายแบบ Doom + ตัววาดอวาตาร์พิกเซล (script.js หัวข้อ 53-55) ===== */
+.tw-root { position: fixed; inset: 0; z-index: 36; background: #0a0706; display: flex; justify-content: center; align-items: flex-start; overflow-y: auto; outline: none; -webkit-user-select: none; user-select: none; }
+.tw-root.hidden { display: none; }
+.tw-box { width: 100%; max-width: 440px; padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); display: grid; gap: 8px; }
+.tw-top { display: flex; align-items: center; gap: 8px; }
+.tw-me { width: 34px; height: 34px; image-rendering: pixelated; border: 2px solid #17130f; border-radius: 3px; background: #26303a; flex: none; }
+.tw-tt { flex: 1; min-width: 0; display: grid; line-height: 1.2; }
+.tw-ttl { font: 700 16px Kanit, sans-serif; color: #f1e6c8; }
+.tw-view { position: relative; width: min(100%, calc(46vh * 160 / 136)); aspect-ratio: 160 / 136; margin: 0 auto; border: 2px solid #17130f; border-radius: 4px; overflow: hidden; background: #000; touch-action: none; cursor: grab; }
+#tw-cv { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.tw-ov { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.tw-nm { position: absolute; transform: translate(-50%, -100%); display: grid; justify-items: center; gap: 2px; white-space: nowrap; }
+.tw-nm b { font: 600 11px/1.2 Kanit, sans-serif; padding: 0 5px; border-radius: 3px; background: rgba(0,0,0,.6); color: #e8e2d0; text-shadow: 0 1px 0 #000; }
+.tw-nm b.npc { color: #ffe14a; } .tw-nm b.zombie { color: #9fd070; } .tw-nm b.human { color: #8fd0ff; }
+.tw-bb { max-width: 150px; white-space: normal; text-align: center; font: 500 11px/1.25 Kanit, sans-serif; background: #f5efe0; color: #1c1710; padding: 2px 6px; border-radius: 6px; border: 1px solid #1c1710; }
+.tw-mm { position: absolute; right: 4px; top: 4px; width: 72px; height: 60px; image-rendering: pixelated; border: 1px solid rgba(255,255,255,.35); border-radius: 2px; opacity: .85; pointer-events: none; }
+.tw-prompt { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); max-width: 92%; padding: 3px 10px; border-radius: 12px; background: rgba(0,0,0,.72); border: 1px solid #ffe14a; color: #fff6c8; font: 600 13px/1.3 Kanit, sans-serif; white-space: nowrap; pointer-events: none; }
+.tw-prompt.hidden { display: none; }
+.tw-pad { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.tw-dp { display: grid; grid-template-columns: repeat(3, 56px); grid-template-rows: repeat(2, 48px); gap: 6px; touch-action: none; }
+.tw-dp button { min-height: 0; padding: 0; font-size: 20px; touch-action: none; }
+.tw-dp .dl { grid-area: 2 / 1; } .tw-dp .df { grid-area: 1 / 2; } .tw-dp .dr { grid-area: 2 / 3; } .tw-dp .db { grid-area: 2 / 2; }
+.tw-dp button.on { background: #7a4a2a; border-color: #f2d230; }
+.tw-act { flex: 1; max-width: 190px; min-height: 64px; font-size: 18px; opacity: .6; }
+.tw-act.ready { opacity: 1; box-shadow: 0 0 0 2px #ffe14a; }
+.tw-log { display: grid; gap: 1px; min-height: 4.6em; font-size: 13px; line-height: 1.4; color: #d9d1b8; }
+.tw-ln b.npc { color: #ffe14a; } .tw-ln b.zombie { color: #9fd070; } .tw-ln b.human { color: #8fd0ff; }
+.tw-chat { display: flex; gap: 6px; }
+.tw-chat input { flex: 1; min-width: 0; font-size: 16px; }
+/* ตัววาดอวาตาร์ */
+.pxa-box { max-width: 420px; display: grid; gap: 8px; }
+.pxa-hint { margin: 0; font-size: 13px; }
+.pxa-row { display: flex; gap: 12px; align-items: flex-start; }
+.pxa-left { flex: none; }
+.pxa-cv { width: min(200px, 52vw); aspect-ratio: 2 / 3; height: auto; image-rendering: pixelated; touch-action: none; border: 2px solid #17130f; border-radius: 3px; cursor: crosshair; display: block; }
+.pxa-right { display: grid; gap: 6px; justify-items: start; }
+.pxa-pv { display: flex; gap: 10px; align-items: flex-end; padding: 6px; background: repeating-conic-gradient(#2b3138 0 25%, #232930 0 50%) 0 0 / 8px 8px; border-radius: 4px; }
+.pxa-tools { display: flex; flex-wrap: wrap; gap: 5px; }
+.pxa-pal { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; }
+.pxa-sw { aspect-ratio: 1; min-height: 30px; border: 2px solid #17130f; border-radius: 4px; cursor: pointer; padding: 0; }
+.pxa-sw0 { background: repeating-conic-gradient(#555 0 25%, #888 0 50%) 0 0 / 8px 8px; }
+.pxa-sw.on { outline: 3px solid #f2d230; outline-offset: 1px; }
+.pxa-act { display: flex; gap: 8px; align-items: center; }
+.pxa-act .primary { flex: 1; min-height: 44px; }
+.pxa-mini canvas { border-radius: 4px; background: #26303a; display: block; }
+@media (prefers-reduced-motion: reduce) { .tw-view { cursor: default; } }

@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1438";
+const APP_VERSION = "2026-10-19.1545";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1412,6 +1412,7 @@ function logLine(text, cls = "info") {
 }
 
 function addChat(key, m) {
+  try { townChat(m); } catch { /* ข้าม */ }
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   let el;
   const isMe = m.uid === state.uid;
@@ -6573,6 +6574,7 @@ function npcOpen(id) {
 
 /* ---- การ์ดคนในค่าย (ใต้รายการโซน, เฉพาะอยู่ Safe Zone) ---- */
 function renderNpcBox() {
+  try { twSync(); } catch { /* ข้าม */ }
   const box = $("npc-box"); if (!box) return;
   const show = state.zone === "safe" && !!state.profile && state.profile.hp > 0;
   const ids = hcFound() ? [...NPC_IDS, HC_ID] : NPC_IDS;
@@ -10824,6 +10826,7 @@ function cavPaint(el, uid, d, fac) {
   const icon = d && d.avic ? d.avic : (FACTION[fac]?.icon || "🧑");
   el.textContent = icon; el.style.background = d && d.avic ? avBg(uid) : "rgba(255,255,255,.08)"; el.style.borderColor = d ? cavFrColor(d.fr) : "transparent";
   if (d && d.upv) profImgUrl(uid, d.upv).then((u) => { const im = document.createElement("img"); im.src = u; im.alt = ""; el.textContent = ""; el.append(im); }).catch(() => { /* ใช้อวาตาร์เกมแทน */ });
+  if (!(d && d.upv)) { try { pxaCavHook(el, uid); } catch { /* ข้าม */ } }   // 🎨 มีอวาตาร์พิกเซลที่วาดเอง → ใช้หน้าพิกเซลแทนอีโมจิ
 }
 function chatAvEl(uid, fac) {
   const el = mk("span", "cav"); el.setAttribute("aria-hidden", "true"); cavPaint(el, uid, null, fac); el.dataset.fac = fac || "";
@@ -10863,6 +10866,7 @@ function profRender() {
   const me = state.profile || {}, avs = Object.fromEntries(D.avatars.map((x) => [x.id, x.ic]));
   const card = { name: me.username, fac: me.faction, av: D.cur.av, avic: avs[D.cur.av], fr: D.cur.fr, bn: D.cur.bn, tin: (D.titles.find((x) => x.id === D.cur.ti) || {}).n, up: D.up, uu: D.up ? state.profUU !== false : false, hid: D.hid };
   body.append(profCardEl(card, state.uid));
+  try { pxaProfBtn(body); } catch { /* ข้าม */ }
   const sec = (title, list, key, kind) => {
     const c = mk("div", "world-row"); c.append(mk("b", "", title)); const g = mk("div"); g.style.cssText = "display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:6px;margin-top:8px";
     list.forEach((it) => {
@@ -11965,6 +11969,8 @@ function tuneListen() {
     { const tr = T("travel_roads", 0); if (tr !== state.roadsEn) { const first = state.roadsEn === undefined; state.roadsEn = tr; if (!first) { try { walkAbort(); renderTravelState(); } catch { /* ข้าม */ } } } }
     { const me = T("map_energy", 0); if (me !== state.zmapEn) { const first = state.zmapEn === undefined; state.zmapEn = me; if (!first || me) { try { buildZoneList(); } catch { /* ข้าม */ } } } }   // เปิด/ปิดป้ายพลังงานต่อถนนบนแผนที่ทันที
     try { sceneBtnSync(); } catch { /* ข้าม: ซ่อน/แสดงปุ่ม 🕹️ ตาม sc_on (หัวข้อ 52) */ }
+    try { twSync(); } catch { /* ข้าม: ปุ่มเดินในค่ายตาม town_on (หัวข้อ 54) */ }
+    try { pxaTuneSync(); } catch { /* ข้าม: px_on (หัวข้อ 53) */ }
     try { worldRefresh(); const am = $("admin-modal"); if (am && !am.classList.contains("hidden") && state.admTab === "tune" && !(document.activeElement && ["INPUT", "SELECT"].includes(document.activeElement.tagName))) admTab("tune"); } catch { /* ข้าม */ }
   }, (er) => console.warn("tune", er?.code || er));
 }
@@ -12058,6 +12064,8 @@ function tuneDefs() {
   rows.push(["mg_on", "มินิเกมก่อนค้นลึก (1 = เปิด, 0 = ปิด/ซ่อนปุ่ม 🎮)", 1, 0, 1, "🎮 มินิเกมค้นลึก"]);
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["sc_on", "ฉากค้นลึกแบบ Doom (1 = เปิด, 0 = ปิด → ค้นลึกแบบเดิม • ฝั่งเกมล้วน ไม่ต้อง deploy อะไร)", 1, 0, 1, "🕹️ ฉากค้นลึก"]);
+  rows.push(["town_on", "เดินในค่ายแบบ Doom ที่ Safe Zone (1 = เปิด, 0 = ปิด • ฝั่งเกมล้วน)", 1, 0, 1, "🏘️ เมืองค่าย"]);
+  rows.push(["px_on", "อวาตาร์พิกเซลที่ผู้เล่นวาดเอง (1 = เปิด, 0 = ปิด • ต้อง deploy rules pxav ก่อนถึงจะบันทึกได้)", 1, 0, 1, "🎨 อวาตาร์พิกเซล"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
     rows.push(["ds_on", "สรุปจบวัน (1 = เปิด, 0 = ปิด)", 1, 0, 1, g]);
@@ -12742,5 +12750,636 @@ function sceneBtnInit() {
 }
 function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("sc_on", 1) !== 1; const on = !fxGet("sc_off", 0); b.classList.toggle("active", on); b.style.opacity = on ? "1" : "0.5"; b.title = on ? "ฉากค้นลึกแบบ Doom: เปิด (กดเพื่อปิดเฉพาะเครื่องนี้)" : "ฉากค้นลึกแบบ Doom: ปิด (กดเพื่อเปิด)"; }
 // ---- /ฉากค้นลึก
+
+
+
+
+
+
+
+// ---- 🏘️ เมืองค่ายแบบ Doom + อวาตาร์พิกเซล
+/* =========================================================
+   53) 🎨 อวาตาร์พิกเซล (วาดเอง 16×24 • จานสี 16 สี) — ใช้ในเมืองค่ายแบบ Doom (หัวข้อ 54) และวงกลมรูปในแชท
+   - เก็บที่ pxav/{uid} = สตริงฐาน 16 ยาว 384 ตัว (1 ตัว = 1 ช่อง, 0 = โปร่งใส) • อ่านได้ทุกคนที่ล็อกอิน • เขียนได้เฉพาะเจ้าของ (GM/owner ลบของคนอื่นได้) — rules อยู่ในไฟล์ database_rules.json
+   - ยังไม่ deploy rules: ตัววาดยังเปิดได้ แต่บันทึกไม่ได้ (แจ้งผู้เล่น) และไม่มีอะไรพัง • ปิดทั้งระบบด้วย tune px_on = 0
+   - ใครไม่ได้วาด: ได้ตัวละครตั้งต้นสุ่มจาก uid (คงที่) ตามฝ่าย • NPC (เคน/มิรา/ธารา) ใช้รูปแบบเดียวกันวาดด้วยโค้ด
+   ========================================================= */
+const PXA_W = 16, PXA_H = 24, PXA_N = PXA_W * PXA_H, PXA_RE = /^[0-9a-f]{384}$/;
+const PXA_PAL = [null, "#140e0a", "#f4f0e8", "#b4b8c0", "#5a5f6b", "#7a4a2a", "#d8281c", "#f08a1c", "#f2d230", "#3fae3a", "#1f6b34", "#2f7be0", "#1e2f6e", "#8a3fb0", "#f2c9a0", "#c98c5e"];
+const PXA_NAMES = ["ใส", "ดำ", "ขาว", "เทาอ่อน", "เทาเข้ม", "น้ำตาล", "แดง", "ส้ม", "เหลือง", "เขียว", "เขียวเข้ม", "ฟ้า", "กรมท่า", "ม่วง", "ผิวอ่อน", "ผิวเข้ม"];
+const pxa = { cache: new Map(), TTL: 600000, pk: null };
+const pxaOn = () => T("px_on", 1) === 1;
+const pxaEnc = (g) => Array.from(g, (v) => v.toString(16)).join("");
+const pxaDec = (s) => { const g = new Uint8Array(PXA_N); if (typeof s === "string" && PXA_RE.test(s)) for (let i = 0; i < PXA_N; i++) g[i] = parseInt(s[i], 16); return g; };
+const pxaFilled = (g) => { let n = 0; for (let i = 0; i < PXA_N; i++) if (g[i]) n++; return n; };
+const pxaHash = (s) => { let h = 2166136261; for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+function pxaPack() { return pxa.pk || (pxa.pk = PXA_PAL.map((c) => (c ? scnHexC(c) : 0))); }
+function pxaImg(src) {   // สตริง/กริด → ภาพสำหรับสไปรต์ในเมือง {w,h,px}
+  const g = typeof src === "string" ? pxaDec(src) : src, pk = pxaPack(), px = new Uint32Array(PXA_N);
+  for (let i = 0; i < PXA_N; i++) px[i] = pk[g[i]] || 0;
+  return { w: PXA_W, h: PXA_H, px };
+}
+function pxaCanvas(src, scale, face) {   // face = true → ครอปแค่หัว-ไหล่ 16×16 (ใช้ในวงกลมแชท)
+  const g = typeof src === "string" ? pxaDec(src) : src, pk = pxaPack(), y0 = face ? 1 : 0, h = face ? 16 : PXA_H;
+  const c = document.createElement("canvas"); c.width = PXA_W; c.height = h;
+  const ctx = c.getContext("2d"), id = ctx.createImageData(PXA_W, h), u = new Uint32Array(id.data.buffer);
+  for (let y = 0; y < h; y++) for (let x = 0; x < PXA_W; x++) u[y * PXA_W + x] = pk[g[(y + y0) * PXA_W + x]] || 0;
+  ctx.putImageData(id, 0, 0);
+  c.style.imageRendering = "pixelated"; if (scale) { c.style.width = PXA_W * scale + "px"; c.style.height = h * scale + "px"; }
+  return c;
+}
+// ---------- ตัวละครตั้งต้น/NPC (วาดด้วยโค้ดลงกริดเดียวกับที่ผู้เล่นวาด) ----------
+function pxaOutline(g) {
+  const o = Uint8Array.from(g);
+  for (let y = 0; y < PXA_H; y++) for (let x = 0; x < PXA_W; x++) {
+    if (g[y * PXA_W + x]) continue;
+    const s = (a, b) => a >= 0 && b >= 0 && a < PXA_W && b < PXA_H && g[b * PXA_W + a] !== 0;
+    if (s(x - 1, y) || s(x + 1, y) || s(x, y - 1) || s(x, y + 1)) o[y * PXA_W + x] = 1;
+  }
+  return o;
+}
+function pxaBuild(o) {
+  const g = new Uint8Array(PXA_N), R = (x, y, w, h, c) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const xx = x + i, yy = y + j; if (xx >= 0 && yy >= 0 && xx < PXA_W && yy < PXA_H) g[yy * PXA_W + xx] = c; } }, P = (x, y, c) => R(x, y, 1, 1, c);
+  const { skin = 14, hair = 5, shirt = 11, pants = 12, shoe = 1, mouth = 5 } = o;
+  R(5, 17, 3, 5, pants); R(8, 17, 3, 5, pants); R(8, 18, 1, 4, 1);                    // ขา + รอยแยก
+  R(4, 22, 4, 2, shoe); R(8, 22, 4, 2, shoe);                                           // รองเท้า
+  R(4, 10, 8, 7, shirt); R(3, 11, 1, 5, shirt); R(12, 11, 1, 5, shirt); P(3, 16, skin); P(12, 16, skin);   // ตัว + แขน + มือ
+  if (o.belt) R(4, 16, 8, 1, o.belt);
+  R(7, 9, 2, 1, skin);                                                                  // คอ
+  R(5, 3, 6, 6, skin); R(4, 4, 1, 3, skin); R(11, 4, 1, 3, skin);                      // หน้า
+  R(5, 1, 6, 1, hair); R(4, 2, 8, 2, hair); P(4, 4, hair); P(11, 4, hair); if (!o.shortHair) { P(4, 5, hair); P(11, 5, hair); } // ผม
+  if (o.bald) { R(4, 1, 8, 3, skin); R(5, 1, 6, 1, 0); }
+  P(6, 5, 1); P(9, 5, 1); P(7, 7, mouth); P(8, 7, mouth);                               // ตา ปาก
+  if (o.zombie) { P(6, 5, 6); P(9, 5, 1); P(5, 16, 0); P(9, 16, 0); P(11, 16, 0); P(4, 22, 0); R(7, 7, 2, 1, 6); }
+  if (o.beard) { R(5, 7, 1, 1, o.beard); R(10, 7, 1, 1, o.beard); R(6, 8, 4, 1, o.beard); }
+  if (o.extra) o.extra(R, P);
+  return pxaOutline(g);
+}
+const PXA_SKINS = [14, 15], PXA_HAIRS = [1, 5, 4, 8, 13], PXA_SHIRTS = [6, 11, 9, 13, 7, 3, 12], PXA_PANTS = [12, 4, 5, 1];
+function pxaDefault(uid, fac) {   // ตัวตั้งต้นของผู้เล่นที่ยังไม่วาด — สุ่มคงที่จาก uid
+  const h = pxaHash(uid || "x"), pick = (a, s) => a[(h >>> s) % a.length];
+  if (fac === "zombie") return pxaBuild({ skin: 9, hair: pick([10, 4, 1], 3), shirt: pick([4, 3, 5], 6), pants: 4, zombie: true, mouth: 6, shortHair: true });
+  return pxaBuild({ skin: pick(PXA_SKINS, 0), hair: pick(PXA_HAIRS, 4), shirt: pick(PXA_SHIRTS, 8), pants: pick(PXA_PANTS, 12), belt: 4 });
+}
+const PXA_NPC = {
+  kane: () => pxaBuild({ skin: 15, hair: 4, shirt: 10, pants: 5, shoe: 1, belt: 5, beard: 4, extra: (R, P) => { R(4, 1, 8, 3, 10); R(3, 3, 10, 1, 10); R(5, 1, 3, 1, 9); R(13, 8, 1, 11, 4); P(13, 7, 3); R(13, 12, 1, 2, 5); R(5, 10, 6, 1, 4); } }),
+  mira: () => pxaBuild({ skin: 14, hair: 5, shirt: 2, pants: 12, shoe: 4, extra: (R, P) => { R(6, 0, 4, 1, 5); R(7, 11, 2, 3, 6); R(6, 12, 4, 1, 6); R(4, 15, 8, 2, 2); } }),
+  tara: () => pxaBuild({ skin: 15, hair: 1, shirt: 2, pants: 4, shoe: 1, shortHair: true, extra: (R, P) => { P(5, 5, 11); P(6, 5, 11); P(9, 5, 11); P(10, 5, 11); R(4, 15, 8, 2, 2); R(13, 13, 1, 2, 9); P(13, 12, 3); R(7, 11, 2, 1, 3); } })
+};
+const PXA_TPL = ["ตัวตั้งต้นของคุณ", "ทหาร", "หมอ", "นักวิจัย", "ซอมบี้", "ร่างเปล่า"];
+function pxaTemplate(i, uid, fac) {
+  if (i === 0) return pxaDefault(uid, fac);
+  if (i === 1) return PXA_NPC.kane(); if (i === 2) return PXA_NPC.mira(); if (i === 3) return PXA_NPC.tara();
+  if (i === 4) return pxaBuild({ skin: 9, hair: 10, shirt: 4, pants: 4, zombie: true, mouth: 6, shortHair: true });
+  return pxaBuild({ skin: 14, hair: 0, shirt: 3, pants: 4, bald: true, shirt0: 1 });
+}
+// ---------- อ่าน/เก็บแคช ----------
+function pxaGet(uid) {
+  if (!uid) return Promise.resolve(null);
+  const c = pxa.cache.get(uid), now = Date.now();
+  if (c && (c.p || now - c.t < pxa.TTL)) return c.p || Promise.resolve(c.v);
+  const p = get(ref(db, "pxav/" + uid)).then((s) => { const v = s.val(), ok = typeof v === "string" && PXA_RE.test(v) ? v : null; pxa.cache.set(uid, { t: Date.now(), v: ok }); return ok; })
+    .catch(() => { pxa.cache.set(uid, { t: Date.now() - pxa.TTL + 60000, v: null }); return null; });
+  pxa.cache.set(uid, { t: now, p }); return p;
+}
+function pxaCavHook(el, uid) {   // วงกลมรูปในแชท: ถ้าเจ้าของวาดอวาตาร์ไว้ (และไม่ได้อัปโหลดรูปถ่าย) ให้ใช้หน้าพิกเซล
+  if (!uid || !pxaOn()) return;
+  pxaGet(uid).then((hex) => { if (!hex || !pxaOn() || el.querySelector("img")) return; el.textContent = ""; el.dataset.pxa = uid; el.style.background = "#26303a"; const c = pxaCanvas(hex, 0, true); c.style.cssText += ";width:100%;height:100%;display:block"; el.append(c); }).catch(() => {});
+}
+function pxaTuneSync() {   // แอดมินปิด px_on ระหว่างเล่น (หรือ tune มาช้ากว่าแชท) → คืนวงกลมในแชทเป็นอีโมจิ/รูปเดิม
+  if (pxaOn()) return;
+  document.querySelectorAll(".cav[data-pxa]").forEach((el) => { const u = el.dataset.pxa; delete el.dataset.pxa; el.style.background = ""; try { cavPaint(el, u, CAV.cache.get(u)?.d || null, el.dataset.fac); } catch { el.textContent = FACTION[el.dataset.fac]?.icon || "🧑"; } });
+}
+// ---------- ตัววาด ----------
+const pxe = { g: null, tool: "pen", col: 8, mirror: true, hist: [], tpl: 0, drag: false };
+function pxaEditor() {
+  let m = $("pxa-modal"); if (m) return m;
+  m = mk("div", "modal hidden"); m.id = "pxa-modal"; m.setAttribute("role", "dialog"); m.setAttribute("aria-modal", "true");
+  const bx = mk("div", "modal-box pxa-box"), hd = mk("div", "modal-head");
+  hd.append(mk("h2", "", "🎨 วาดอวาตาร์พิกเซล"), btn("ปิด", () => m.classList.add("hidden"), "btn ghost mini"));
+  const hint = mk("p", "muted pxa-hint", "แตะ/ลากเพื่อวาด • สมมาตรซ้าย-ขวาช่วยให้ตัวสวยเร็ว • ตัวละครนี้จะเดินในค่ายให้ผู้เล่นอื่นเห็น");
+  const row = mk("div", "pxa-row"), left = mk("div", "pxa-left"), right = mk("div", "pxa-right");
+  const cv = mk("canvas", "pxa-cv"); cv.id = "pxa-cv"; cv.width = PXA_W * 14; cv.height = PXA_H * 14; left.append(cv);
+  const pv = mk("div", "pxa-pv"); pv.id = "pxa-pv"; right.append(mk("small", "muted", "ตัวอย่าง"), pv);
+  const tools = mk("div", "pxa-tools");
+  const tb = (id, lab, tip, fn) => { const b = btn(lab, fn, "btn ghost mini"); b.id = id; b.title = tip; tools.append(b); return b; };
+  tb("pxa-t-pen", "✏️ วาด", "ปากกา", () => pxaTool("pen")); tb("pxa-t-fill", "🪣 เท", "เทสีเป็นพื้นที่", () => pxaTool("fill")); tb("pxa-t-pick", "💧 ดูดสี", "ดูดสีจากภาพ", () => pxaTool("pick"));
+  tb("pxa-t-mir", "↔️ สมมาตร", "วาดสะท้อนซ้าย-ขวา", () => { pxe.mirror = !pxe.mirror; pxaSync(); });
+  tb("pxa-t-undo", "↩️ ย้อน", "ย้อนกลับ", () => { const h = pxe.hist.pop(); if (h) { pxe.g = h; pxaDraw(); } });
+  tb("pxa-t-ol", "🖍️ ขอบ", "เติมเส้นขอบดำรอบตัว", () => { pxaPush(); pxe.g = pxaOutline(pxe.g); pxaDraw(); });
+  tb("pxa-t-tpl", "🎲 แม่แบบ", "เริ่มจากตัวอย่าง", () => { pxaPush(); pxe.tpl = (pxe.tpl + 1) % PXA_TPL.length; pxe.g = pxaTemplate(pxe.tpl, state.uid, state.profile?.faction); pxaDraw(); toast("แม่แบบ: " + PXA_TPL[pxe.tpl]); });
+  tb("pxa-t-clr", "🗑️ ล้าง", "ล้างทั้งภาพ", () => { pxaPush(); pxe.g = new Uint8Array(PXA_N); pxaDraw(); });
+  const pal = mk("div", "pxa-pal"); pal.id = "pxa-pal";
+  PXA_PAL.forEach((c, i) => { const b = mk("button", "pxa-sw"); b.type = "button"; b.dataset.i = String(i); b.title = PXA_NAMES[i]; b.setAttribute("aria-label", PXA_NAMES[i]); if (c) b.style.background = c; else b.classList.add("pxa-sw0"); b.addEventListener("click", () => { pxe.col = i; if (pxe.tool === "pick") pxe.tool = "pen"; pxaSync(); }); pal.append(b); });
+  const act = mk("div", "pxa-act"), save = btn("💾 บันทึกอวาตาร์", () => pxaSave(), "btn primary"); save.id = "pxa-save";
+  const del = btn("ลบของฉัน", () => pxaDelete(), "btn ghost mini"); del.id = "pxa-del";
+  act.append(save, del);
+  row.append(left, right); bx.append(hd, hint, row, tools, pal, act); m.append(bx); document.body.append(m);
+  m.addEventListener("click", (e) => { if (e.target === m) m.classList.add("hidden"); });
+  const at = (e) => { const r = cv.getBoundingClientRect(); return [Math.min(PXA_W - 1, Math.max(0, Math.floor(((e.clientX - r.left) / r.width) * PXA_W))), Math.min(PXA_H - 1, Math.max(0, Math.floor(((e.clientY - r.top) / r.height) * PXA_H)))]; };
+  const put = (x, y, c) => { pxe.g[y * PXA_W + x] = c; if (pxe.mirror) pxe.g[y * PXA_W + (PXA_W - 1 - x)] = c; };
+  cv.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); const [x, y] = at(e);
+    if (pxe.tool === "pick") { pxe.col = pxe.g[y * PXA_W + x]; pxe.tool = "pen"; return pxaSync(); }
+    pxaPush();
+    if (pxe.tool === "fill") { pxaFill(x, y, pxe.col); return pxaDraw(); }
+    pxe.drag = true; try { cv.setPointerCapture(e.pointerId); } catch { /* ข้าม */ } put(x, y, pxe.col); pxaDraw();
+  });
+  cv.addEventListener("pointermove", (e) => { if (!pxe.drag) return; const [x, y] = at(e); put(x, y, pxe.col); pxaDraw(); });
+  const up = () => { pxe.drag = false; }; cv.addEventListener("pointerup", up); cv.addEventListener("pointercancel", up);
+  return m;
+}
+function pxaPush() { pxe.hist.push(Uint8Array.from(pxe.g)); if (pxe.hist.length > 40) pxe.hist.shift(); }
+function pxaTool(t) { pxe.tool = t; pxaSync(); }
+function pxaFill(x, y, c) {
+  const g = pxe.g, from = g[y * PXA_W + x]; if (from === c) return;
+  const st = [[x, y]]; while (st.length) { const [a, b] = st.pop(); if (a < 0 || b < 0 || a >= PXA_W || b >= PXA_H || g[b * PXA_W + a] !== from) continue; g[b * PXA_W + a] = c; st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]); }
+}
+function pxaSync() {
+  const set = (id, on) => $(id)?.classList.toggle("primary", !!on);
+  set("pxa-t-pen", pxe.tool === "pen"); set("pxa-t-fill", pxe.tool === "fill"); set("pxa-t-pick", pxe.tool === "pick"); set("pxa-t-mir", pxe.mirror);
+  document.querySelectorAll("#pxa-pal .pxa-sw").forEach((b) => b.classList.toggle("on", Number(b.dataset.i) === pxe.col));
+}
+function pxaDraw() {
+  const cv = $("pxa-cv"); if (!cv) return; const ctx = cv.getContext("2d"), C = 14;
+  for (let y = 0; y < PXA_H; y++) for (let x = 0; x < PXA_W; x++) {
+    const v = pxe.g[y * PXA_W + x];
+    ctx.fillStyle = v ? PXA_PAL[v] : ((x + y) & 1 ? "#2b3138" : "#232930"); ctx.fillRect(x * C, y * C, C, C);
+  }
+  ctx.strokeStyle = "rgba(255,255,255,.07)"; ctx.lineWidth = 1; ctx.beginPath();
+  for (let x = 0; x <= PXA_W; x++) { ctx.moveTo(x * C + 0.5, 0); ctx.lineTo(x * C + 0.5, PXA_H * C); }
+  for (let y = 0; y <= PXA_H; y++) { ctx.moveTo(0, y * C + 0.5); ctx.lineTo(PXA_W * C, y * C + 0.5); }
+  ctx.stroke();
+  if (pxe.mirror) { ctx.strokeStyle = "rgba(255,200,60,.5)"; ctx.beginPath(); ctx.moveTo(PXA_W * C / 2, 0); ctx.lineTo(PXA_W * C / 2, PXA_H * C); ctx.stroke(); }
+  const pv = $("pxa-pv"); if (pv) { pv.textContent = ""; pv.append(pxaCanvas(pxe.g, 1), pxaCanvas(pxe.g, 3)); }
+}
+function pxaOpen() {
+  if (!state.profile) return;
+  const m = pxaEditor(); pxe.hist = []; pxe.tool = "pen"; pxe.drag = false;
+  const mine = pxa.cache.get(state.uid)?.v;
+  pxe.g = mine ? pxaDec(mine) : pxaTemplate(0, state.uid, state.profile.faction);
+  m.classList.remove("hidden"); pxaSync(); pxaDraw();
+  if (!mine) pxaGet(state.uid).then((hex) => { if (hex && !m.classList.contains("hidden") && !pxe.hist.length) { pxe.g = pxaDec(hex); pxaDraw(); } });
+}
+async function pxaSave() {
+  if (pxaFilled(pxe.g) < 24) return toast("วาดให้มากกว่านี้อีกนิด (อย่างน้อย 24 ช่อง)");
+  const hex = pxaEnc(pxe.g), b = $("pxa-save"); if (b) b.disabled = true;
+  try {
+    await set(ref(db, "pxav/" + state.uid), hex);
+    pxa.cache.set(state.uid, { t: Date.now(), v: hex }); $("pxa-modal").classList.add("hidden"); toast("บันทึกอวาตาร์แล้ว ✨");
+    try { twSelfImg(); } catch { /* ข้าม */ }
+  } catch (e) { toast(String(e?.code || e).includes("PERMISSION_DENIED") ? "บันทึกยังไม่ได้ — เซิร์ฟเวอร์ยังไม่อัปเดตกฎ (แจ้งแอดมินให้ deploy rules)" : errMsg(e)); }
+  finally { if (b) b.disabled = false; }
+}
+async function pxaDelete() {
+  if (!confirm("ลบอวาตาร์ที่วาดไว้? (จะกลับไปใช้ตัวตั้งต้น)")) return;
+  try { await remove(ref(db, "pxav/" + state.uid)); pxa.cache.set(state.uid, { t: Date.now(), v: null }); $("pxa-modal").classList.add("hidden"); toast("ลบแล้ว"); try { twSelfImg(); } catch { /* ข้าม */ } } catch (e) { toast(errMsg(e)); }
+}
+function pxaProfBtn(body) {   // แถวในหน้าต่างตกแต่งโปรไฟล์
+  if (!pxaOn() || !body) return;
+  const c = mk("div", "world-row"), r = mk("div"); r.style.cssText = "display:flex;gap:10px;align-items:center";
+  const pv = mk("div", "pxa-mini"); pv.append(pxaCanvas(pxa.cache.get(state.uid)?.v || pxaDefault(state.uid, state.profile?.faction), 2));
+  pxaGet(state.uid).then((hex) => { if (hex) { pv.textContent = ""; pv.append(pxaCanvas(hex, 2)); } });
+  const tx = mk("div"); tx.style.flex = "1"; tx.append(mk("b", "", "🎨 อวาตาร์พิกเซล"), mk("div", "muted", "วาดตัวละครของคุณเอง ใช้เดินในค่ายและเป็นรูปในแชท"));
+  r.append(pv, tx, btn("วาด", () => pxaOpen(), "btn primary mini")); c.append(r); body.append(c);
+}
+
+/* =========================================================
+   54) 🏘️ เมืองค่ายแบบ Doom — Safe Zone เดินได้ (มุมมองบุคคลที่หนึ่ง) พร้อม NPC และผู้เล่นคนอื่น
+   - เปิดจากปุ่ม "🏘️ เดินในค่าย" ใต้รายการโซน (เฉพาะอยู่ Safe Zone) • แผนที่ช่อง 24×20 + กล้องหมุนได้ + ท้องฟ้าโพล้เพล้ + กองไฟให้แสง
+   - ฝั่ง client ล้วน: ประตู/เต็นท์/ป้าย กดแล้วเรียกหน้าต่างเดิม (ตลาด/ภารกิจ/ที่พัก/คุย NPC) • NPC ใช้ npcOpen() เดิมทั้งหมด
+   - ธารา: เต็นท์วิจัยมีอยู่ในแผนที่ แต่จะมีตัวยืนอยู่เมื่อ hcFound() เท่านั้น (เงื่อนไขเดียวกับการ์ด "คนในค่าย") — ไม่โผล่ก่อนเนื้อเรื่อง
+   - 55) ผู้เล่นคนอื่น: ตำแหน่งที่ town/{uid} = "x,y" (หน่วย 0.1 ช่อง) ส่งสูงสุด ~2 ครั้ง/วินาที + หัวใจทุก 7 วินาที • ลบเมื่อออก/หลุดสัญญาณ (onDisconnect) • เป็นภาพประกอบล้วน ไม่มีผลต่อเกมเพลย์
+     ชื่อ/ฝ่ายมาจาก state.players (zonePlayers/safe) • ข้อความแชทโซนเดียวกันขึ้นเป็นบับเบิลเหนือหัว (hook townChat ใน addChat)
+   - ถ้า rules ยังไม่ deploy: เดินคนเดียวได้ปกติ (ส่งตำแหน่งไม่ได้ 3 ครั้งแล้วหยุดลอง) • ปิดด้วย tune town_on = 0
+   ========================================================= */
+const TW_W = 160, TW_H = 136, TW_MW = 24, TW_MH = 20, TW_SKY_W = 256, TW_SKY_H = 80;
+const TW_DOORS = {
+  G: { label: "🚪 ประตูค่าย — ออกไปข้างนอก", act: "gate" }, M: { label: "🏪 ตลาด", act: "btn-market" }, Q: { label: "📜 กระดานภารกิจ", act: "btn-quests" }, H: { label: "🏠 ที่พัก", act: "btn-base" },
+  m: { label: "⚕️ เต็นท์พยาบาล", act: "npc:mira" }, r: { label: "🧪 เต็นท์วิจัย", act: "npc:tara" }
+};
+const TW = {
+  on: false, x: 12, y: 13.2, a: -Math.PI / 2, keys: { f: 0, b: 0, l: 0, r: 0 }, ents: [], now: 0, last: 0, bob: 0, bobAmp: 0, bobY: 0, dragTurn: 0, map: null, T: null, sky: null,
+  lbl: new Map(), proj: [], fire: { x: 12, y: 10 }, tgt: null, tgtT: 0, mmT: 0, npcSig: "", pres: { off: null, last: "", lastT: 0, tog: 0, fail: 0 }, broken: false
+};
+const twOn = () => T("town_on", 1) === 1;
+try { Object.defineProperty(window, "__town", { value: { TW, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
+function twMapBuild() {
+  const g = Array.from({ length: TW_MH }, () => Array(TW_MW).fill("."));
+  const box = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = c; };
+  box(0, 0, TW_MW - 1, 0, "#"); box(0, TW_MH - 1, TW_MW - 1, TW_MH - 1, "#"); box(0, 0, 0, TW_MH - 1, "#"); box(TW_MW - 1, 0, TW_MW - 1, TW_MH - 1, "#");
+  box(10, 0, 13, 0, "G");
+  box(1, 6, 4, 11, "t"); g[8][4] = "m"; g[9][4] = "m";
+  box(19, 6, 22, 11, "t"); g[8][19] = "r"; g[9][19] = "r";
+  box(3, 15, 8, 18, "b"); g[15][5] = "M"; g[15][6] = "M";
+  box(10, 15, 13, 18, "b"); g[15][11] = "Q"; g[15][12] = "Q";
+  box(15, 15, 20, 18, "b"); g[15][17] = "H"; g[15][18] = "H";
+  [[2, 2], [3, 2], [20, 2], [21, 2], [2, 13], [21, 13], [8, 5], [15, 5]].forEach(([x, y]) => { g[y][x] = "c"; });
+  return g.map((r) => r.join(""));
+}
+const twCell = (mx, my) => (mx < 0 || my < 0 || mx >= TW_MW || my >= TW_MH ? "#" : TW.map[my][mx]);
+// ---------- พื้นผิว ----------
+function twTexs() {
+  if (TW.T) return TW.T;
+  const tex = scnTex, mul = scnMul, nz = scnNz;
+  return (TW.T = {
+    "#": scnPanel([122, 112, 92], [54, 50, 44], 3), b: scnBrick([150, 92, 70], [60, 52, 48], 5), c: scnCrateTex(),
+    t: tex((x, y) => { let k = 0.86 + 0.22 * nz(x, y, 61) - ((x & 7) === 0 ? 0.18 : 0); if (y > 25) k *= 0.85 - 0.01 * (y - 25); if (y === 0 || y === 31) k *= 0.7; return mul([118, 126, 86], k); }),
+    G: tex((x, y) => {
+      if (y < 6) return ((x + y) >> 2) & 1 ? [226, 184, 40] : [40, 38, 36];
+      if (x % 6 < 2) return mul([120, 124, 130], x % 6 === 0 ? 1.15 : 0.7);
+      if (y >= 14 && y <= 16) return mul([90, 92, 98], 1.1);
+      return mul([62, 64, 70], 0.9 + 0.2 * nz(x, y, 62));
+    }),
+    M: tex((x, y) => {
+      if (y < 10) return mul((x >> 2) & 1 ? [220, 214, 200] : [190, 50, 40], y >= 8 ? 0.7 : 1);
+      if (y < 12) return [40, 28, 20];
+      if (y >= 22 && y <= 26) return mul([120, 84, 52], y === 22 ? 1.2 : 0.9);
+      if (y > 26) return [60, 44, 30];
+      if (y === 16 || y === 21) return [90, 62, 38];
+      const cols = [[220, 70, 50], [80, 170, 70], [230, 200, 60], [70, 130, 210]];
+      return (x & 3) !== 3 && nz(x >> 2, y >> 3, 63) > 0.35 ? mul(cols[((x >> 2) + (y >> 3) * 5) % 4], 0.9 + 0.2 * nz(x, y, 64)) : [44, 34, 26];
+    }),
+    Q: tex((x, y) => {
+      if (x < 2 || x > 29 || y < 3 || y > 28) return mul([110, 76, 44], 0.8 + 0.3 * nz(x, y, 65));
+      for (const [a, b, w, h] of [[4, 6, 8, 9], [15, 5, 7, 10], [23, 8, 6, 8], [6, 18, 9, 8], [18, 17, 8, 9]]) {
+        if (x >= a && x < a + w && y >= b && y < b + h) { if (y === b + 1 && x > a + 1 && x < a + w - 2) return [180, 50, 40]; if ((y - b) % 3 === 0 && x > a && x < a + w - 1) return [120, 120, 120]; return [235, 230, 210]; }
+      }
+      return mul([160, 118, 70], 0.85 + 0.25 * nz(x, y, 66));
+    }),
+    H: tex((x, y) => {
+      if (y < 5) return mul([90, 52, 40], 0.85 + 0.15 * ((x >> 2) & 1));
+      if (x < 3 || x > 28) return mul([100, 72, 48], 0.8);
+      if (y >= 9 && y <= 18 && x >= 9 && x <= 22) return x === 9 || x === 22 || y === 9 || y === 18 || x === 15 || y === 13 ? [60, 44, 30] : [250, 214, 120];
+      return mul([130, 92, 58], (x & 3) === 0 ? 0.8 : 0.95 + 0.15 * nz(x, y, 67));
+    }),
+    m: tex((x, y) => {
+      if ((Math.abs(x - 15.5) <= 3.5 && y >= 6 && y <= 25) || (Math.abs(y - 15.5) <= 3.5 && x >= 6 && x <= 25)) return [200, 36, 30];
+      if (x < 2 || x > 29 || y < 1) return mul([150, 154, 146], 0.8);
+      return mul([212, 216, 206], 0.88 + 0.18 * nz(x, y, 68));
+    }),
+    r: tex((x, y) => {
+      const dx = Math.abs(x - 15.5);
+      if (y >= 5 && y <= 11 && dx <= 2.5) return dx > 1.6 ? [90, 130, 130] : [190, 230, 230];
+      if (y >= 12 && y <= 25) { const hw = (y - 11) * 0.55 + 2.6; if (dx <= hw) return dx > hw - 1.2 ? [80, 120, 120] : y > 18 ? [60, 200, 110] : [150, 235, 220]; }
+      if (x < 2 || x > 29) return mul([100, 112, 80], 0.8);
+      return mul([140, 152, 112], 0.88 + 0.2 * nz(x, y, 69));
+    }),
+    dirt: tex((x, y) => { let k = 0.8 + 0.3 * nz(x, y, 69); if (nz(x >> 1, y >> 1, 70) > 0.88) k *= 1.3; if (nz(x, y, 71) > 0.93) return [90, 84, 78]; return mul([112, 88, 62], k); }),
+    plaza: scnConc([128, 122, 112], true)
+  });
+}
+function twSkyBuild() {
+  if (TW.sky) return TW.sky;
+  const SW = TW_SKY_W, SH = TW_SKY_H, a = new Uint32Array(SW * SH), nz = scnNz;
+  const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+  const top = [34, 34, 86], mid = [198, 92, 80], low = [250, 170, 96];
+  for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
+    const t = y / (SH - 1); let c = t < 0.62 ? lerp(top, mid, t / 0.62) : lerp(mid, low, (t - 0.62) / 0.38);
+    if (y < 30 && nz(x, y, 72) > 0.985) c = [235, 235, 255];
+    if (y > 16 && y < 46 && nz(x >> 3, y >> 2, 75) > 0.72) c = lerp(c, [255, 190, 140], 0.45);
+    const h = 5 + Math.floor(14 * nz(x >> 3, 5, 76)) + (nz(x >> 4, 9, 77) > 0.7 ? 8 : 0);
+    if (y >= SH - 1 - h) { c = [30, 22, 38]; if ((x & 3) === 1 && (y & 3) === 1 && nz(x, y, 78) > 0.82) c = [250, 200, 90]; }
+    a[y * SW + x] = scnPack(c[0], c[1], c[2]);
+  }
+  return (TW.sky = a);
+}
+function twFireImg(f) {
+  const w = 12, h = 16, px = new Uint32Array(w * h);
+  for (let y = 0; y < 13; y++) {
+    const t = y / 12, hw = 0.8 + t * 4.2, sw = Math.sin(f * 2.1 + y * 0.5) * (1 - t) * 1.4;
+    for (let x = 0; x < w; x++) {
+      const dx = x + 0.5 - 6 - sw; if (Math.abs(dx) > hw) continue;
+      if (t < 0.35 && scnNz(x, y, f + 80) > 0.6) continue;
+      const d = Math.abs(dx) / hw, c = d < 0.35 && t > 0.3 ? [255, 240, 150] : d < 0.7 ? [255, 150, 40] : [220, 60, 20];
+      px[y * w + x] = scnPack(c[0], c[1], c[2]);
+    }
+  }
+  for (let y = 12; y < 16; y++) for (let x = 1; x < 11; x++) { const e = x === 1 || x === 10 || y === 15; px[y * w + x] = e ? scnPack(40, 26, 12) : scnPack(98 + (x & 1) * 18, 62, 30); }
+  return { w, h, px };
+}
+// ---------- สถานะ/ตัวละครในฉาก ----------
+function twNpcSync() {
+  const want = ["kane", "mira"]; if (hcFound()) want.push(HC_ID);
+  const sig = want.join(","); if (sig === TW.npcSig) return; TW.npcSig = sig;
+  TW.ents = TW.ents.filter((e) => e.type !== "npc");
+  const pos = { kane: [11.9, 2.1], mira: [5.7, 8.6], tara: [17.9, 8.6] };
+  want.forEach((id) => TW.ents.push({ type: "npc", id, x: pos[id][0], y: pos[id][1], img: pxaImg(PXA_NPC[id]()), h: 0.84, r: 0.32, act: "npc", nm: NPC_META[id].name, icon: NPC_META[id].icon }));
+}
+function twSelfImg() {
+  const cv = $("tw-me"); if (!cv || !state.profile) return;
+  const draw = (hex) => { const c = pxaCanvas(hex || pxaDefault(state.uid, state.profile.faction), 0, true), x = cv.getContext("2d"); x.clearRect(0, 0, 16, 16); x.drawImage(c, 0, 0); };
+  draw(pxa.cache.get(state.uid)?.v); pxaGet(state.uid).then((hex) => { if (hex) draw(hex); });
+}
+function twNewPlayer(uid, tx, ty) {
+  const e = { type: "player", uid, x: tx, y: ty, tx, ty, raw: "", seen: Date.now(), img: pxaImg(pxaDefault(uid, "human")), h: 0.8, r: 0.28, act: "player", nm: "", hide: true, facSet: false, custom: false };
+  if (pxaOn()) pxaGet(uid).then((hex) => { if (hex) { e.img = pxaImg(hex); e.custom = true; } });
+  return e;
+}
+function twEntTick(dt, now) {
+  const pl = state.players || {};
+  for (const e of TW.ents) {
+    if (e.type !== "player") continue;
+    const p = pl[e.uid]; e.hide = !p || Date.now() - e.seen > 30000; e.nm = p?.name || "";
+    if (p && !e.facSet) { e.facSet = true; e.fac = p.faction; if (!e.custom) e.img = pxaImg(pxaDefault(e.uid, p.faction)); }
+    const dx = e.tx - e.x, dy = e.ty - e.y, d = Math.hypot(dx, dy);
+    e.moving = d > 0.05; if (d > 3) { e.x = e.tx; e.y = e.ty; } else if (d > 0.01) { const k = Math.min(1, dt * 6); e.x += dx * k; e.y += dy * k; }
+    if (e.bub && now > e.bubT) e.bub = "";
+  }
+}
+// ---------- ชน/เดิน ----------
+function twBlocked(x, y) {
+  const r = 0.22;
+  for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) if (twCell(Math.floor(x + ox), Math.floor(y + oy)) !== ".") return true;
+  if (Math.hypot(x - TW.fire.x, y - TW.fire.y) < 0.55) return true;
+  for (const e of TW.ents) if (e.type === "npc" && Math.hypot(x - e.x, y - e.y) < e.r + 0.18) return true;
+  return false;
+}
+function twMove(dx, dy) { const S = TW; if (!twBlocked(S.x + dx, S.y)) S.x += dx; if (!twBlocked(S.x, S.y + dy)) S.y += dy; }
+function twStep(dt) {
+  const S = TW, k = S.keys, red = scnReduce();
+  S.a += (k.r - k.l) * 2.3 * dt + S.dragTurn; S.dragTurn = 0;
+  const mv = k.f - k.b;
+  if (mv) { const sp = 2.3 * dt * mv * (mv < 0 ? 0.7 : 1); twMove(Math.cos(S.a) * sp, Math.sin(S.a) * sp); S.bob += dt * 9; S.bobAmp = Math.min(1, S.bobAmp + dt * 6); } else S.bobAmp = Math.max(0, S.bobAmp - dt * 5);
+  S.bobY = red ? 0 : Math.sin(S.bob * 2) * 1.6 * S.bobAmp;
+  twEntTick(dt, S.now); twPresTick();
+}
+// ---------- เป้าหมายที่กด "ใช้" ได้ ----------
+function twTarget() {
+  const S = TW, dx = Math.cos(S.a), dy = Math.sin(S.a); let best = null;
+  for (const e of S.ents) {
+    if (!e.act || e.hide) continue;
+    const vx = e.x - S.x, vy = e.y - S.y, d = Math.hypot(vx, vy); if (d > 2.3 || d < 0.01) continue;
+    if ((vx * dx + vy * dy) / d < 0.8) continue;
+    if (!best || d < best.d) best = { kind: "ent", e, d };
+  }
+  if (best) return best;
+  for (let t = 0.3; t <= 1.7; t += 0.1) {
+    const c = twCell(Math.floor(S.x + dx * t), Math.floor(S.y + dy * t));
+    if (c !== ".") { const D = TW_DOORS[c]; if (D) return { kind: "door", c, def: D, d: t }; break; }
+  }
+  return null;
+}
+const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? t.def.label : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `👋 ทักทาย ${t.e.nm || "ผู้เล่น"}`);
+function twAct() {
+  const t = twTarget(); if (!t) return toast("เดินไปหาประตู คน หรือป้าย แล้วกดอีกครั้ง");
+  S_keysOff();
+  if (t.kind === "ent") {
+    if (t.e.type === "npc") return npcOpen(t.e.id);
+    if (isStaff() && t.e.uid && confirm(`ลบอวาตาร์พิกเซลของ ${t.e.nm}?\n(ตกลง = ลบ • ยกเลิก = แค่โบกมือทักทาย)`)) { remove(ref(db, "pxav/" + t.e.uid)).then(() => { pxa.cache.set(t.e.uid, { t: Date.now(), v: null }); t.e.custom = false; t.e.img = pxaImg(pxaDefault(t.e.uid, t.e.fac)); toast("ลบแล้ว"); }).catch((er) => toast(errMsg(er))); return; }
+    return sendChat("/me โบกมือทักทาย " + (t.e.nm || "")).catch(() => {});
+  }
+  const a = t.def.act;
+  if (a === "gate") { twClose(); setTab("map"); return toast("เลือกโซนปลายทางจากรายการโซน"); }
+  if (a.startsWith("npc:")) { const id = a.slice(4); if (id === HC_ID && !hcFound()) return toast("เต็นท์นี้ว่างเปล่า… ยังไม่มีใครอยู่"); return npcOpen(id); }
+  const b = $(a); if (b && !b.hidden && !b.classList.contains("hidden")) b.click(); else toast("ฟีเจอร์นี้ยังไม่เปิดใช้งาน");
+}
+function S_keysOff() { TW.keys.f = TW.keys.b = TW.keys.l = TW.keys.r = 0; document.querySelectorAll("#tw-root .tw-dp button.on").forEach((b) => b.classList.remove("on")); }
+// ---------- เรนเดอร์ ----------
+const twSh = (d) => Math.max(0.3, Math.min(1, 1.12 - d * 0.05));
+function twDraw() {
+  const S = TW, W = TW_W, H = TW_H, buf = S.buf, zb = S.zb, T = S.T, now = S.now, SK = S.sky;
+  const dirX = Math.cos(S.a), dirY = Math.sin(S.a), plX = -dirY * 0.66, plY = dirX * 0.66, px = S.x, py = S.y, hor = (H >> 1) + Math.round(S.bobY || 0);
+  const fl = 0.9 + 0.1 * Math.sin(now / 90) * Math.sin(now / 230 + 1), fx0 = S.fire.x, fy0 = S.fire.y;
+  const fr = 120, fg = 84, fb = 70;   // หมอกโพล้เพล้ไกล ๆ
+  const glow = (wx, wy) => { const d2 = (wx - fx0) * (wx - fx0) + (wy - fy0) * (wy - fy0); return d2 < 40 ? (1 - d2 / 40) * fl : 0; };
+  // ท้องฟ้า
+  for (let x = 0; x < W; x++) {
+    const u = (((S.a + S.colAng[x]) / (Math.PI * 2)) % 1 + 1) % 1, su = Math.floor(u * TW_SKY_W) % TW_SKY_W;
+    for (let y = 0; y <= hor && y < H; y++) { const sy = Math.max(0, Math.min(TW_SKY_H - 1, TW_SKY_H - 1 - (hor - y))); buf[y * W + x] = SK[sy * TW_SKY_W + su]; }
+  }
+  // พื้น
+  for (let y = hor + 1; y < H; y++) {
+    const p = y - hor, rd = (0.5 * H) / p, sh = twSh(rd);
+    let fx = px + rd * (dirX - plX), fy = py + rd * (dirY - plY); const sx = (rd * 2 * plX) / W, sy = (rd * 2 * plY) / W;
+    for (let x = 0; x < W; x++) {
+      const plaza = Math.abs(fx - fx0) < 4.2 && Math.abs(fy - fy0) < 3.6, tex = plaza ? T.plaza : T.dirt;
+      const c = tex[(((fy * SCN_T) | 0) & 31) * SCN_T + (((fx * SCN_T) | 0) & 31)];
+      let r = fr + ((c & 255) - fr) * sh, g = fg + (((c >> 8) & 255) - fg) * sh, b = fb + (((c >> 16) & 255) - fb) * sh;
+      const gl = glow(fx, fy); if (gl > 0) { r += 130 * gl; g += 72 * gl; b += 18 * gl; }
+      buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
+      fx += sx; fy += sy;
+    }
+  }
+  // ผนัง
+  for (let x = 0; x < W; x++) {
+    const cx = (2 * x) / W - 1, rdx = dirX + plX * cx, rdy = dirY + plY * cx;
+    let mx = Math.floor(px), my = Math.floor(py);
+    const ddx = rdx === 0 ? 1e30 : Math.abs(1 / rdx), ddy = rdy === 0 ? 1e30 : Math.abs(1 / rdy);
+    let stepX, stepY, sdx, sdy;
+    if (rdx < 0) { stepX = -1; sdx = (px - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - px) * ddx; }
+    if (rdy < 0) { stepY = -1; sdy = (py - my) * ddy; } else { stepY = 1; sdy = (my + 1 - py) * ddy; }
+    let hit = ".", side = 0, guard = 0;
+    while (hit === "." && guard++ < 40) { if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; } hit = twCell(mx, my); }
+    const perp = Math.max(0.05, side === 0 ? sdx - ddx : sdy - ddy);
+    zb[x] = perp;
+    const lineH = (H / perp) | 0, ds = Math.max(0, hor - (lineH >> 1)), de = Math.min(H - 1, hor + (lineH >> 1));
+    let wx = side === 0 ? py + perp * rdy : px + perp * rdx; wx -= Math.floor(wx);
+    let tx = (wx * SCN_T) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = SCN_T - 1 - tx;
+    const tex = T[hit] || T["#"], sh = twSh(perp) * (side ? 0.82 : 1), step = SCN_T / lineH, gl = glow(px + perp * rdx, py + perp * rdy);
+    let tp = (ds - hor + lineH / 2) * step;
+    for (let y = ds; y <= de; y++) {
+      const c = tex[(tp & 31) * SCN_T + tx]; tp += step;
+      let r = fr + ((c & 255) - fr) * sh, g = fg + (((c >> 8) & 255) - fg) * sh, b = fb + (((c >> 16) & 255) - fb) * sh;
+      if (gl > 0) { r += 120 * gl; g += 66 * gl; b += 16 * gl; }
+      buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
+    }
+  }
+  // สไปรต์
+  const inv = 1 / (plX * dirY - dirX * plY), list = [];
+  for (const s of S.ents) { if (s.hide) continue; const sx = s.x - px, sy = s.y - py, ty = inv * (-plY * sx + plX * sy); if (ty > 0.2) list.push([s, inv * (dirY * sx - dirX * sy), ty]); }
+  list.sort((a, b) => b[2] - a[2]);
+  S.proj.length = 0;
+  const lift = (s) => (s.type === "player" && s.moving && !scnReduce() ? Math.abs(Math.sin(now / 95)) * 0.035 : 0);
+  for (const [s, tx, ty] of list) {
+    const img = s.img, hh = (H / ty) * s.h, sw = hh * (img.w / img.h), cxs = (W / 2) * (1 + tx / ty);
+    const floorY = hor + H / ty / 2 - lift(s) * (H / ty), top = floorY - hh, left = cxs - sw / 2;
+    const x0 = Math.max(0, Math.floor(left)), x1 = Math.min(W - 1, Math.ceil(left + sw)), y0 = Math.max(0, Math.floor(top)), y1 = Math.min(H - 1, Math.ceil(floorY));
+    const shd = Math.min(1, twSh(ty) * 1.08), gl = glow(s.x, s.y) + (s.type === "fire" ? 1 : 0);
+    for (let x = x0; x <= x1; x++) {
+      if (ty >= zb[x]) continue;
+      const ix = ((x - left) / sw * img.w) | 0; if (ix < 0 || ix >= img.w) continue;
+      for (let y = y0; y <= y1; y++) {
+        const iy = ((y - top) / hh * img.h) | 0; if (iy < 0 || iy >= img.h) continue;
+        const c = img.px[iy * img.w + ix]; if (!c) continue;
+        let r = fr + ((c & 255) - fr) * shd, g = fg + (((c >> 8) & 255) - fg) * shd, b = fb + (((c >> 16) & 255) - fb) * shd;
+        if (s.type !== "fire" && gl > 0) { r += 70 * gl; g += 38 * gl; b += 8 * gl; }
+        buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
+      }
+    }
+    if (s.nm) S.proj.push({ e: s, fx: cxs / W, fy: top / H, ty, col: Math.max(0, Math.min(W - 1, Math.round(cxs))) });
+  }
+  S.ctx.putImageData(S.id, 0, 0);
+}
+function twMiniMap() {
+  const cv = $("tw-mm"); if (!cv) return; const x = cv.getContext("2d"), C = 3, S = TW;
+  x.clearRect(0, 0, cv.width, cv.height);
+  const col = { "#": "#5a5448", b: "#96605a", t: "#78825a", c: "#7a5428", G: "#e2b828", M: "#d83c30", Q: "#c8a064", H: "#e8c870", m: "#e8ece4", r: "#8cd8c0" };
+  for (let j = 0; j < TW_MH; j++) for (let i = 0; i < TW_MW; i++) { const c = S.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
+  x.fillStyle = "#ff9a2a"; x.fillRect(Math.round(S.fire.x * C) - 1, Math.round(S.fire.y * C) - 1, 3, 3);
+  for (const e of S.ents) { if (e.hide || e.type === "fire") continue; x.fillStyle = e.type === "npc" ? "#ffe14a" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
+  x.fillStyle = "#fff"; x.fillRect(Math.round(S.x * C) - 1, Math.round(S.y * C) - 1, 3, 3);
+  x.strokeStyle = "#fff"; x.beginPath(); x.moveTo(S.x * C, S.y * C); x.lineTo(S.x * C + Math.cos(S.a) * 6, S.y * C + Math.sin(S.a) * 6); x.stroke();
+}
+function twLabels() {
+  const S = TW, ov = $("tw-ov"); if (!ov) return; const seen = new Set();
+  for (const p of S.proj) {
+    const e = p.e, key = e.uid || e.id; if (!key || p.ty > 8 || S.zb[p.col] < p.ty * 0.97) continue;
+    seen.add(key);
+    let el = S.lbl.get(key);
+    if (!el) { el = mk("div", "tw-nm"); const bb0 = mk("span", "tw-bb"); bb0.style.display = "none"; el.append(bb0, mk("b", "")); ov.append(el); S.lbl.set(key, el); }
+    el.style.left = (p.fx * 100).toFixed(2) + "%"; el.style.top = (p.fy * 100 - 1).toFixed(2) + "%";
+    const b = el.lastChild, bb = el.firstChild, nm = (e.icon ? e.icon + " " : "") + e.nm; if (b.textContent !== nm) b.textContent = nm;
+    const t = e.bub || ""; if (bb.textContent !== t) { bb.textContent = t; bb.style.display = t ? "" : "none"; }
+    b.className = e.type === "npc" ? "npc" : e.fac === "zombie" ? "zombie" : "human";
+  }
+  for (const [k, el] of S.lbl) if (!seen.has(k)) { el.remove(); S.lbl.delete(k); }
+}
+function twPrompt() {
+  const S = TW, t = twTarget(), lab = twTgtLabel(t), p = $("tw-prompt"), a = $("tw-act");
+  if (p && p.textContent !== lab) { p.textContent = lab; p.classList.toggle("hidden", !lab); }
+  if (a) { const txt = t ? "✋ " + (t.kind === "door" ? "เข้า/ใช้" : t.e.type === "npc" ? "คุย" : "ทักทาย") : "✋ ใช้"; if (a.textContent !== txt) a.textContent = txt; a.classList.toggle("ready", !!t); }
+  S.tgt = t;
+}
+function twCount() { const n = TW.ents.filter((e) => e.type === "player" && !e.hide).length + 1; const c = $("tw-cnt"); const t = `👥 ${n} ในฉาก`; if (c && c.textContent !== t) c.textContent = t; }
+function twLoop(ts) {
+  const S = TW; if (!S.on) return;
+  S.raf = requestAnimationFrame(twLoop);
+  if (ts - S.last < 33) return;
+  const dt = Math.min(0.1, (ts - S.last) / 1000); S.last = ts; S.now = ts;
+  try {
+    twStep(dt); twDraw(); twLabels();
+    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twCount(); twNpcSync(); }
+  } catch (e) { console.warn("town", e); S.broken = true; twClose(); }
+}
+// ---------- ผู้เล่นอื่น (ตำแหน่งแบบเรียลไทม์) ----------
+function twPresStart() {
+  const P = TW.pres; P.fail = 0; P.last = ""; P.lastT = 0; P.tog = 0;
+  try { onDisconnect(ref(db, "town/" + state.uid)).remove(); } catch { /* ข้าม */ }
+  try { P.off = onValue(ref(db, "town"), (s) => { try { twPresIn(s.val() || {}); } catch (e) { console.warn("town in", e); } }, () => { /* อ่านไม่ได้ (rules ยังไม่ deploy) → เดินคนเดียว */ }); } catch { /* ข้าม */ }
+}
+function twPresStop() {
+  const P = TW.pres; try { if (typeof P.off === "function") P.off(); } catch { /* ข้าม */ } P.off = null;
+  if (state.uid && P.fail < 3) remove(ref(db, "town/" + state.uid)).catch(() => {});
+  TW.ents = TW.ents.filter((e) => e.type !== "player");
+}
+function twPresIn(obj) {
+  const S = TW, now = Date.now(), keep = new Set();
+  for (const [uid, v] of Object.entries(obj)) {
+    if (uid === state.uid || typeof v !== "string") continue;
+    const m = /^(\d{1,3}),(\d{1,3})$/.exec(v); if (!m) continue;
+    const tx = +m[1] / 10, ty = +m[2] / 10; let e = S.ents.find((q) => q.type === "player" && q.uid === uid);
+    if (!e) { if (S.ents.filter((q) => q.type === "player").length >= 24) continue; e = twNewPlayer(uid, tx, ty); S.ents.push(e); }
+    keep.add(uid);
+    if (e.raw !== v) { e.raw = v; e.tx = tx; e.ty = ty; e.seen = now; }
+  }
+  S.ents = S.ents.filter((e) => e.type !== "player" || keep.has(e.uid));
+}
+function twPresTick() {
+  const P = TW.pres, S = TW, now = performance.now(); if (P.fail >= 3 || !state.uid) return;
+  const x = Math.max(0, Math.min(999, Math.round(S.x * 10))), y = Math.max(0, Math.min(999, Math.round(S.y * 10))), cur = x + "," + y;
+  const moved = cur !== P.last, due = moved ? now - P.lastT >= 500 : now - P.lastT >= 7000;
+  if (!due) return;
+  P.lastT = now; if (!moved) { P.tog ^= 1; } const out = moved ? cur : Math.min(999, x + P.tog) + "," + y; P.last = cur;
+  set(ref(db, "town/" + state.uid), out).then(() => { P.fail = 0; }).catch(() => { P.fail++; });
+}
+// ---------- แชทบนฉาก ----------
+function twLogAdd(m) {
+  const log = $("tw-log"); if (!log) return;
+  const el = mk("div", "tw-ln"); const who = mk("b", m.faction === "zombie" ? "zombie" : "human", m.type === "emote" ? `* ${m.name}` : m.name + ":");
+  el.append(who, document.createTextNode(" " + String(m.text).slice(0, 120))); log.append(el);
+  while (log.children.length > 4) log.firstChild.remove();
+}
+function townChat(m) {   // เรียกจาก addChat
+  if (!TW.on || !m || m.type === "combat") return;
+  if (typeof m.ts === "number" && serverNow() - m.ts > 25000) return;
+  twLogAdd(m);
+  if (m.uid !== state.uid) { const e = TW.ents.find((q) => q.type === "player" && q.uid === m.uid); if (e) { e.bub = String(m.text).slice(0, 70); e.bubT = performance.now() + 6000; } }
+}
+// ---------- หน้าจอ ----------
+function twBuild() {
+  if ($("tw-root")) return;
+  const root = mk("div", "tw-root hidden"); root.id = "tw-root"; root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "ค่ายพักพิง"); root.tabIndex = -1;
+  const box = mk("div", "tw-box"), top = mk("div", "tw-top"), me = mk("canvas", "tw-me"); me.id = "tw-me"; me.width = 16; me.height = 16;
+  const ttl = mk("b", "tw-ttl", "🏘️ ค่ายพักพิง"), cnt = mk("small", "muted"); cnt.id = "tw-cnt";
+  const tt = mk("div", "tw-tt"); tt.append(ttl, cnt);
+  const paint = btn("🎨", () => { S_keysOff(); pxaOpen(); }, "btn ghost mini"); paint.title = "วาดอวาตาร์พิกเซลของคุณ"; paint.id = "tw-paint";
+  const x = btn("✕ ออก", () => twClose(), "btn ghost mini"); x.id = "tw-x";
+  top.append(me, tt, paint, x);
+  const view = mk("div", "tw-view"); view.id = "tw-view";
+  const cv = mk("canvas"); cv.id = "tw-cv"; cv.width = TW_W; cv.height = TW_H;
+  const ov = mk("div", "tw-ov"); ov.id = "tw-ov";
+  const mm = mk("canvas", "tw-mm"); mm.id = "tw-mm"; mm.width = TW_MW * 3; mm.height = TW_MH * 3;
+  const pr = mk("div", "tw-prompt hidden"); pr.id = "tw-prompt";
+  view.append(cv, ov, mm, pr);
+  const pad = mk("div", "tw-pad"), dp = mk("div", "tw-dp");
+  const hold = (lab, key, cls, tip) => { const b = mk("button", "btn ghost " + cls, lab); b.type = "button"; b.title = tip; b.setAttribute("aria-label", tip); const on = (e) => { e.preventDefault(); TW.keys[key] = 1; b.classList.add("on"); }, off = () => { TW.keys[key] = 0; b.classList.remove("on"); }; b.addEventListener("pointerdown", on); ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, off)); b.addEventListener("contextmenu", (e) => e.preventDefault()); dp.append(b); return b; };
+  hold("◀", "l", "dl", "หันซ้าย"); hold("▲", "f", "df", "เดินหน้า"); hold("▶", "r", "dr", "หันขวา"); hold("▼", "b", "db", "ถอยหลัง");
+  const act = btn("✋ ใช้", () => twAct(), "btn primary tw-act"); act.id = "tw-act";
+  pad.append(dp, act);
+  const log = mk("div", "tw-log"); log.id = "tw-log"; log.setAttribute("aria-live", "polite");
+  const form = mk("form", "tw-chat"), inp = mk("input"); inp.id = "tw-in"; inp.type = "text"; inp.maxLength = 200; inp.placeholder = "พิมพ์คุยกับคนในค่าย…"; inp.autocomplete = "off";
+  const send = btn("ส่ง", () => {}, "btn ghost mini"); send.type = "submit";
+  form.append(inp, send); form.addEventListener("submit", async (e) => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; inp.value = ""; try { await sendChat(t); } catch (er) { toast(errMsg(er)); } });
+  box.append(top, view, pad, log, form); root.append(box); document.body.append(root);
+  root.addEventListener("keydown", (e) => {
+    if (e.target && /^(INPUT|TEXTAREA)$/.test(e.target.tagName)) { if (e.key === "Escape") { e.target.blur(); root.focus(); } return; }
+    const k = e.key.toLowerCase(), set = (n, v) => { TW.keys[n] = v; };
+    if (k === "escape") return twClose();
+    if (k === "arrowup" || k === "w") set("f", 1); else if (k === "arrowdown" || k === "s") set("b", 1); else if (k === "arrowleft" || k === "a" || k === "q") set("l", 1); else if (k === "arrowright" || k === "d" || k === "e") set("r", 1);
+    else if (k === " " || k === "enter" || k === "f") { e.preventDefault(); return twAct(); } else if (k === "t" || k === "/") { e.preventDefault(); return inp.focus(); } else return;
+    e.preventDefault();
+  });
+  root.addEventListener("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "arrowup" || k === "w") TW.keys.f = 0; else if (k === "arrowdown" || k === "s") TW.keys.b = 0; else if (k === "arrowleft" || k === "a" || k === "q") TW.keys.l = 0; else if (k === "arrowright" || k === "d" || k === "e") TW.keys.r = 0; });
+  window.addEventListener("blur", S_keysOff);
+  // ลากบนภาพ = หัน • แตะสั้น ๆ = ใช้
+  let drag = null;
+  view.addEventListener("pointerdown", (e) => { if (e.target.closest(".tw-mm")) return; drag = { x: e.clientX, t: performance.now(), moved: false }; try { view.setPointerCapture(e.pointerId); } catch { /* ข้าม */ } });
+  view.addEventListener("pointermove", (e) => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 3) drag.moved = true; drag.x = e.clientX; TW.dragTurn += dx * 0.011; });
+  const end = () => { if (drag && !drag.moved && performance.now() - drag.t < 350) twAct(); drag = null; };
+  view.addEventListener("pointerup", end); view.addEventListener("pointercancel", () => { drag = null; });
+}
+function twWanted() {
+  return !!(twOn() && state.zone === "safe" && state.profile && state.profile.hp > 0 && !state.profile.banned && !state.boss && !state.hb && !SCN.on && !TW.broken && typeof HTMLCanvasElement !== "undefined");
+}
+function twOpen() {
+  const S = TW; if (S.on) return;
+  if (!twWanted()) return toast("ตอนนี้เดินในค่ายไม่ได้");
+  try {
+    twBuild();
+    S.map = twMapBuild(); S.T = twTexs(); S.sky = twSkyBuild();
+    S.colAng = new Float32Array(TW_W); for (let x = 0; x < TW_W; x++) S.colAng[x] = Math.atan(((2 * x) / TW_W - 1) * 0.66);
+    const cv = $("tw-cv"); S.ctx = cv.getContext("2d"); S.id = S.ctx.createImageData(TW_W, TW_H); S.buf = new Uint32Array(S.id.data.buffer); S.zb = new Float32Array(TW_W);
+    S.x = 12; S.y = 13.2; S.a = -Math.PI / 2; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.dragTurn = 0; S.proj = []; S.npcSig = "";
+    const f = [0, 1, 2].map((i) => twFireImg(i));
+    S.ents = [{ type: "fire", x: S.fire.x, y: S.fire.y, img: f[0], frames: f, h: 0.5, r: 0.4, nm: "" }];
+    twNpcSync(); S.pres.fail = 0;
+  } catch (e) { console.warn("town build", e); S.broken = true; return toast("เปิดฉากค่ายไม่สำเร็จ"); }
+  S.on = true; S.now = performance.now(); S.last = 0;
+  S.fireT = setInterval(() => { const fe = S.ents.find((q) => q.type === "fire"); if (fe) fe.img = fe.frames[Math.floor(performance.now() / 110) % 3]; }, 110);
+  $("tw-log").textContent = ""; S_keysOff();
+  $("tw-root").classList.remove("hidden"); try { $("tw-root").focus({ preventScroll: true }); } catch { /* ข้าม */ }
+  twSelfImg(); twPresStart();
+  S.watch = setInterval(() => { const p = state.profile; if (!p || p.hp <= 0 || p.banned || state.zone !== "safe" || state.boss) twClose(); }, 500);
+  S.raf = requestAnimationFrame(twLoop);
+}
+function twClose() {
+  const S = TW; if (!S.on) return;
+  S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearInterval(S.fireT); S_keysOff(); twPresStop();
+  for (const el of S.lbl.values()) el.remove(); S.lbl.clear();
+  const r = $("tw-root"); if (r) r.classList.add("hidden");
+}
+function twSync() {   // ปุ่ม "เดินในค่าย" ใต้รายการโซน (เรียกจาก renderNpcBox)
+  const show = twWanted();
+  let b = $("btn-town");
+  if (!b) {
+    if (!$("zone-list")) return;
+    b = btn("🏘️ เดินในค่าย (มุมมอง Doom)", () => twOpen(), "btn primary wide"); b.id = "btn-town"; b.style.margin = "8px 0";
+    const nb = $("npc-box"); if (nb) nb.before(b); else $("zone-list").after(b);
+  }
+  b.classList.toggle("hidden", !show);
+  if (!show && TW.on) twClose();
+}
+// ---- /เมืองค่าย
 
 if (HAS_DOM) initNpcUi();
