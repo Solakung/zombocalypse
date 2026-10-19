@@ -22,19 +22,19 @@ const prompt = (pg) => pg.evaluate(() => document.getElementById("tw-prompt").te
 
 (async () => {
   // 1) ปุ่ม: เห็นเฉพาะ Safe Zone และเมื่อเปิดด้วย tune town_on • เปิด/ปิดฉาก • ภาพไม่ว่าง
-  let B = await mkpage({ seed: { zonePlayers: { safe: { u1: { name: "tester", faction: "human" }, u2: { name: "Bob", faction: "human" }, u3: { name: "Zed", faction: "zombie" } } }, town: { u2: "100,100", u3: "126,112" } } }), pg = B.pg;
+  let B = await mkpage({ seed: { zonePlayers: { safe: { u1: { name: "tester", faction: "human" }, u2: { name: "Bob", faction: "human" }, u3: { name: "Zed", faction: "zombie" } } }, town: { safe: { 0: { u2: "100,100,0,0", u3: "126,112,6,0" } } } } }), pg = B.pg;
   assert(await pg.evaluate(() => { const b = document.getElementById("btn-town"); return !!b && !b.classList.contains("hidden"); }), "Safe Zone → มีปุ่มเดินในค่าย");
   assert(!(await shown(pg, "#tw-root")), "ยังไม่เปิดฉาก");
   await click(pg, "btn-town"); await pg.waitForTimeout(700);
   assert(await shown(pg, "#tw-root"), "เปิดฉากค่าย");
   assert(!(await pg.evaluate(() => document.getElementById("tw-root").classList.contains("modal"))), "ฉากไม่ใช้คลาส modal (ไม่บล็อกหน้าต่างอื่น)");
   const cv = await canvasColors(pg); assert(cv.w === 160 && cv.h === 136 && cv.n > 25, "ภาพวาดแล้ว " + JSON.stringify(cv));
-  assert(/ในฉาก/.test(await pg.evaluate(() => document.getElementById("tw-cnt").textContent)), "แสดงจำนวนคนในฉาก");
+  assert(/👥/.test(await pg.evaluate(() => document.getElementById("tw-cnt").textContent)), "แสดงจำนวนคนในฉาก");
   let ents = await tw(pg, "return T.ents.map(e => e.type + ':' + (e.id || e.uid || ''));");
   assert(ents.includes("npc:kane") && ents.includes("npc:mira"), "เคน/มิรา ยืนในค่าย " + ents);
   assert(!ents.includes("npc:tara"), "ธารายังไม่ปรากฏ (ยังไม่ hcFound) " + ents);
   assert(ents.includes("player:u2") && ents.includes("player:u3"), "เห็นผู้เล่นอื่นจาก town/ " + ents);
-  assert(/3 ในฉาก/.test(await pg.evaluate(() => document.getElementById("tw-cnt").textContent)), "นับ 3 คน");
+  assert(/👥 3/.test(await pg.evaluate(() => document.getElementById("tw-cnt").textContent)), "นับ 3 คน");
   // เดิน/ชน: เดินหน้านาน ๆ ไม่ทะลุกำแพง/กองไฟ • หมุนเปลี่ยนมุม
   const a0 = await tw(pg, "return T.a;"); await pg.keyboard.down("ArrowRight"); await pg.waitForTimeout(500); await pg.keyboard.up("ArrowRight");
   assert((await tw(pg, "return T.a;")) !== a0, "กดหันขวาแล้วมุมเปลี่ยน");
@@ -45,8 +45,8 @@ const prompt = (pg) => pg.evaluate(() => document.getElementById("tw-prompt").te
   await tp(pg, 12, 13.2, 0); await pg.keyboard.down("ArrowUp"); await pg.waitForTimeout(6000); await pg.keyboard.up("ArrowUp");
   pos = await tw(pg, "return [T.x, T.y];"); assert(pos[0] < 23 && pos[0] > 15, "เดินไปทางขวาชนรั้ว " + pos);
   // ส่งตำแหน่งของตัวเองให้คนอื่น
-  await pg.waitForTimeout(700); assert(await pg.evaluate(() => /^\d{1,3},\d{1,3}$/.test(window.__DB.town?.u1 || "")), "เขียน town/u1 เป็น x,y");
-  assert((await pg.evaluate(() => window.__DB.town.u1)) !== undefined, "มีตำแหน่ง");
+  await pg.waitForTimeout(700); assert(await pg.evaluate(() => /^\d{1,3},\d{1,3},\d{1,2},[01]$/.test(window.__DB.town?.safe?.[0]?.u1 || "")), "เขียน town/safe/0/u1 เป็น x,y,h,m");
+  assert((await pg.evaluate(() => window.__DB.town.safe[0].u1)) !== undefined, "มีตำแหน่ง");
   // NPC: หันหามิรา → ข้อความปุ่ม → กดใช้ → เปิดหน้าต่างคุย
   await tp(pg, 7.2, 8.6, Math.PI); await pg.waitForTimeout(400); assert(/มิรา/.test(await prompt(pg)), "ข้อความบอกคุยกับมิรา: " + await prompt(pg));
   assert(await pg.evaluate(() => document.getElementById("tw-act").classList.contains("ready")), "ปุ่มใช้พร้อม");
@@ -61,11 +61,11 @@ const prompt = (pg) => pg.evaluate(() => document.getElementById("tw-prompt").te
   assert(/ประตูค่าย/.test(await prompt(pg)), "ข้อความประตูค่าย: " + await prompt(pg));
   await click(pg, "tw-act"); await pg.waitForTimeout(400); assert(!(await shown(pg, "#tw-root")), "ประตูค่าย = ปิดฉาก");
   assert(await pg.evaluate(() => document.querySelector('.tabbar [data-tab="map"]').classList.contains("on")), "ไปแท็บโซน");
-  await pg.waitForTimeout(300); assert(await pg.evaluate(() => window.__DB.town?.u1 === undefined), "ปิดฉากแล้วลบตำแหน่ง town/u1");
+  await pg.waitForTimeout(300); assert(await pg.evaluate(() => window.__DB.town?.safe?.[0]?.u1 === undefined), "ปิดฉากแล้วลบตำแหน่ง town/u1");
   assert.deepStrictEqual(errs(B), [], "ไม่มี error"); await B.br.close(); console.log("1 เปิด/เดิน/ชน/NPC/ประตู/ส่งตำแหน่ง ✓");
 
   // 2) ธาราปรากฏเฉพาะเมื่อ hcFound • บับเบิลแชท • ออกด้วยปุ่ม ✕
-  B = await mkpage({ seed: { npc: { u1: { tara: { p: 0, d: 0, s: 0, m: 1 << 22, v: 0 } } }, zonePlayers: { safe: { u1: { name: "tester", faction: "human" }, u2: { name: "Bob", faction: "human" } } }, town: { u2: "126,100" } } }); pg = B.pg;
+  B = await mkpage({ seed: { npc: { u1: { tara: { p: 0, d: 0, s: 0, m: 1 << 22, v: 0 } } }, zonePlayers: { safe: { u1: { name: "tester", faction: "human" }, u2: { name: "Bob", faction: "human" } } }, town: { safe: { 0: { u2: "126,100,0,0" } } } } }); pg = B.pg;
   await click(pg, "btn-town"); await pg.waitForTimeout(900);
   ents = await tw(pg, "return T.ents.map(e => e.type + ':' + (e.id || e.uid || ''));"); assert(ents.includes("npc:tara"), "เจอธาราแล้ว → ธารายืนในเต็นท์วิจัย " + ents);
   await tp(pg, 14.5, 11, -Math.PI / 2 + 0.4); await pg.waitForTimeout(300);
@@ -78,9 +78,12 @@ const prompt = (pg) => pg.evaluate(() => document.getElementById("tw-prompt").te
   await click(pg, "tw-x"); await pg.waitForTimeout(200); assert(!(await shown(pg, "#tw-root")), "ปุ่มออกปิดฉาก");
   assert.deepStrictEqual(errs(B), [], "ไม่มี error"); await B.br.close(); console.log("2 ธารา/แชท/ออก ✓");
 
-  // 3) ปุ่มหายนอก Safe Zone และเมื่อ town_on = 0
+  // 3) โซนอื่นมีปุ่ม • คุก/บ่อนไม่มี • town_on = 0 ซ่อน
   B = await mkpage({ zone: "ruins" }); pg = B.pg;
-  assert(await pg.evaluate(() => { const b = document.getElementById("btn-town"); return !b || b.classList.contains("hidden"); }), "นอก Safe Zone ไม่มีปุ่ม");
+  assert(await pg.evaluate(() => { const b = document.getElementById("btn-town"); return !!b && !b.classList.contains("hidden") && /เดินสำรวจ/.test(b.textContent); }), "โซนอื่นมีปุ่มเดินสำรวจ");
+  await B.br.close();
+  B = await mkpage({ zone: "jail" }); pg = B.pg;
+  assert(await pg.evaluate(() => { const b = document.getElementById("btn-town"); return !b || b.classList.contains("hidden"); }), "คุกไม่มีปุ่ม");
   await B.br.close();
   B = await mkpage({ tune: { town_on: 0 } }); pg = B.pg;
   assert(await pg.evaluate(() => { const b = document.getElementById("btn-town"); return !b || b.classList.contains("hidden"); }), "town_on=0 → ซ่อนปุ่ม");

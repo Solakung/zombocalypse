@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1604";
+const APP_VERSION = "2026-10-19.1647";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -1404,6 +1404,7 @@ async function enterZone(z, initial = false, moved = false, opt = {}) {
 
 function logLine(text, cls = "info") {
   try { jrnlAdd(text, cls); } catch { /* บันทึกไม่ได้ก็ข้าม */ }
+  try { twSys(text, cls); } catch { /* ข้าม */ }
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   const el = mk("div", "msg " + cls + fxOnLog(text, cls));
   el.append(mk("div", "bubble", text));
@@ -1413,6 +1414,7 @@ function logLine(text, cls = "info") {
 
 function addChat(key, m) {
   try { townChat(m); } catch { /* ข้าม */ }
+  try { pvChat(m); } catch { /* ข้าม */ }
   const log = $("chat-log"); const near = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   let el;
   const isMe = m.uid === state.uid;
@@ -3341,6 +3343,7 @@ async function attack(targetUid, targetName = "เป้าหมาย") {
 
     if (skId) { state.pvpSkill = null; renderPvpSkillBar(); }
     toast(`${skId ? skd.icon + " " : ""}คุณพุ่งเข้าใส่ ${targetName} (ทอยได้ ${roll})${pkTxt}${pkd > 0 ? ` 🦖 ลูกฝูงงับ +${pkd}` : ""} — รอเขาตอบโต้...`);
+    try { pvBegin({ role: "att", uid: targetUid, name: targetName, fac: state.players?.[targetUid]?.faction }); } catch { /* ข้าม */ }
     watchAttack(targetUid, targetName, w, skId ? skd : null);
   } catch (e) {
     state.pending.delete(targetUid);
@@ -3462,6 +3465,7 @@ async function resolveAttack(key, a) {
     text += a.roll === defRoll ? "เสมอ ไม่มีใครโดน" : `${p.username} ป้องกันได้`; achBump("pdef");
   }
 
+  try { if (pvBegin({ role: "def", uid: key, name: a.fromName, fac: state.players?.[key]?.faction })) pvResult({ k: landed ? "hit" : blocked ? "block" : dodged ? "dodge" : a.roll === defRoll ? "tie" : "def", dmg, dead: landed && newHp === 0, ar: a.roll, dr: defRoll }); } catch { /* ข้าม */ }
   if (packTxt) text += packTxt;
   const chatRef = push(ref(db, "chats/" + state.zone));
   // แก้ไขบักตรงนี้: ใช้ uid ของคนโจมตีเหมือนเดิมแทนการใช้คำว่า "system"
@@ -12065,6 +12069,10 @@ function tuneDefs() {
   rows.push(["mg_str", "ความแรงของโบนัสมินิเกม (% • 100 = เดิม, 0 = ไม่มีผล)", 100, 0, 200, "🎮 มินิเกมค้นลึก"]);
   rows.push(["sc_on", "ฉากค้นลึกแบบเดินในทางเดิน (1 = เปิด, 0 = ปิด → ค้นลึกแบบเดิม • ฝั่งเกมล้วน ไม่ต้อง deploy อะไร)", 1, 0, 1, "🕹️ ฉากค้นลึก"]);
   rows.push(["town_on", "เดินในค่ายที่ Safe Zone (1 = เปิด, 0 = ปิด • ฝั่งเกมล้วน)", 1, 0, 1, "🏘️ เมืองค่าย"]);
+  rows.push(["pv_on", "ฉากปะทะตอนสู้กับผู้เล่น (1 = เปิด, 0 = ปิด • ฝั่งเกมล้วน ไม่กระทบผลต่อสู้)", 1, 0, 1, "⚔️ ฉากปะทะ"]);
+  rows.push(["town_pres", "แสดงตำแหน่งผู้เล่นอื่นในฉากเดินสำรวจ (1 = เปิด, 0 = เดินคนเดียว • 0 = ไม่ส่ง/ไม่ฟังตำแหน่งเลย ประหยัดแบนด์วิทสุด)", 1, 0, 1, "🏘️ เมืองค่าย"]);
+  rows.push(["town_hz", "ช่วงเวลาขั้นต่ำระหว่างการส่งตำแหน่งตอนเลี้ยว (มิลลิวินาที • มาก = ประหยัดแบนด์วิท)", 800, 200, 5000, "🏘️ เมืองค่าย"]);
+  rows.push(["town_rooms", "แบ่งห้องต่อโซน (1 = ทุกคนเห็นกันหมด • 2-9 = แบ่งกลุ่มคนละห้อง คนเยอะจะประหยัดขึ้นมาก)", 1, 1, 9, "🏘️ เมืองค่าย"]);
   rows.push(["px_on", "อวาตาร์พิกเซลที่ผู้เล่นวาดเอง (1 = เปิด, 0 = ปิด • ต้อง deploy rules pxav ก่อนถึงจะบันทึกได้)", 1, 0, 1, "🎨 อวาตาร์พิกเซล"]);
   rows.push(["base_on", "ที่พัก/สถานีตั้งเวลา (1 = เปิด, 0 = ซ่อนปุ่ม • ต้องใช้ rules v32)", 1, 0, 1, "🏠 ที่พัก"]);
   { const g = "📅 สรุปวัน • 🍂 ฤดูกาล • 🤝 พรจากมิตรภาพ";
@@ -12757,6 +12765,9 @@ function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("s
 
 
 
+
+
+
 // ---- 🏘️ เมืองค่ายแบบ Doom + อวาตาร์พิกเซล
 /* =========================================================
    53) 🎨 อวาตาร์พิกเซล (วาดเอง 16×24 • จานสี 16 สี) — ใช้ในเมืองค่ายแบบ Doom (หัวข้อ 54) และวงกลมรูปในแชท
@@ -12945,29 +12956,48 @@ function pxaProfBtn(body) {   // แถวในหน้าต่างตก�
 }
 
 /* =========================================================
-   54) 🏘️ เมืองค่ายแบบ Doom — Safe Zone เดินได้ (มุมมองบุคคลที่หนึ่ง) พร้อม NPC และผู้เล่นคนอื่น
-   - เปิดจากปุ่ม "🏘️ เดินในค่าย" ใต้รายการโซน (เฉพาะอยู่ Safe Zone) • แผนที่ช่อง 24×20 + กล้องหมุนได้ + ท้องฟ้าโพล้เพล้ + กองไฟให้แสง
-   - ฝั่ง client ล้วน: ประตู/เต็นท์/ป้าย กดแล้วเรียกหน้าต่างเดิม (ตลาด/ภารกิจ/ที่พัก/คุย NPC) • NPC ใช้ npcOpen() เดิมทั้งหมด
-   - ธารา: เต็นท์วิจัยมีอยู่ในแผนที่ แต่จะมีตัวยืนอยู่เมื่อ hcFound() เท่านั้น (เงื่อนไขเดียวกับการ์ด "คนในค่าย") — ไม่โผล่ก่อนเนื้อเรื่อง
-   - 55) ผู้เล่นคนอื่น: ตำแหน่งที่ town/{uid} = "x,y" (หน่วย 0.1 ช่อง) ส่งสูงสุด ~2 ครั้ง/วินาที + หัวใจทุก 7 วินาที • ลบเมื่อออก/หลุดสัญญาณ (onDisconnect) • เป็นภาพประกอบล้วน ไม่มีผลต่อเกมเพลย์
-     ชื่อ/ฝ่ายมาจาก state.players (zonePlayers/safe) • ข้อความแชทโซนเดียวกันขึ้นเป็นบับเบิลเหนือหัว (hook townChat ใน addChat)
-   - ถ้า rules ยังไม่ deploy: เดินคนเดียวได้ปกติ (ส่งตำแหน่งไม่ได้ 3 ครั้งแล้วหยุดลอง) • ปิดด้วย tune town_on = 0
+   54) 🏘️ โลกเดินได้ (มุมมองบุคคลที่หนึ่งแบบพิกเซล) — ค่าย Safe Zone วาดมือ + ทุกโซนอื่นสร้างอัตโนมัติ (ยกเว้นคุก/บ่อน)
+   - เปิดจากปุ่มใต้รายการโซน ("🏘️ เดินในค่าย" ที่ Safe Zone / "🚶 เดินสำรวจ" ที่โซนอื่น) • tune town_on = 0 ปิดทั้งระบบ
+   - เอนจินเดียวกันทุกโซน: "โลก" (world) = แผนที่ช่อง + พื้นผิว + ท้องฟ้า(นอกอาคาร)/เพดาน(ในอาคาร) + หมอก + แสง + ประตู/จุดใช้งาน
+     • ค่าย: แผนที่ 24×20 วาดมือ มี NPC (npcOpen เดิม) ประตูตลาด/ภารกิจ/ที่พัก และกองไฟ — ธาราโผล่เมื่อ hcFound() เท่านั้น (เต็นท์ว่างก่อนหน้านั้น)
+     • โซนอื่น: แผนที่ 28×22 สร้างจากชื่อโซนแบบคงที่ (ทุกเครื่องได้แผนที่เดียวกัน) ธีมสี/พื้นผิวจาก SCN_TH (หัวข้อ 52) • ลัง = กดค้นหา (ปุ่มค้นหาเดิม) • ทางออก = ปิดฉากกลับไปเลือกโซน
+   - เจอผู้เล่นคนอื่น: กด ✋ ที่ตัวเขา → ⚔️ โจมตี (เรียก attack() เดิม ตรวจเงื่อนไข/คูลดาวน์/โล่เหมือนเดิมทุกอย่าง) หรือ 👋 ทักทาย
+   - 55) ตำแหน่งผู้เล่น (ประหยัดแบนด์วิท): town/{โซน}/{ห้อง}/{uid} = "x,y,h,m" (x,y หน่วย 0.1 ช่อง • h ทิศ 0-23 ทีละ 15° • m 1=กำลังเดิน)
+     • ส่งเฉพาะ "เริ่มเดิน/หยุด/เปลี่ยนทิศ" (ฝั่งคนดูต่อเส้นทางเองด้วย h) + ปรับแก้ทุก 3 วินาทีระหว่างเดินตรง + หัวใจทุก 20 วินาทีตอนยืน — ไม่ได้ส่งทุกครึ่งวินาที
+     • ไม่ส่ง/ไม่ฟังเมื่อไม่มีใครอยู่โซนเดียวกัน • แท็บถูกซ่อน > 15 วินาที = เลิกฟัง+ลบตำแหน่งตัวเอง • แยกตามโซน และแบ่งห้องได้ (tune town_rooms)
+     • tune: town_pres (0 = ปิดการส่ง/ฟังตำแหน่ง เดินคนเดียว), town_hz (ms ขั้นต่ำระหว่างการส่ง), town_rooms (1-9 ห้อง/โซน)
+     • เป็นภาพประกอบล้วน ไม่มีผลต่อการตัดสินการต่อสู้ (ผลมาจาก attack()/resolveAttack() เดิม)
+   - ถ้า rules ยังไม่ deploy: เดินคนเดียวได้ปกติ (ส่งตำแหน่งไม่ได้ 3 ครั้งแล้วหยุดลอง) • ข้อความแชท/บรรทัดผลค้นหาขึ้นแถบล่างของฉาก (hook townChat/twSys)
    ========================================================= */
-const TW_W = 160, TW_H = 136, TW_MW = 24, TW_MH = 20, TW_SKY_W = 256, TW_SKY_H = 80;
+const TW_W = 160, TW_H = 136, TW_SKY_W = 256, TW_SKY_H = 80, TW_NOGO = ["jail", "casino"], TW_SPEED = 2.3;
 const TW_DOORS = {
   G: { label: "🚪 ประตูค่าย — ออกไปข้างนอก", act: "gate" }, M: { label: "🏪 ตลาด", act: "btn-market" }, Q: { label: "📜 กระดานภารกิจ", act: "btn-quests" }, H: { label: "🏠 ที่พัก", act: "btn-base" },
   m: { label: "⚕️ เต็นท์พยาบาล", act: "npc:mira" }, r: { label: "🧪 เต็นท์วิจัย", act: "npc:tara" }
 };
+const TW_ZDOORS = { X: { label: "🚪 ทางออก — กลับไปเลือกโซน", act: "gate" }, c: { label: "📦 ค้นหาที่นี่", act: "btn-scavenge" } };
+// ธีมต่อโซน: out = นอกอาคาร (ท้องฟ้า) / ไม่ใช่ = ในอาคาร (เพดาน) • sky = [บน, กลาง, ขอบฟ้า] • light = สีแสงโคมในอาคาร
+const TW_ZSTYLE = {
+  ruins: { out: true, sky: [[44, 36, 70], [196, 100, 74], [240, 170, 100]], sil: [34, 26, 34], win: true },
+  forest: { out: true, sky: [[14, 30, 50], [60, 110, 90], [186, 196, 120]], sil: [14, 36, 24], trees: true },
+  port: { out: true, sky: [[20, 32, 74], [70, 120, 170], [226, 176, 136]], sil: [26, 34, 50], win: true },
+  factory: { out: true, sky: [[40, 30, 38], [150, 90, 60], [222, 150, 80]], sil: [34, 26, 24] },
+  base: { out: true, sky: [[28, 38, 60], [120, 132, 150], [212, 192, 152]], sil: [34, 40, 36] },
+  mall: { out: false, light: [90, 70, 30] }, hospital: { out: false, light: [30, 80, 70] }, police: { out: false, light: [24, 36, 90] },
+  tunnel: { out: false, light: [96, 52, 12] }, lab: { out: false, light: [20, 70, 84] },
+  _: { out: true, sky: [[30, 30, 60], [120, 100, 100], [200, 160, 120]], sil: [30, 26, 30] }
+};
 const TW = {
-  on: false, x: 12, y: 13.2, a: -Math.PI / 2, keys: { f: 0, b: 0, l: 0, r: 0 }, ents: [], now: 0, last: 0, bob: 0, bobAmp: 0, bobY: 0, dragTurn: 0, map: null, T: null, sky: null,
-  lbl: new Map(), proj: [], fire: { x: 12, y: 10 }, tgt: null, tgtT: 0, mmT: 0, npcSig: "", pres: { off: null, last: "", lastT: 0, tog: 0, fail: 0 }, broken: false
+  on: false, zone: "", W: null, worlds: {}, x: 12, y: 13.2, a: -Math.PI / 2, keys: { f: 0, b: 0, l: 0, r: 0 }, ents: [], now: 0, last: 0, bob: 0, bobAmp: 0, bobY: 0, dragTurn: 0, mv: 0,
+  lbl: new Map(), proj: [], tgt: null, mmT: 0, npcSig: "", broken: false,
+  pres: { off: null, path: "", sent: "", lastT: 0, mv: 0, hd: -1, tog: 0, fail: 0, alone: true, paused: false, hidT: 0, started: false }
 };
 const twOn = () => T("town_on", 1) === 1;
-try { Object.defineProperty(window, "__town", { value: { TW, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
+const twCell = (W, mx, my) => (mx < 0 || my < 0 || mx >= W.mw || my >= W.mh ? "#" : W.map[my][mx]);
+// ---------- แผนที่ค่าย (วาดมือ) ----------
 function twMapBuild() {
-  const g = Array.from({ length: TW_MH }, () => Array(TW_MW).fill("."));
+  const g = Array.from({ length: 20 }, () => Array(24).fill("."));
   const box = (x0, y0, x1, y1, c) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = c; };
-  box(0, 0, TW_MW - 1, 0, "#"); box(0, TW_MH - 1, TW_MW - 1, TW_MH - 1, "#"); box(0, 0, 0, TW_MH - 1, "#"); box(TW_MW - 1, 0, TW_MW - 1, TW_MH - 1, "#");
+  box(0, 0, 23, 0, "#"); box(0, 19, 23, 19, "#"); box(0, 0, 0, 19, "#"); box(23, 0, 23, 19, "#");
   box(10, 0, 13, 0, "G");
   box(1, 6, 4, 11, "t"); g[8][4] = "m"; g[9][4] = "m";
   box(19, 6, 22, 11, "t"); g[8][19] = "r"; g[9][19] = "r";
@@ -12977,12 +13007,57 @@ function twMapBuild() {
   [[2, 2], [3, 2], [20, 2], [21, 2], [2, 13], [21, 13], [8, 5], [15, 5]].forEach(([x, y]) => { g[y][x] = "c"; });
   return g.map((r) => r.join(""));
 }
-const twCell = (mx, my) => (mx < 0 || my < 0 || mx >= TW_MW || my >= TW_MH ? "#" : TW.map[my][mx]);
+// ---------- แผนที่โซนอื่น (สร้างจากชื่อโซน → คงที่ทุกเครื่อง) ----------
+// ผัง: ถนน/ทางเดินกว้าง 2-3 ช่องคั่นระหว่าง "ล็อต" 3×3 → เดินถึงกันทุกจุดเสมอ • ล็อตเป็น อาคาร/ลานมีกำแพง/ซากพัง/ที่โล่ง • ลังวางชิดผนังเท่านั้น (ไม่ปิดทาง)
+function twRngMk(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function twGenMap(zone) {
+  const MW = 28, MH = 22, R = twRngMk(pxaHash("zw:" + zone)), g = Array.from({ length: MH }, () => Array(MW).fill("."));
+  for (let x = 0; x < MW; x++) { g[0][x] = "#"; g[MH - 1][x] = "#"; }
+  for (let y = 0; y < MH; y++) { g[y][0] = "#"; g[y][MW - 1] = "#"; }
+  for (let x = 10; x <= 12; x++) g[0][x] = "X";
+  const cols = [[4, 9], [13, 18], [22, 25]], rows = [[3, 6], [9, 12], [15, 18]];
+  for (const [y0, y1] of rows) for (const [x0, x1] of cols) {
+    const k = R(), put = (x, y, c) => { g[y][x] = c; };
+    if (k < 0.16) {   // ที่โล่ง: เสา/ลังกลางลาน
+      put(x0 + 1 + Math.floor(R() * (x1 - x0 - 1)), y0 + 1, "p"); if (R() < 0.6) put(x1 - 1, y1 - 1, "p"); if (R() < 0.5) put(x0 + 2, y1 - 1, "c");
+    } else if (k < 0.55) {   // อาคาร
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) put(x, y, "b");
+      const side = Math.floor(R() * 4); if (side === 0) put(x0 + 1 + Math.floor(R() * (x1 - x0 - 1)), y1, "d"); else if (side === 1) put(x0 + 1 + Math.floor(R() * (x1 - x0 - 1)), y0, "d"); else if (side === 2) put(x0, y0 + 1 + Math.floor(R() * (y1 - y0 - 1)), "d"); else put(x1, y0 + 1 + Math.floor(R() * (y1 - y0 - 1)), "d");
+    } else if (k < 0.8) {   // ลานมีกำแพง + ช่องทางเข้า 2 ช่อง
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (x === x0 || x === x1 || y === y0 || y === y1) put(x, y, "b");
+      const gx = x0 + 1 + Math.floor(R() * (x1 - x0 - 2)); put(gx, y1, "."); put(gx + 1 > x1 - 1 ? gx - 1 : gx + 1, y1, ".");
+      put(x0 + 1 + Math.floor(R() * (x1 - x0 - 1)), y0 + 1, "c");
+    } else {   // ซากพัง
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (R() < 0.62) put(x, y, R() < 0.2 ? "p" : "b");
+    }
+  }
+  // ลังริมทาง: ติดผนังเท่านั้น และห่างกัน ≥ 2 ช่อง (ไม่ปิดทาง) • เว้นจุดเกิด/ทางออก
+  const crates = [], cand = [];
+  for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) {
+    if (g[y][x] !== "." || (x >= 9 && x <= 13 && ((y >= 6 && y <= 9) || y <= 2))) continue;
+    const near = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => "#bp".includes(g[y + dy][x + dx])); if (near) cand.push([x, y]);
+  }
+  for (let i = cand.length - 1; i > 0; i--) { const j = Math.floor(R() * (i + 1)); [cand[i], cand[j]] = [cand[j], cand[i]]; }
+  for (const [x, y] of cand) { if (crates.length >= 14) break; if (crates.some(([a, b]) => Math.abs(a - x) < 3 && Math.abs(b - y) < 3)) continue; g[y][x] = "c"; crates.push([x, y]); }
+  // อุดช่องว่างที่เดินไม่ถึงจากจุดเกิด (ซากพังสุ่มอาจปิดล้อมช่องเดี่ยว ๆ) → กลายเป็นกำแพง • ลังที่ไม่ติดทางเดินก็เป็นกำแพง
+  const seen = new Set(["11,7"]), q = [[11, 7]];
+  while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = x + dx, b = y + dy, k = a + "," + b; if (g[b] && g[b][a] === "." && !seen.has(k)) { seen.add(k); q.push([a, b]); } } }
+  for (let y = 1; y < MH - 1; y++) for (let x = 1; x < MW - 1; x++) {
+    const c = g[y][x];
+    if (c === "." && !seen.has(x + "," + y)) g[y][x] = "b";
+    else if (c === "c" && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has(x + dx + "," + (y + dy)))) g[y][x] = "b";
+  }
+  return g.map((r) => r.join(""));
+}
+function twReach(W, sx, sy) {   // ช่องว่างที่เดินถึงจากจุดเกิด (BFS) — ใช้ตรวจแผนที่ในเทสต์
+  const seen = new Set([sx + "," + sy]), q = [[sx, sy]];
+  while (q.length) { const [x, y] = q.pop(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = x + dx, b = y + dy, k = a + "," + b; if (!seen.has(k) && twCell(W, a, b) === ".") { seen.add(k); q.push([a, b]); } } }
+  return seen;
+}
 // ---------- พื้นผิว ----------
-function twTexs() {
-  if (TW.T) return TW.T;
+function twCampTex() {
   const tex = scnTex, mul = scnMul, nz = scnNz;
-  return (TW.T = {
+  return {
     "#": scnPanel([122, 112, 92], [54, 50, 44], 3), b: scnBrick([150, 92, 70], [60, 52, 48], 5), c: scnCrateTex(),
     t: tex((x, y) => { let k = 0.86 + 0.22 * nz(x, y, 61) - ((x & 7) === 0 ? 0.18 : 0); if (y > 25) k *= 0.85 - 0.01 * (y - 25); if (y === 0 || y === 31) k *= 0.7; return mul([118, 126, 86], k); }),
     G: tex((x, y) => {
@@ -13027,22 +13102,27 @@ function twTexs() {
     }),
     dirt: tex((x, y) => { let k = 0.8 + 0.3 * nz(x, y, 69); if (nz(x >> 1, y >> 1, 70) > 0.88) k *= 1.3; if (nz(x, y, 71) > 0.93) return [90, 84, 78]; return mul([112, 88, 62], k); }),
     plaza: scnConc([128, 122, 112], true)
-  });
+  };
 }
-function twSkyBuild() {
-  if (TW.sky) return TW.sky;
-  const SW = TW_SKY_W, SH = TW_SKY_H, a = new Uint32Array(SW * SH), nz = scnNz;
+const twExitTex = () => scnTex((x, y) => {
+  if (x < 2 || x > 29) return [50, 50, 56]; if (y < 3) return [60, 150, 70];
+  const d = Math.abs(x - 15.5); return y > 6 && y < 28 && (y + d * 0.9) % 12 < 3 ? [90, 230, 120] : scnMul([14, 26, 18], 0.8 + 0.4 * scnNz(x, y, 81));
+});
+const twSkyCache = {};
+function twSkyBuild(key, cols, sil, o) {
+  if (twSkyCache[key]) return twSkyCache[key];
+  const SW = TW_SKY_W, SH = TW_SKY_H, a = new Uint32Array(SW * SH), nz = scnNz, s0 = pxaHash(key) & 255;
   const lerp = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
-  const top = [34, 34, 86], mid = [198, 92, 80], low = [250, 170, 96];
+  const [top, mid, low] = cols;
   for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
     const t = y / (SH - 1); let c = t < 0.62 ? lerp(top, mid, t / 0.62) : lerp(mid, low, (t - 0.62) / 0.38);
-    if (y < 30 && nz(x, y, 72) > 0.985) c = [235, 235, 255];
-    if (y > 16 && y < 46 && nz(x >> 3, y >> 2, 75) > 0.72) c = lerp(c, [255, 190, 140], 0.45);
-    const h = 5 + Math.floor(14 * nz(x >> 3, 5, 76)) + (nz(x >> 4, 9, 77) > 0.7 ? 8 : 0);
-    if (y >= SH - 1 - h) { c = [30, 22, 38]; if ((x & 3) === 1 && (y & 3) === 1 && nz(x, y, 78) > 0.82) c = [250, 200, 90]; }
+    if (y < 30 && nz(x, y, s0 + 72) > 0.985) c = [235, 235, 255];
+    if (y > 16 && y < 46 && nz(x >> 3, y >> 2, s0 + 75) > 0.72) c = lerp(c, [255, 190, 140], 0.45);
+    const h = o && o.trees ? 8 + Math.floor(7 * Math.abs(Math.sin(x * 0.42 + nz(x >> 2, 1, s0) * 6))) + (nz(x >> 4, 9, s0 + 77) > 0.7 ? 4 : 0) : 5 + Math.floor(14 * nz(x >> 3, 5, s0 + 76)) + (nz(x >> 4, 9, s0 + 77) > 0.7 ? 8 : 0);
+    if (y >= SH - 1 - h) { c = sil; if (o && o.win && (x & 3) === 1 && (y & 3) === 1 && nz(x, y, s0 + 78) > 0.82) c = [250, 200, 90]; }
     a[y * SW + x] = scnPack(c[0], c[1], c[2]);
   }
-  return (TW.sky = a);
+  return (twSkyCache[key] = a);
 }
 function twFireImg(f) {
   const w = 12, h = 16, px = new Uint32Array(w * h);
@@ -13058,13 +13138,33 @@ function twFireImg(f) {
   for (let y = 12; y < 16; y++) for (let x = 1; x < 11; x++) { const e = x === 1 || x === 10 || y === 15; px[y * w + x] = e ? scnPack(40, 26, 12) : scnPack(98 + (x & 1) * 18, 62, 30); }
   return { w, h, px };
 }
-// ---------- สถานะ/ตัวละครในฉาก ----------
+// ---------- สร้าง "โลก" ----------
+function twWorld(zone) {
+  if (TW.worlds[zone]) return TW.worlds[zone];
+  if (zone === "safe") {
+    const t = twCampTex();
+    return (TW.worlds.safe = { id: "safe", camp: true, map: twMapBuild(), mw: 24, mh: 20, tex: t, floorTex: null, floor: (fx, fy) => (Math.abs(fx - 12) < 4.2 && Math.abs(fy - 10) < 3.6 ? t.plaza : t.dirt), sky: twSkyBuild("camp", [[34, 34, 86], [198, 92, 80], [250, 170, 96]], [30, 22, 38], { win: true }), ceil: null, fog: [120, 84, 70], fall: 0.05, minSh: 0.3, lights: [{ x: 12, y: 10, r2: 40, c: [130, 72, 18], fire: true }], doors: TW_DOORS, spawn: { x: 12, y: 13.2, a: -Math.PI / 2 } });
+  }
+  const st = TW_ZSTYLE[zone] || TW_ZSTYLE._, tx = scnTexs(zone), th = tx.th, seed = pxaHash(zone) & 255;
+  const gen = { brick: scnBrick, tile: scnTile, panel: scnPanel, stone: scnStone }[th.w[0]] || scnPanel;
+  const tex = { "#": tx.wall, b: gen(scnMul(th.w[1], 0.8), th.w[2], seed + 11), p: scnStone([112, 108, 100], [40, 38, 36], seed + 3), c: tx.crate, d: tx.door, X: twExitTex() };
+  const map = twGenMap(zone), lows = st.sky ? st.sky[2] : [90, 90, 90];
+  return (TW.worlds[zone] = {
+    id: zone, camp: false, map, mw: 28, mh: 22, tex, floorTex: tx.floor, floor: null,
+    sky: st.out ? twSkyBuild("z:" + zone, st.sky, st.sil, { win: st.win, trees: st.trees }) : null, ceil: st.out ? null : tx.ceil,
+    fog: st.out ? [lows[0] * 0.6 | 0, lows[1] * 0.55 | 0, lows[2] * 0.55 | 0] : th.fog, fall: st.out ? 0.045 : 0.085, minSh: st.out ? 0.3 : 0.18,
+    lights: st.out ? [] : [[11, 8], [2, 14], [20, 14]].map(([x, y]) => ({ x: x + 0.5, y: y + 0.5, r2: 34, c: st.light || [70, 60, 40] })),
+    doors: TW_ZDOORS, spawn: { x: 11.5, y: 7.9, a: -Math.PI / 2 }
+  });
+}
+// ---------- ตัวละครในฉาก ----------
 function twNpcSync() {
+  const S = TW; if (!S.W || !S.W.camp) return;
   const want = ["kane", "mira"]; if (hcFound()) want.push(HC_ID);
-  const sig = want.join(","); if (sig === TW.npcSig) return; TW.npcSig = sig;
-  TW.ents = TW.ents.filter((e) => e.type !== "npc");
+  const sig = want.join(","); if (sig === S.npcSig) return; S.npcSig = sig;
+  S.ents = S.ents.filter((e) => e.type !== "npc");
   const pos = { kane: [11.9, 2.1], mira: [5.7, 8.6], tara: [17.9, 8.6] };
-  want.forEach((id) => TW.ents.push({ type: "npc", id, x: pos[id][0], y: pos[id][1], img: pxaImg(PXA_NPC[id]()), h: 0.84, r: 0.32, act: "npc", nm: NPC_META[id].name, icon: NPC_META[id].icon }));
+  want.forEach((id) => S.ents.push({ type: "npc", id, x: pos[id][0], y: pos[id][1], img: pxaImg(PXA_NPC[id]()), h: 0.84, r: 0.32, act: "npc", nm: NPC_META[id].name, icon: NPC_META[id].icon, solid: 0.32 }));
 }
 function twSelfImg() {
   const cv = $("tw-me"); if (!cv || !state.profile) return;
@@ -13072,35 +13172,43 @@ function twSelfImg() {
   draw(pxa.cache.get(state.uid)?.v); pxaGet(state.uid).then((hex) => { if (hex) draw(hex); });
 }
 function twNewPlayer(uid, tx, ty) {
-  const e = { type: "player", uid, x: tx, y: ty, tx, ty, raw: "", seen: Date.now(), img: pxaImg(pxaDefault(uid, "human")), h: 0.8, r: 0.28, act: "player", nm: "", hide: true, facSet: false, custom: false };
+  const e = { type: "player", uid, x: tx, y: ty, tx, ty, hd: 0, mv: 0, t0: performance.now(), seen: Date.now(), img: pxaImg(pxaDefault(uid, "human")), h: 0.8, r: 0.28, act: "player", nm: "", hide: true, facSet: false, custom: false };
   if (pxaOn()) pxaGet(uid).then((hex) => { if (hex) { e.img = pxaImg(hex); e.custom = true; } });
   return e;
 }
+const twSolid = (W, x, y) => twCell(W, Math.floor(x), Math.floor(y)) !== ".";
 function twEntTick(dt, now) {
-  const pl = state.players || {};
-  for (const e of TW.ents) {
+  const S = TW, pl = state.players || {}, tn = performance.now();
+  for (const e of S.ents) {
     if (e.type !== "player") continue;
-    const p = pl[e.uid]; e.hide = !p || Date.now() - e.seen > 30000; e.nm = p?.name || "";
+    const p = pl[e.uid]; e.hide = !p || Date.now() - e.seen > 45000; e.nm = p?.name || "";
     if (p && !e.facSet) { e.facSet = true; e.fac = p.faction; if (!e.custom) e.img = pxaImg(pxaDefault(e.uid, p.faction)); }
-    const dx = e.tx - e.x, dy = e.ty - e.y, d = Math.hypot(dx, dy);
-    e.moving = d > 0.05; if (d > 3) { e.x = e.tx; e.y = e.ty; } else if (d > 0.01) { const k = Math.min(1, dt * 6); e.x += dx * k; e.y += dy * k; }
+    // ต่อเส้นทางจากข้อความล่าสุด: กำลังเดิน (m=1) → เดินต่อไปตามทิศ h ไม่เกิน 3.5 วินาที แล้วค่อยค่อยหยุด • ไม่ทะลุกำแพง
+    const age = (tn - e.t0) / 1000; let gx = e.tx, gy = e.ty;
+    if (e.mv && age < 3.5) {
+      const ang = (e.hd * Math.PI) / 12, st = 12, sx = Math.cos(ang) * TW_SPEED * age / st, sy = Math.sin(ang) * TW_SPEED * age / st;
+      for (let i = 0; i < st; i++) { if (!twSolid(S.W, gx + sx, gy)) gx += sx; if (!twSolid(S.W, gx, gy + sy)) gy += sy; }
+    }
+    e.moving = !!e.mv && age < 3.5;
+    const dx = gx - e.x, dy = gy - e.y, d = Math.hypot(dx, dy);
+    if (d > 4) { e.x = gx; e.y = gy; } else if (d > 0.01) { const k = Math.min(1, dt * 8); e.x += dx * k; e.y += dy * k; }
     if (e.bub && now > e.bubT) e.bub = "";
   }
 }
 // ---------- ชน/เดิน ----------
 function twBlocked(x, y) {
-  const r = 0.22;
-  for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) if (twCell(Math.floor(x + ox), Math.floor(y + oy)) !== ".") return true;
-  if (Math.hypot(x - TW.fire.x, y - TW.fire.y) < 0.55) return true;
-  for (const e of TW.ents) if (e.type === "npc" && Math.hypot(x - e.x, y - e.y) < e.r + 0.18) return true;
+  const S = TW, r = 0.22;
+  for (const [ox, oy] of [[-r, -r], [r, -r], [-r, r], [r, r]]) if (twCell(S.W, Math.floor(x + ox), Math.floor(y + oy)) !== ".") return true;
+  for (const e of S.ents) if (e.solid && Math.hypot(x - e.x, y - e.y) < e.solid + 0.18) return true;
   return false;
 }
 function twMove(dx, dy) { const S = TW; if (!twBlocked(S.x + dx, S.y)) S.x += dx; if (!twBlocked(S.x, S.y + dy)) S.y += dy; }
 function twStep(dt) {
   const S = TW, k = S.keys, red = scnReduce();
   S.a += (k.r - k.l) * 2.3 * dt + S.dragTurn; S.dragTurn = 0;
-  const mv = k.f - k.b;
-  if (mv) { const sp = 2.3 * dt * mv * (mv < 0 ? 0.7 : 1); twMove(Math.cos(S.a) * sp, Math.sin(S.a) * sp); S.bob += dt * 9; S.bobAmp = Math.min(1, S.bobAmp + dt * 6); } else S.bobAmp = Math.max(0, S.bobAmp - dt * 5);
+  const mv = k.f - k.b, x0 = S.x, y0 = S.y;
+  if (mv) { const sp = TW_SPEED * dt * mv * (mv < 0 ? 0.7 : 1); twMove(Math.cos(S.a) * sp, Math.sin(S.a) * sp); S.bob += dt * 9; S.bobAmp = Math.min(1, S.bobAmp + dt * 6); } else S.bobAmp = Math.max(0, S.bobAmp - dt * 5);
+  S.mv = mv && Math.hypot(S.x - x0, S.y - y0) > 0.0005 ? mv : 0;   // ชนผนังจนขยับไม่ได้ = ไม่นับว่าเดิน
   S.bobY = red ? 0 : Math.sin(S.bob * 2) * 1.6 * S.bobAmp;
   twEntTick(dt, S.now); twPresTick();
 }
@@ -13115,50 +13223,69 @@ function twTarget() {
   }
   if (best) return best;
   for (let t = 0.3; t <= 1.7; t += 0.1) {
-    const c = twCell(Math.floor(S.x + dx * t), Math.floor(S.y + dy * t));
-    if (c !== ".") { const D = TW_DOORS[c]; if (D) return { kind: "door", c, def: D, d: t }; break; }
+    const c = twCell(S.W, Math.floor(S.x + dx * t), Math.floor(S.y + dy * t));
+    if (c !== ".") { const D = S.W.doors[c]; if (D) return { kind: "door", c, def: D, d: t }; break; }
   }
   return null;
 }
-const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? t.def.label : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `👋 ทักทาย ${t.e.nm || "ผู้เล่น"}`);
+const twTgtLabel = (t) => (!t ? "" : t.kind === "door" ? t.def.label : t.e.type === "npc" ? `${t.e.icon} คุยกับ${t.e.nm}` : `🧍 ${t.e.nm || "ผู้เล่น"}`);
+function S_keysOff() { TW.keys.f = TW.keys.b = TW.keys.l = TW.keys.r = 0; document.querySelectorAll("#tw-root .tw-dp button.on").forEach((b) => b.classList.remove("on")); }
+function twPop(hide) { const p = $("tw-pop"); if (p) { p.classList.toggle("hidden", !!hide); if (hide) p.textContent = ""; } }
+function twPlayerMenu(e) {   // กด ✋ ที่ผู้เล่นอื่น: โจมตี (ตรวจเงื่อนไขใน attack() เดิม) / ทักทาย / (สตาฟ) ลบอวาตาร์
+  const p = $("tw-pop"); if (!p) return; p.textContent = ""; p.classList.remove("hidden");
+  p.append(mk("b", "", `${e.fac === "zombie" ? "🧟" : "🧍"} ${e.nm || "ผู้เล่น"}`));
+  const canFight = state.zone !== "safe" || (typeof wallBroken === "function" && wallBroken());
+  if (canFight) { const left = Math.ceil(attackCooldownLeft() / 1000), b = btn(left > 0 ? `⚔️ โจมตี (พัก ${left})` : "⚔️ โจมตี", () => { twPop(true); attack(e.uid, e.nm || "เป้าหมาย"); }, "btn danger mini"); b.disabled = left > 0; p.append(b); }
+  p.append(btn("👋 โบกมือทักทาย", () => { twPop(true); sendChat("/me โบกมือทักทาย " + (e.nm || "")).catch(() => {}); }, "btn ghost mini"));
+  if (isStaff() && e.uid) p.append(btn("🗑️ ลบอวาตาร์", () => { twPop(true); if (!confirm(`ลบอวาตาร์พิกเซลของ ${e.nm}?`)) return; remove(ref(db, "pxav/" + e.uid)).then(() => { pxa.cache.set(e.uid, { t: Date.now(), v: null }); e.custom = false; e.img = pxaImg(pxaDefault(e.uid, e.fac)); toast("ลบแล้ว"); }).catch((er) => toast(errMsg(er))); }, "btn ghost mini"));
+  p.append(btn("ปิด", () => twPop(true), "btn ghost mini"));
+}
 function twAct() {
+  const pop = $("tw-pop"); if (pop && !pop.classList.contains("hidden")) return twPop(true);
   const t = twTarget(); if (!t) return toast("เดินไปหาประตู คน หรือป้าย แล้วกดอีกครั้ง");
   S_keysOff();
-  if (t.kind === "ent") {
-    if (t.e.type === "npc") return npcOpen(t.e.id);
-    if (isStaff() && t.e.uid && confirm(`ลบอวาตาร์พิกเซลของ ${t.e.nm}?\n(ตกลง = ลบ • ยกเลิก = แค่โบกมือทักทาย)`)) { remove(ref(db, "pxav/" + t.e.uid)).then(() => { pxa.cache.set(t.e.uid, { t: Date.now(), v: null }); t.e.custom = false; t.e.img = pxaImg(pxaDefault(t.e.uid, t.e.fac)); toast("ลบแล้ว"); }).catch((er) => toast(errMsg(er))); return; }
-    return sendChat("/me โบกมือทักทาย " + (t.e.nm || "")).catch(() => {});
-  }
+  if (t.kind === "ent") { if (t.e.type === "npc") return npcOpen(t.e.id); return twPlayerMenu(t.e); }
   const a = t.def.act;
   if (a === "gate") { twClose(); setTab("map"); return toast("เลือกโซนปลายทางจากรายการโซน"); }
   if (a.startsWith("npc:")) { const id = a.slice(4); if (id === HC_ID && !hcFound()) return toast("เต็นท์นี้ว่างเปล่า… ยังไม่มีใครอยู่"); return npcOpen(id); }
   const b = $(a); if (b && !b.hidden && !b.classList.contains("hidden")) b.click(); else toast("ฟีเจอร์นี้ยังไม่เปิดใช้งาน");
 }
-function S_keysOff() { TW.keys.f = TW.keys.b = TW.keys.l = TW.keys.r = 0; document.querySelectorAll("#tw-root .tw-dp button.on").forEach((b) => b.classList.remove("on")); }
-// ---------- เรนเดอร์ ----------
-const twSh = (d) => Math.max(0.3, Math.min(1, 1.12 - d * 0.05));
-function twDraw() {
-  const S = TW, W = TW_W, H = TW_H, buf = S.buf, zb = S.zb, T = S.T, now = S.now, SK = S.sky;
+// ---------- เรนเดอร์ (ใช้ร่วมกับฉากปะทะ: S = ตัวแปรสถานะที่มี W/x/y/a/ents/buf/zb/ctx/id/colAng/now/bobY/proj) ----------
+function twDraw(S) {
+  const W = TW_W, H = TW_H, buf = S.buf, zb = S.zb, WD = S.W, now = S.now, SK = WD.sky, CE = WD.ceil, L = WD.lights, nl = L.length;
+  const fr = WD.fog[0], fg = WD.fog[1], fb = WD.fog[2], fall = WD.fall, minSh = WD.minSh, sh = (d) => Math.max(minSh, Math.min(1, 1.12 - d * fall));
   const dirX = Math.cos(S.a), dirY = Math.sin(S.a), plX = -dirY * 0.66, plY = dirX * 0.66, px = S.x, py = S.y, hor = (H >> 1) + Math.round(S.bobY || 0);
-  const fl = 0.9 + 0.1 * Math.sin(now / 90) * Math.sin(now / 230 + 1), fx0 = S.fire.x, fy0 = S.fire.y;
-  const fr = 120, fg = 84, fb = 70;   // หมอกโพล้เพล้ไกล ๆ
-  const glow = (wx, wy) => { const d2 = (wx - fx0) * (wx - fx0) + (wy - fy0) * (wy - fy0); return d2 < 40 ? (1 - d2 / 40) * fl : 0; };
-  // ท้องฟ้า
-  for (let x = 0; x < W; x++) {
-    const u = (((S.a + S.colAng[x]) / (Math.PI * 2)) % 1 + 1) % 1, su = Math.floor(u * TW_SKY_W) % TW_SKY_W;
-    for (let y = 0; y <= hor && y < H; y++) { const sy = Math.max(0, Math.min(TW_SKY_H - 1, TW_SKY_H - 1 - (hor - y))); buf[y * W + x] = SK[sy * TW_SKY_W + su]; }
+  const fl = 0.9 + 0.1 * Math.sin(now / 90) * Math.sin(now / 230 + 1);
+  let gr = 0, gg = 0, gb = 0;
+  const glowAt = (wx, wy) => { gr = gg = gb = 0; for (let i = 0; i < nl; i++) { const l = L[i], d2 = (wx - l.x) * (wx - l.x) + (wy - l.y) * (wy - l.y); if (d2 < l.r2) { const k = (1 - d2 / l.r2) * (l.fire ? fl : 1); gr += l.c[0] * k; gg += l.c[1] * k; gb += l.c[2] * k; } } };
+  const put = (i, r, g, b) => { buf[i] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r); };
+  // ท้องฟ้า / เพดาน
+  if (SK) {
+    for (let x = 0; x < W; x++) {
+      const u = (((S.a + S.colAng[x]) / (Math.PI * 2)) % 1 + 1) % 1, su = Math.floor(u * TW_SKY_W) % TW_SKY_W;
+      for (let y = 0; y <= hor && y < H; y++) { const sy = Math.max(0, Math.min(TW_SKY_H - 1, TW_SKY_H - 1 - (hor - y))); buf[y * W + x] = SK[sy * TW_SKY_W + su]; }
+    }
+  } else {
+    for (let y = 0; y < H && y <= hor; y++) {
+      const p = hor - y; if (p === 0) { for (let x = 0; x < W; x++) put(y * W + x, fr, fg, fb); continue; }
+      const rd = (0.5 * H) / p, s = sh(rd); let fx = px + rd * (dirX - plX), fy = py + rd * (dirY - plY); const sx = (rd * 2 * plX) / W, sy = (rd * 2 * plY) / W;
+      for (let x = 0; x < W; x++) {
+        const c = CE[(((fy * SCN_T) | 0) & 31) * SCN_T + (((fx * SCN_T) | 0) & 31)];
+        let r = fr + ((c & 255) - fr) * s, g = fg + (((c >> 8) & 255) - fg) * s, b = fb + (((c >> 16) & 255) - fb) * s;
+        if (nl) { glowAt(fx, fy); r += gr * 0.6; g += gg * 0.6; b += gb * 0.6; }
+        put(y * W + x, r, g, b); fx += sx; fy += sy;
+      }
+    }
   }
   // พื้น
   for (let y = hor + 1; y < H; y++) {
-    const p = y - hor, rd = (0.5 * H) / p, sh = twSh(rd);
+    const p = y - hor, rd = (0.5 * H) / p, s = sh(rd);
     let fx = px + rd * (dirX - plX), fy = py + rd * (dirY - plY); const sx = (rd * 2 * plX) / W, sy = (rd * 2 * plY) / W;
     for (let x = 0; x < W; x++) {
-      const plaza = Math.abs(fx - fx0) < 4.2 && Math.abs(fy - fy0) < 3.6, tex = plaza ? T.plaza : T.dirt;
-      const c = tex[(((fy * SCN_T) | 0) & 31) * SCN_T + (((fx * SCN_T) | 0) & 31)];
-      let r = fr + ((c & 255) - fr) * sh, g = fg + (((c >> 8) & 255) - fg) * sh, b = fb + (((c >> 16) & 255) - fb) * sh;
-      const gl = glow(fx, fy); if (gl > 0) { r += 130 * gl; g += 72 * gl; b += 18 * gl; }
-      buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
-      fx += sx; fy += sy;
+      const tex = WD.floorTex || WD.floor(fx, fy), c = tex[(((fy * SCN_T) | 0) & 31) * SCN_T + (((fx * SCN_T) | 0) & 31)];
+      let r = fr + ((c & 255) - fr) * s, g = fg + (((c >> 8) & 255) - fg) * s, b = fb + (((c >> 16) & 255) - fb) * s;
+      if (nl) { glowAt(fx, fy); r += gr; g += gg; b += gb; }
+      put(y * W + x, r, g, b); fx += sx; fy += sy;
     }
   }
   // ผนัง
@@ -13170,41 +13297,49 @@ function twDraw() {
     if (rdx < 0) { stepX = -1; sdx = (px - mx) * ddx; } else { stepX = 1; sdx = (mx + 1 - px) * ddx; }
     if (rdy < 0) { stepY = -1; sdy = (py - my) * ddy; } else { stepY = 1; sdy = (my + 1 - py) * ddy; }
     let hit = ".", side = 0, guard = 0;
-    while (hit === "." && guard++ < 40) { if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; } hit = twCell(mx, my); }
+    while (hit === "." && guard++ < 48) { if (sdx < sdy) { sdx += ddx; mx += stepX; side = 0; } else { sdy += ddy; my += stepY; side = 1; } hit = twCell(WD, mx, my); }
     const perp = Math.max(0.05, side === 0 ? sdx - ddx : sdy - ddy);
     zb[x] = perp;
     const lineH = (H / perp) | 0, ds = Math.max(0, hor - (lineH >> 1)), de = Math.min(H - 1, hor + (lineH >> 1));
     let wx = side === 0 ? py + perp * rdy : px + perp * rdx; wx -= Math.floor(wx);
     let tx = (wx * SCN_T) | 0; if ((side === 0 && rdx > 0) || (side === 1 && rdy < 0)) tx = SCN_T - 1 - tx;
-    const tex = T[hit] || T["#"], sh = twSh(perp) * (side ? 0.82 : 1), step = SCN_T / lineH, gl = glow(px + perp * rdx, py + perp * rdy);
+    const tex = WD.tex[hit] || WD.tex["#"], s = sh(perp) * (side ? 0.82 : 1), step = SCN_T / lineH;
+    if (nl) glowAt(px + perp * rdx, py + perp * rdy);
     let tp = (ds - hor + lineH / 2) * step;
     for (let y = ds; y <= de; y++) {
       const c = tex[(tp & 31) * SCN_T + tx]; tp += step;
-      let r = fr + ((c & 255) - fr) * sh, g = fg + (((c >> 8) & 255) - fg) * sh, b = fb + (((c >> 16) & 255) - fb) * sh;
-      if (gl > 0) { r += 120 * gl; g += 66 * gl; b += 16 * gl; }
-      buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
+      let r = fr + ((c & 255) - fr) * s, g = fg + (((c >> 8) & 255) - fg) * s, b = fb + (((c >> 16) & 255) - fb) * s;
+      if (nl) { r += gr * 0.9; g += gg * 0.9; b += gb * 0.9; }
+      put(y * W + x, r, g, b);
     }
   }
-  // สไปรต์
+  // สไปรต์ (ไกล → ใกล้) • รองรับ แฟลชสี fl/tint • บีบความสูง sq • โปร่งแบบดิเทอร์ a • เลื่อนข้าง ox
   const inv = 1 / (plX * dirY - dirX * plY), list = [];
-  for (const s of S.ents) { if (s.hide) continue; const sx = s.x - px, sy = s.y - py, ty = inv * (-plY * sx + plX * sy); if (ty > 0.2) list.push([s, inv * (dirY * sx - dirX * sy), ty]); }
+  for (const s of S.ents) {
+    if (s.hide) continue;
+    const wx = s.x + (s.ox || 0) * -dirY, wy = s.y + (s.ox || 0) * dirX, sx = wx - px, sy = wy - py, ty = inv * (-plY * sx + plX * sy);
+    if (ty > 0.2 && (s.a ?? 1) > 0.02) list.push([s, inv * (dirY * sx - dirX * sy), ty, wx, wy]);
+  }
   list.sort((a, b) => b[2] - a[2]);
   S.proj.length = 0;
-  const lift = (s) => (s.type === "player" && s.moving && !scnReduce() ? Math.abs(Math.sin(now / 95)) * 0.035 : 0);
-  for (const [s, tx, ty] of list) {
-    const img = s.img, hh = (H / ty) * s.h, sw = hh * (img.w / img.h), cxs = (W / 2) * (1 + tx / ty);
-    const floorY = hor + H / ty / 2 - lift(s) * (H / ty), top = floorY - hh, left = cxs - sw / 2;
+  for (const [s, tx, ty, wx, wy] of list) {
+    const img = s.img, sq = s.sq ?? 1, lift = s.lift ?? (s.type === "player" && s.moving && !scnReduce() ? Math.abs(Math.sin(now / 95)) * 0.035 : 0), alpha = s.a ?? 1;
+    const hh = (H / ty) * s.h, shh = hh * sq, sw = hh * (img.w / img.h), cxs = (W / 2) * (1 + tx / ty);
+    const floorY = hor + H / ty / 2 - lift * (H / ty), top = floorY - shh, left = cxs - sw / 2;
     const x0 = Math.max(0, Math.floor(left)), x1 = Math.min(W - 1, Math.ceil(left + sw)), y0 = Math.max(0, Math.floor(top)), y1 = Math.min(H - 1, Math.ceil(floorY));
-    const shd = Math.min(1, twSh(ty) * 1.08), gl = glow(s.x, s.y) + (s.type === "fire" ? 1 : 0);
+    const shd = Math.min(1, sh(ty) * 1.08), flv = s.fl || 0, tint = s.tint || [255, 255, 255];
+    if (nl && s.type !== "fire") glowAt(wx, wy); else { gr = gg = gb = 0; }
     for (let x = x0; x <= x1; x++) {
       if (ty >= zb[x]) continue;
-      const ix = ((x - left) / sw * img.w) | 0; if (ix < 0 || ix >= img.w) continue;
+      let ix = ((x - left) / sw * img.w) | 0; if (ix < 0 || ix >= img.w) continue; if (s.flip) ix = img.w - 1 - ix;
       for (let y = y0; y <= y1; y++) {
-        const iy = ((y - top) / hh * img.h) | 0; if (iy < 0 || iy >= img.h) continue;
+        const iy = ((y - top) / shh * img.h) | 0; if (iy < 0 || iy >= img.h) continue;
         const c = img.px[iy * img.w + ix]; if (!c) continue;
+        if (alpha < 1 && SCN_BAYER[(x & 3) + ((y & 3) << 2)] >= alpha * 16) continue;
         let r = fr + ((c & 255) - fr) * shd, g = fg + (((c >> 8) & 255) - fg) * shd, b = fb + (((c >> 16) & 255) - fb) * shd;
-        if (s.type !== "fire" && gl > 0) { r += 70 * gl; g += 38 * gl; b += 8 * gl; }
-        buf[y * W + x] = 0xff000000 | ((b > 255 ? 255 : b) << 16) | ((g > 255 ? 255 : g) << 8) | (r > 255 ? 255 : r);
+        if (s.type === "fire") { r = c & 255; g = (c >> 8) & 255; b = (c >> 16) & 255; } else if (nl) { r += gr * 0.5; g += gg * 0.5; b += gb * 0.5; }
+        if (flv > 0) { r += (tint[0] - r) * flv; g += (tint[1] - g) * flv; b += (tint[2] - b) * flv; }
+        put(y * W + x, r, g, b);
       }
     }
     if (s.nm) S.proj.push({ e: s, fx: cxs / W, fy: top / H, ty, col: Math.max(0, Math.min(W - 1, Math.round(cxs))) });
@@ -13212,12 +13347,12 @@ function twDraw() {
   S.ctx.putImageData(S.id, 0, 0);
 }
 function twMiniMap() {
-  const cv = $("tw-mm"); if (!cv) return; const x = cv.getContext("2d"), C = 3, S = TW;
+  const cv = $("tw-mm"), S = TW; if (!cv || !S.W) return; const x = cv.getContext("2d"), WD = S.W, C = 3;
+  if (cv.width !== WD.mw * C) { cv.width = WD.mw * C; cv.height = WD.mh * C; cv.style.width = WD.mw * C + "px"; cv.style.height = WD.mh * C + "px"; }
   x.clearRect(0, 0, cv.width, cv.height);
-  const col = { "#": "#5a5448", b: "#96605a", t: "#78825a", c: "#7a5428", G: "#e2b828", M: "#d83c30", Q: "#c8a064", H: "#e8c870", m: "#e8ece4", r: "#8cd8c0" };
-  for (let j = 0; j < TW_MH; j++) for (let i = 0; i < TW_MW; i++) { const c = S.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
-  x.fillStyle = "#ff9a2a"; x.fillRect(Math.round(S.fire.x * C) - 1, Math.round(S.fire.y * C) - 1, 3, 3);
-  for (const e of S.ents) { if (e.hide || e.type === "fire") continue; x.fillStyle = e.type === "npc" ? "#ffe14a" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
+  const col = { "#": "#5a5448", b: "#96605a", p: "#8a8478", d: "#d8a050", t: "#78825a", c: "#7a5428", G: "#e2b828", M: "#d83c30", Q: "#c8a064", H: "#e8c870", m: "#e8ece4", r: "#8cd8c0", X: "#50e078" };
+  for (let j = 0; j < WD.mh; j++) for (let i = 0; i < WD.mw; i++) { const c = WD.map[j][i]; x.fillStyle = c === "." ? "rgba(20,16,12,.55)" : col[c] || "#777"; x.fillRect(i * C, j * C, C, C); }
+  for (const e of S.ents) { if (e.hide) continue; if (e.type === "fire") { x.fillStyle = "#ff9a2a"; } else x.fillStyle = e.type === "npc" ? "#ffe14a" : e.fac === "zombie" ? "#9fd070" : "#4ad8ff"; x.fillRect(Math.round(e.x * C) - 1, Math.round(e.y * C) - 1, 3, 3); }
   x.fillStyle = "#fff"; x.fillRect(Math.round(S.x * C) - 1, Math.round(S.y * C) - 1, 3, 3);
   x.strokeStyle = "#fff"; x.beginPath(); x.moveTo(S.x * C, S.y * C); x.lineTo(S.x * C + Math.cos(S.a) * 6, S.y * C + Math.sin(S.a) * 6); x.stroke();
 }
@@ -13238,56 +13373,85 @@ function twLabels() {
 function twPrompt() {
   const S = TW, t = twTarget(), lab = twTgtLabel(t), p = $("tw-prompt"), a = $("tw-act");
   if (p && p.textContent !== lab) { p.textContent = lab; p.classList.toggle("hidden", !lab); }
-  if (a) { const txt = t ? "✋ " + (t.kind === "door" ? "เข้า/ใช้" : t.e.type === "npc" ? "คุย" : "ทักทาย") : "✋ ใช้"; if (a.textContent !== txt) a.textContent = txt; a.classList.toggle("ready", !!t); }
+  if (a) { const txt = t ? "✋ " + (t.kind === "door" ? "เข้า/ใช้" : t.e.type === "npc" ? "คุย" : "เลือก") : "✋ ใช้"; if (a.textContent !== txt) a.textContent = txt; a.classList.toggle("ready", !!t); }
+  if (!t) twPop(true);
   S.tgt = t;
 }
-function twCount() { const n = TW.ents.filter((e) => e.type === "player" && !e.hide).length + 1; const c = $("tw-cnt"); const t = `👥 ${n} ในฉาก`; if (c && c.textContent !== t) c.textContent = t; }
+function twInfo() {
+  const n = TW.ents.filter((e) => e.type === "player" && !e.hide).length + 1, p = state.profile, c = $("tw-cnt"); if (!c || !p) return;
+  const t = `👥 ${n} • ❤️ ${Math.max(0, Math.round(p.hp))}/${maxHp()} • ⚡ ${Math.floor(curStamina())}`; if (c.textContent !== t) c.textContent = t;
+}
 function twLoop(ts) {
   const S = TW; if (!S.on) return;
   S.raf = requestAnimationFrame(twLoop);
   if (ts - S.last < 33) return;
   const dt = Math.min(0.1, (ts - S.last) / 1000); S.last = ts; S.now = ts;
   try {
-    twStep(dt); twDraw(); twLabels();
-    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twCount(); twNpcSync(); }
+    twStep(dt); twDraw(S); twLabels();
+    if (ts - S.mmT > 120) { S.mmT = ts; twMiniMap(); twPrompt(); twInfo(); twNpcSync(); }
   } catch (e) { console.warn("town", e); S.broken = true; twClose(); }
 }
-// ---------- ผู้เล่นอื่น (ตำแหน่งแบบเรียลไทม์) ----------
+// ---------- 55) ผู้เล่นอื่น: ตำแหน่งแบบประหยัดแบนด์วิท ----------
+const twRoom = () => { const K = Math.max(1, Math.min(9, Math.round(T("town_rooms", 1)))); return K > 1 ? String(pxaHash(state.uid || "x") % K) : "0"; };
+const twPresOn = () => T("town_pres", 1) === 1;
 function twPresStart() {
-  const P = TW.pres; P.fail = 0; P.last = ""; P.lastT = 0; P.tog = 0;
-  try { onDisconnect(ref(db, "town/" + state.uid)).remove(); } catch { /* ข้าม */ }
-  try { P.off = onValue(ref(db, "town"), (s) => { try { twPresIn(s.val() || {}); } catch (e) { console.warn("town in", e); } }, () => { /* อ่านไม่ได้ (rules ยังไม่ deploy) → เดินคนเดียว */ }); } catch { /* ข้าม */ }
+  const P = TW.pres; if (P.started || !twPresOn()) return;
+  P.started = true; P.paused = false; P.fail = 0; P.sent = ""; P.lastT = 0; P.mv = 0; P.hd = -1; P.path = `town/${TW.zone}/${twRoom()}`;
+  try { onDisconnect(ref(db, `${P.path}/${state.uid}`)).remove(); } catch { /* ข้าม */ }
+  try { P.off = onValue(ref(db, P.path), (s) => { try { twPresIn(s.val() || {}); } catch (e) { console.warn("town in", e); } }, () => { /* อ่านไม่ได้ (rules ยังไม่ deploy) → เดินคนเดียว */ }); } catch { /* ข้าม */ }
 }
 function twPresStop() {
   const P = TW.pres; try { if (typeof P.off === "function") P.off(); } catch { /* ข้าม */ } P.off = null;
-  if (state.uid && P.fail < 3) remove(ref(db, "town/" + state.uid)).catch(() => {});
+  if (P.started && state.uid && P.fail < 3) remove(ref(db, `${P.path}/${state.uid}`)).catch(() => {});
+  P.started = false; P.sent = "";
   TW.ents = TW.ents.filter((e) => e.type !== "player");
 }
 function twPresIn(obj) {
-  const S = TW, now = Date.now(), keep = new Set();
+  const S = TW, now = Date.now(), tn = performance.now(), keep = new Set();
   for (const [uid, v] of Object.entries(obj)) {
     if (uid === state.uid || typeof v !== "string") continue;
-    const m = /^(\d{1,3}),(\d{1,3})$/.exec(v); if (!m) continue;
+    const m = /^(\d{1,3}),(\d{1,3}),(\d{1,2}),([01])$/.exec(v); if (!m) continue;
     const tx = +m[1] / 10, ty = +m[2] / 10; let e = S.ents.find((q) => q.type === "player" && q.uid === uid);
     if (!e) { if (S.ents.filter((q) => q.type === "player").length >= 24) continue; e = twNewPlayer(uid, tx, ty); S.ents.push(e); }
     keep.add(uid);
-    if (e.raw !== v) { e.raw = v; e.tx = tx; e.ty = ty; e.seen = now; }
+    if (e.raw !== v) { e.raw = v; e.tx = tx; e.ty = ty; e.hd = +m[3] % 24; e.mv = +m[4]; e.t0 = tn; e.seen = now; }
   }
   S.ents = S.ents.filter((e) => e.type !== "player" || keep.has(e.uid));
 }
 function twPresTick() {
-  const P = TW.pres, S = TW, now = performance.now(); if (P.fail >= 3 || !state.uid) return;
-  const x = Math.max(0, Math.min(999, Math.round(S.x * 10))), y = Math.max(0, Math.min(999, Math.round(S.y * 10))), cur = x + "," + y;
-  const moved = cur !== P.last, due = moved ? now - P.lastT >= 500 : now - P.lastT >= 7000;
+  const P = TW.pres, S = TW; if (!P.started || P.paused || P.fail >= 3 || !state.uid) return;
+  const alone = Object.keys(state.players || {}).filter((u) => u !== state.uid).length === 0;   // ไม่มีใครอยู่โซนนี้ = ไม่ต้องส่งเลย
+  if (alone) { P.alone = true; return; }
+  const now = performance.now(), mv = S.mv ? 1 : 0, ang = S.a + (S.mv < 0 ? Math.PI : 0), hd = Math.round((((ang % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 12)) % 24;
+  const hz = Math.max(200, T("town_hz", 800)), since = now - P.lastT;
+  let due = false;
+  if (P.alone) due = true;                                   // เพิ่งมีคนเข้าโซน → ส่งตำแหน่งปัจจุบันให้เขาเห็นทันที
+  else if (mv !== P.mv) due = since >= 250;                  // เริ่มเดิน / หยุด
+  else if (mv && hd !== P.hd) due = since >= hz;             // เลี้ยวระหว่างเดิน
+  else if (mv) due = since >= 3000;                          // เดินตรงนาน ๆ: ปรับแก้ตำแหน่ง
+  else due = since >= 20000;                                 // ยืนนิ่ง: หัวใจ (กันถูกมองว่าหายไป)
   if (!due) return;
-  P.lastT = now; if (!moved) { P.tog ^= 1; } const out = moved ? cur : Math.min(999, x + P.tog) + "," + y; P.last = cur;
-  set(ref(db, "town/" + state.uid), out).then(() => { P.fail = 0; }).catch(() => { P.fail++; });
+  const x = Math.max(0, Math.min(999, Math.round(S.x * 10))), y = Math.max(0, Math.min(999, Math.round(S.y * 10)));
+  const xs = !mv && !P.alone && P.sent && P.sent.startsWith(x + "," + y + ",") ? Math.min(999, x + (P.tog ^= 1)) : x;   // ค่าซ้ำไม่ยิงอีเวนต์ → สลับ x ±0.1 ตอนหัวใจ
+  const out = `${xs},${y},${hd},${mv}`;
+  P.alone = false; P.lastT = now; P.mv = mv; P.hd = hd; P.sent = out;
+  set(ref(db, `${P.path}/${state.uid}`), out).then(() => { P.fail = 0; }).catch(() => { P.fail++; });
 }
-// ---------- แชทบนฉาก ----------
+function twVis() {   // แท็บถูกซ่อน > 15 วินาที = เลิกฟัง/ลบตำแหน่ง (ประหยัดแบนด์วิท) • กลับมาแล้วเริ่มใหม่
+  const P = TW.pres; if (!TW.on) return;
+  if (document.hidden) { clearTimeout(P.hidT); P.hidT = setTimeout(() => { if (document.hidden && TW.on && P.started) { P.paused = true; twPresStop(); } }, 15000); }
+  else { clearTimeout(P.hidT); if (P.paused) { P.paused = false; twPresStart(); } }
+}
+// ---------- แถบแชท/ผลบนฉาก ----------
 function twLogAdd(m) {
   const log = $("tw-log"); if (!log) return;
   const el = mk("div", "tw-ln"); const who = mk("b", m.faction === "zombie" ? "zombie" : "human", m.type === "emote" ? `* ${m.name}` : m.name + ":");
   el.append(who, document.createTextNode(" " + String(m.text).slice(0, 120))); log.append(el);
+  while (log.children.length > 4) log.firstChild.remove();
+}
+function twSys(text, cls) {   // เรียกจาก logLine: บรรทัดผลค้นหา/ระบบ ขึ้นแถบล่างของฉากด้วย
+  if (!TW.on || !text) return; const log = $("tw-log"); if (!log) return;
+  const el = mk("div", "tw-ln sys", String(text).slice(0, 140)); log.append(el);
   while (log.children.length > 4) log.firstChild.remove();
 }
 function townChat(m) {   // เรียกจาก addChat
@@ -13299,26 +13463,28 @@ function townChat(m) {   // เรียกจาก addChat
 // ---------- หน้าจอ ----------
 function twBuild() {
   if ($("tw-root")) return;
-  const root = mk("div", "tw-root hidden"); root.id = "tw-root"; root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "ค่ายพักพิง"); root.tabIndex = -1;
+  const root = mk("div", "tw-root hidden"); root.id = "tw-root"; root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "เดินสำรวจ"); root.tabIndex = -1;
   const box = mk("div", "tw-box"), top = mk("div", "tw-top"), me = mk("canvas", "tw-me"); me.id = "tw-me"; me.width = 16; me.height = 16;
-  const ttl = mk("b", "tw-ttl", "🏘️ ค่ายพักพิง"), cnt = mk("small", "muted"); cnt.id = "tw-cnt";
+  const ttl = mk("b", "tw-ttl", "🏘️ ค่ายพักพิง"); ttl.id = "tw-ttl"; const cnt = mk("small", "muted"); cnt.id = "tw-cnt";
   const tt = mk("div", "tw-tt"); tt.append(ttl, cnt);
   const paint = btn("🎨", () => { S_keysOff(); pxaOpen(); }, "btn ghost mini"); paint.title = "วาดอวาตาร์พิกเซลของคุณ"; paint.id = "tw-paint";
+  const pvb = btn("⚔️", () => { try { pvToggle(); } catch { /* ข้าม */ } }, "btn ghost mini"); pvb.id = "tw-pv"; pvb.title = "ฉากปะทะตอนต่อสู้: เปิด/ปิดในเครื่องนี้";
   const x = btn("✕ ออก", () => twClose(), "btn ghost mini"); x.id = "tw-x";
-  top.append(me, tt, paint, x);
+  top.append(me, tt, pvb, paint, x);
   const view = mk("div", "tw-view"); view.id = "tw-view";
   const cv = mk("canvas"); cv.id = "tw-cv"; cv.width = TW_W; cv.height = TW_H;
   const ov = mk("div", "tw-ov"); ov.id = "tw-ov";
-  const mm = mk("canvas", "tw-mm"); mm.id = "tw-mm"; mm.width = TW_MW * 3; mm.height = TW_MH * 3;
+  const mm = mk("canvas", "tw-mm"); mm.id = "tw-mm"; mm.width = 72; mm.height = 60;
   const pr = mk("div", "tw-prompt hidden"); pr.id = "tw-prompt";
-  view.append(cv, ov, mm, pr);
+  const pop = mk("div", "tw-pop hidden"); pop.id = "tw-pop";
+  view.append(cv, ov, mm, pr, pop);
   const pad = mk("div", "tw-pad"), dp = mk("div", "tw-dp");
   const hold = (lab, key, cls, tip) => { const b = mk("button", "btn ghost " + cls, lab); b.type = "button"; b.title = tip; b.setAttribute("aria-label", tip); const on = (e) => { e.preventDefault(); TW.keys[key] = 1; b.classList.add("on"); }, off = () => { TW.keys[key] = 0; b.classList.remove("on"); }; b.addEventListener("pointerdown", on); ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => b.addEventListener(ev, off)); b.addEventListener("contextmenu", (e) => e.preventDefault()); dp.append(b); return b; };
   hold("◀", "l", "dl", "หันซ้าย"); hold("▲", "f", "df", "เดินหน้า"); hold("▶", "r", "dr", "หันขวา"); hold("▼", "b", "db", "ถอยหลัง");
   const act = btn("✋ ใช้", () => twAct(), "btn primary tw-act"); act.id = "tw-act";
   pad.append(dp, act);
   const log = mk("div", "tw-log"); log.id = "tw-log"; log.setAttribute("aria-live", "polite");
-  const form = mk("form", "tw-chat"), inp = mk("input"); inp.id = "tw-in"; inp.type = "text"; inp.maxLength = 200; inp.placeholder = "พิมพ์คุยกับคนในค่าย…"; inp.autocomplete = "off";
+  const form = mk("form", "tw-chat"), inp = mk("input"); inp.id = "tw-in"; inp.type = "text"; inp.maxLength = 200; inp.placeholder = "พิมพ์คุยกับคนในโซนนี้…"; inp.autocomplete = "off";
   const send = btn("ส่ง", () => {}, "btn ghost mini"); send.type = "submit";
   form.append(inp, send); form.addEventListener("submit", async (e) => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; inp.value = ""; try { await sendChat(t); } catch (er) { toast(errMsg(er)); } });
   box.append(top, view, pad, log, form); root.append(box); document.body.append(root);
@@ -13332,44 +13498,46 @@ function twBuild() {
   });
   root.addEventListener("keyup", (e) => { const k = e.key.toLowerCase(); if (k === "arrowup" || k === "w") TW.keys.f = 0; else if (k === "arrowdown" || k === "s") TW.keys.b = 0; else if (k === "arrowleft" || k === "a" || k === "q") TW.keys.l = 0; else if (k === "arrowright" || k === "d" || k === "e") TW.keys.r = 0; });
   window.addEventListener("blur", S_keysOff);
+  document.addEventListener("visibilitychange", twVis);
   // ลากบนภาพ = หัน • แตะสั้น ๆ = ใช้
   let drag = null;
-  view.addEventListener("pointerdown", (e) => { if (e.target.closest(".tw-mm")) return; drag = { x: e.clientX, t: performance.now(), moved: false }; try { view.setPointerCapture(e.pointerId); } catch { /* ข้าม */ } });
+  view.addEventListener("pointerdown", (e) => { if (e.target.closest(".tw-mm,.tw-pop")) return; drag = { x: e.clientX, t: performance.now(), moved: false }; try { view.setPointerCapture(e.pointerId); } catch { /* ข้าม */ } });
   view.addEventListener("pointermove", (e) => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 3) drag.moved = true; drag.x = e.clientX; TW.dragTurn += dx * 0.011; });
   const end = () => { if (drag && !drag.moved && performance.now() - drag.t < 350) twAct(); drag = null; };
   view.addEventListener("pointerup", end); view.addEventListener("pointercancel", () => { drag = null; });
 }
 function twWanted() {
-  return !!(twOn() && state.zone === "safe" && state.profile && state.profile.hp > 0 && !state.profile.banned && !state.boss && !state.hb && !SCN.on && !TW.broken && typeof HTMLCanvasElement !== "undefined");
+  return !!(twOn() && state.zone && ZONES[state.zone] && !TW_NOGO.includes(state.zone) && state.profile && state.profile.hp > 0 && !state.profile.banned && !state.boss && !state.hb && !SCN.on && !TW.broken && typeof HTMLCanvasElement !== "undefined");
 }
 function twOpen() {
   const S = TW; if (S.on) return;
-  if (!twWanted()) return toast("ตอนนี้เดินในค่ายไม่ได้");
+  if (!twWanted()) return toast("ตอนนี้เดินสำรวจไม่ได้");
   try {
     twBuild();
-    S.map = twMapBuild(); S.T = twTexs(); S.sky = twSkyBuild();
+    S.zone = state.zone; S.W = twWorld(S.zone);
     S.colAng = new Float32Array(TW_W); for (let x = 0; x < TW_W; x++) S.colAng[x] = Math.atan(((2 * x) / TW_W - 1) * 0.66);
     const cv = $("tw-cv"); S.ctx = cv.getContext("2d"); S.id = S.ctx.createImageData(TW_W, TW_H); S.buf = new Uint32Array(S.id.data.buffer); S.zb = new Float32Array(TW_W);
-    S.x = 12; S.y = 13.2; S.a = -Math.PI / 2; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.dragTurn = 0; S.proj = []; S.npcSig = "";
-    const f = [0, 1, 2].map((i) => twFireImg(i));
-    S.ents = [{ type: "fire", x: S.fire.x, y: S.fire.y, img: f[0], frames: f, h: 0.5, r: 0.4, nm: "" }];
-    twNpcSync(); S.pres.fail = 0;
-  } catch (e) { console.warn("town build", e); S.broken = true; return toast("เปิดฉากค่ายไม่สำเร็จ"); }
+    S.x = S.W.spawn.x; S.y = S.W.spawn.y; S.a = S.W.spawn.a; S.bob = 0; S.bobAmp = 0; S.bobY = 0; S.dragTurn = 0; S.mv = 0; S.proj = []; S.npcSig = ""; S.ents = [];
+    if (S.W.camp) { const f = [0, 1, 2].map((i) => twFireImg(i)); S.ents.push({ type: "fire", x: 12, y: 10, img: f[0], frames: f, h: 0.5, solid: 0.4, nm: "" }); }
+    twNpcSync();
+  } catch (e) { console.warn("town build", e); S.broken = true; return toast("เปิดฉากไม่สำเร็จ"); }
   S.on = true; S.now = performance.now(); S.last = 0;
   S.fireT = setInterval(() => { const fe = S.ents.find((q) => q.type === "fire"); if (fe) fe.img = fe.frames[Math.floor(performance.now() / 110) % 3]; }, 110);
-  $("tw-log").textContent = ""; S_keysOff();
+  $("tw-ttl").textContent = S.W.camp ? "🏘️ ค่ายพักพิง" : `${ZONES[S.zone].icon} ${ZONES[S.zone].name}`;
+  $("tw-log").textContent = ""; twPop(true); S_keysOff();
+  try { const b = $("tw-pv"); if (b) b.style.opacity = pvOn() ? "1" : "0.5"; } catch { /* ข้าม */ }
   $("tw-root").classList.remove("hidden"); try { $("tw-root").focus({ preventScroll: true }); } catch { /* ข้าม */ }
   twSelfImg(); twPresStart();
-  S.watch = setInterval(() => { const p = state.profile; if (!p || p.hp <= 0 || p.banned || state.zone !== "safe" || state.boss) twClose(); }, 500);
+  S.watch = setInterval(() => { const p = state.profile; if (!p || p.hp <= 0 || p.banned || state.zone !== S.zone || state.boss) twClose(); }, 500);
   S.raf = requestAnimationFrame(twLoop);
 }
 function twClose() {
   const S = TW; if (!S.on) return;
-  S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearInterval(S.fireT); S_keysOff(); twPresStop();
+  S.on = false; cancelAnimationFrame(S.raf); clearInterval(S.watch); clearInterval(S.fireT); clearTimeout(S.pres.hidT); S_keysOff(); twPresStop();
   for (const el of S.lbl.values()) el.remove(); S.lbl.clear();
   const r = $("tw-root"); if (r) r.classList.add("hidden");
 }
-function twSync() {   // ปุ่ม "เดินในค่าย" ใต้รายการโซน (เรียกจาก renderNpcBox)
+function twSync() {   // ปุ่มใต้รายการโซน (เรียกจาก renderNpcBox + เมื่อ tune เปลี่ยน)
   const show = twWanted();
   let b = $("btn-town");
   if (!b) {
@@ -13377,9 +13545,128 @@ function twSync() {   // ปุ่ม "เดินในค่าย" ใต้
     b = btn("🏘️ เดินในค่าย", () => twOpen(), "btn primary wide"); b.id = "btn-town"; b.style.margin = "8px 0";
     const nb = $("npc-box"); if (nb) nb.before(b); else $("zone-list").after(b);
   }
+  const lab = state.zone === "safe" ? "🏘️ เดินในค่าย" : `🚶 เดินสำรวจ${ZONES[state.zone] ? " " + ZONES[state.zone].name : ""}`;
+  if (b.textContent !== lab) b.textContent = lab;
   b.classList.toggle("hidden", !show);
   if (!show && TW.on) twClose();
 }
+
+/* =========================================================
+   56) ⚔️ ฉากปะทะ (ภาพประกอบตอนสู้กับผู้เล่น) — ใช้เอนจินเดียวกับเมืองเดินได้ (twDraw)
+   - ผลแพ้ชนะมาจาก attack()/resolveAttack()/freeHit() เดิมทั้งหมด (ทอยเต๋า/ดาเมจ/หลบ/ป้องกัน) — ฉากนี้แค่ "เล่นภาพ" ตามผลนั้น ไม่เขียนอะไรลงฐานข้อมูล ไม่ใช้แบนด์วิทเพิ่ม
+   - ผู้โจมตี: เห็นคู่ต่อสู้ยืนรอ → พอผลออก (อ่านจากข้อความ combat ในแชทที่เกมโพสต์อยู่แล้ว) เล่นท่า โดน/หลบ/ป้องกัน/ล้ม
+   - ผู้ถูกโจมตี: เห็นคู่ต่อสู้พุ่งเข้าหา แล้วเล่นท่าตามผลที่ resolveAttack คำนวณ
+   - ปิดได้: tune pv_on = 0 (ทั้งเกม) หรือปุ่ม ⚔️ ในฉากเดินสำรวจ (เฉพาะเครื่องนี้) • แตะ/Esc/ปุ่มข้าม = ปิดทันที • ไม่ผ่านถ้าเปิดฉากอื่นอยู่ (ค้นลึก)
+   ========================================================= */
+const PV = { on: false, S: null, role: "", uid: "", name: "", opp: null, phase: "", t0: 0, res: null, actT0: 0, closeAt: 0, raf: 0, txt: "" };
+const PV_MAP = ["#############", "#...........#", "#....p......#", "#...........#", "#...........#", "#...........#", "#......p....#", "#...........#", "#############"];
+const pvOn = () => { try { return T("pv_on", 1) === 1 && HAS_DOM && localStorage.getItem("zb_pv_off") !== "1"; } catch { return T("pv_on", 1) === 1 && HAS_DOM; } };
+function pvToggle() {
+  let off = false; try { off = localStorage.getItem("zb_pv_off") === "1"; localStorage.setItem("zb_pv_off", off ? "0" : "1"); } catch { /* ข้าม */ }
+  toast(off ? "⚔️ เปิดฉากปะทะแล้ว" : "⚔️ ปิดฉากปะทะในเครื่องนี้แล้ว");
+  const b = $("tw-pv"); if (b) b.style.opacity = pvOn() ? "1" : "0.5";
+}
+function pvWorld() {
+  const zn = state.zone && ZONES[state.zone] ? state.zone : "safe", base = twWorld(zn);
+  const lights = base.camp ? [{ x: 3, y: 4.5, r2: 50, c: [130, 72, 18], fire: true }, { x: 9.5, y: 4.5, r2: 50, c: [130, 72, 18], fire: true }] : base.lights.length ? [{ x: 3, y: 4.5, r2: 50, c: base.lights[0].c }, { x: 9.5, y: 4.5, r2: 50, c: base.lights[0].c }] : [];
+  return { ...base, map: PV_MAP, mw: 13, mh: 9, doors: {}, lights, floor: base.floor ? () => base.tex.plaza || base.tex.dirt : null };
+}
+function pvBuild() {
+  if ($("pv-root")) return;
+  const root = mk("div", "pv-root hidden"); root.id = "pv-root"; root.setAttribute("role", "dialog"); root.setAttribute("aria-label", "ฉากปะทะ");
+  const box = mk("div", "pv-box"), top = mk("div", "pv-top"), vs = mk("b", "pv-vs"); vs.id = "pv-vs";
+  const sk = btn("ข้าม ⏭", () => pvClose(), "btn ghost mini"); sk.id = "pv-skip"; top.append(vs, sk);
+  const view = mk("div", "pv-view"), cv = mk("canvas"); cv.id = "pv-cv"; cv.width = TW_W; cv.height = TW_H;
+  const fl = mk("div", "pv-flash"); fl.id = "pv-flash"; const ov = mk("div", "pv-ov"); ov.id = "pv-ov"; view.append(cv, fl, ov);
+  const cap = mk("div", "pv-cap"); cap.id = "pv-cap"; cap.setAttribute("aria-live", "polite");
+  box.append(top, view, cap); root.append(box); document.body.append(root);
+  root.addEventListener("pointerdown", (e) => { if (e.target === root || e.target.closest(".pv-view")) { if (PV.phase === "end") pvClose(); } });
+  document.addEventListener("keydown", (e) => { if (PV.on && e.key === "Escape") pvClose(); });
+}
+const pvFlash = (col, a, ms) => { const f = $("pv-flash"); if (f && f.animate) { try { f.style.background = col; f.animate([{ opacity: scnReduce() ? a * 0.4 : a }, { opacity: 0 }], { duration: ms, easing: "ease-out" }); } catch { /* ข้าม */ } } };
+function pvShake(a) { if (scnReduce()) return; const v = document.querySelector("#pv-root .pv-view"); if (v && v.animate) { try { v.animate([{ transform: "translate(0,0)" }, { transform: `translate(${a}px,${-a}px)` }, { transform: `translate(${-a}px,${a / 2}px)` }, { transform: "translate(0,0)" }], { duration: 260 }); } catch { /* ข้าม */ } } }
+function pvFloat(text, col) {
+  const ov = $("pv-ov"); if (!ov) return; const d = mk("div", "pv-fl", text); d.style.color = col; ov.append(d);
+  if (d.animate && !scnReduce()) { try { d.animate([{ transform: "translate(-50%,0)", opacity: 1 }, { transform: "translate(-50%,-34px)", opacity: 0 }], { duration: 1100, easing: "ease-out" }).onfinish = () => d.remove(); return; } catch { /* ข้าม */ } }
+  setTimeout(() => d.remove(), 1100);
+}
+function pvBegin(o) {   // o = { role: "att"|"def", uid, name, fac }
+  if (!pvOn() || PV.on || SCN.on || state.boss || state.hb || typeof HTMLCanvasElement === "undefined") return false;
+  try {
+    pvBuild(); S_keysOff();
+    const W = pvWorld(), S = { W, x: 2.3, y: 4.5, a: 0, now: performance.now(), bobY: 0, proj: [], ents: [] };
+    S.colAng = new Float32Array(TW_W); for (let x = 0; x < TW_W; x++) S.colAng[x] = Math.atan(((2 * x) / TW_W - 1) * 0.66);
+    const cv = $("pv-cv"); S.ctx = cv.getContext("2d"); S.id = S.ctx.createImageData(TW_W, TW_H); S.buf = new Uint32Array(S.id.data.buffer); S.zb = new Float32Array(TW_W);
+    const opp = { type: "pvopp", x: o.role === "def" ? 8.6 : 5.7, y: 4.5, img: pxaImg(pxaDefault(o.uid, o.fac || "human")), h: 0.95, r: 0.3, nm: "" };
+    if (pxaOn()) pxaGet(o.uid).then((hex) => { if (hex && PV.on && PV.opp === opp) opp.img = pxaImg(hex); });
+    S.ents.push(opp);
+    Object.assign(PV, { on: true, S, role: o.role, uid: o.uid, name: o.name || "คู่ต่อสู้", opp, phase: o.role === "def" ? "come" : "wait", t0: S.now, res: null, actT0: 0, closeAt: 0, txt: "" });
+  } catch (e) { console.warn("pv build", e); PV.on = false; return false; }
+  $("pv-vs").textContent = `⚔️ ${state.profile?.username || "คุณ"}  vs  ${PV.name}`;
+  $("pv-ov").textContent = ""; $("pv-cap").textContent = o.role === "att" ? "คุณพุ่งเข้าใส่… รอเขาตอบโต้" : `${PV.name} พุ่งเข้ามาโจมตี!`;
+  $("pv-root").classList.remove("hidden");
+  PV.raf = requestAnimationFrame(pvLoop);
+  return true;
+}
+function pvResult(r) {   // r = { k: hit|dodge|block|def|tie, dmg, dead, ar, dr }
+  if (!PV.on || PV.res) return; PV.res = r;
+}
+function pvClose() {
+  if (!PV.on) return; PV.on = false; cancelAnimationFrame(PV.raf); PV.phase = ""; PV.opp = null;
+  const r = $("pv-root"); if (r) r.classList.add("hidden");
+}
+const pvEase = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3);
+function pvStartAct() {
+  const r = PV.res, mine = PV.role === "att", now = PV.S.now; PV.phase = "act"; PV.actT0 = now;
+  const nm = PV.name, me = state.profile?.username || "คุณ", rolls = r.ar != null && r.dr != null ? `  🎲 ${r.ar} vs ${r.dr}` : "";
+  if (r.k === "hit") {
+    pvShake(mine ? 3 : 6); pvFlash(mine ? "#fff" : "#c00", mine ? 0.35 : 0.55, 320);
+    pvFloat(`−${r.dmg ?? "?"}`, mine ? "#ffe14a" : "#ff5a4a");
+    PV.txt = mine ? `⚔️ คุณโจมตีโดน ${nm}! −${r.dmg ?? "?"} HP${r.dead ? ` — ${nm} ล้มลง!` : ""}` : `💥 ${nm} โจมตีโดน! −${r.dmg ?? "?"} HP${r.dead ? " — คุณล้มลง!" : ""}`;
+  } else if (r.k === "dodge") { pvFloat("💨", "#9fe"); PV.txt = mine ? `💨 ${nm} หลบได้ในจังหวะสุดท้าย!` : `💨 ${me} หลบได้ในจังหวะสุดท้าย!`; }
+  else if (r.k === "block") { pvFlash("#6af", 0.3, 300); PV.txt = mine ? `🦖 ลูกฝูงของ ${nm} กระโจนมารับแทน!` : "🦖 ลูกฝูงกระโจนมารับแทน!"; }
+  else { pvFlash("#6af", 0.28, 300); pvFloat("🛡️", "#9cf"); PV.txt = r.k === "tie" ? "🤝 เสมอ ไม่มีใครโดน" : mine ? `🛡️ ${nm} ป้องกันได้` : `🛡️ ${me} ป้องกันได้`; }
+  $("pv-cap").textContent = PV.txt + rolls;
+}
+function pvTick(now) {
+  const P = PV, S = P.S, o = P.opp; S.now = now; if (!o) return;
+  if (P.phase === "come") {   // ผู้ถูกโจมตี: คู่ต่อสู้พุ่งเข้ามา
+    const t = (now - P.t0) / 1000; o.x = 8.6 - 5.2 * pvEase(t / 1.1); o.moving = t < 1.1;
+    if (t >= 1.15) { o.moving = false; if (P.res) pvStartAct(); }
+  } else if (P.phase === "wait") {
+    o.lift = Math.abs(Math.sin(now / 420)) * 0.015; if (P.res) pvStartAct(); else if (now - P.t0 > 42000) { $("pv-cap").textContent = "ไม่มีผลตอบกลับ"; P.phase = "end"; P.closeAt = now + 600; }
+  } else if (P.phase === "act") {
+    const r = P.res, mine = P.role === "att", t = now - P.actT0, rest = mine ? 5.7 : 3.4;
+    o.fl = 0; o.tint = null; o.ox = 0; o.a = 1; o.sq = 1; o.lift = 0; o.x = rest;
+    if (r.k === "hit") {
+      if (mine) {   // เราฟันโดน: เขาสะดุ้งถอย/ล้ม
+        o.x = rest + 0.5 * pvEase(t / 220); o.fl = Math.max(0, 1 - t / 260); o.tint = [255, 255, 255];
+        if (r.dead && t > 350) { const k = Math.min(1, (t - 350) / 800); o.sq = 1 - 0.85 * k; o.a = 1 - k; }
+      } else {      // เขาฟันโดนเรา: พุ่งเข้าชน
+        o.x = rest - 0.5 * Math.sin(Math.min(1, t / 160) * Math.PI); o.fl = Math.max(0, 0.7 - t / 400); o.tint = [255, 40, 30];
+        if (r.dead && t > 250) { const f = $("pv-flash"); if (f && !f._d) { f._d = 1; f.style.background = "#400"; f.style.opacity = "0.75"; } }
+      }
+    } else if (r.k === "dodge") { const k = Math.min(1, t / 500); o.ox = (mine ? 1 : -1) * 1.1 * Math.sin(k * Math.PI * 0.5) * (t > 700 ? Math.max(0, 1 - (t - 700) / 400) : 1); o.a = 0.55; if (!mine) o.x = rest - 0.4 * Math.sin(Math.min(1, t / 300) * Math.PI); }
+    else { o.x = rest + 0.7 * pvEase(t / 260); o.fl = Math.max(0, 0.6 - t / 400); o.tint = [90, 160, 255]; }
+    if (t > 1500 && P.phase === "act") { P.phase = "end"; P.closeAt = now + 900; }
+  } else if (P.phase === "end" && now >= P.closeAt) { pvClose(); }
+}
+function pvLoop(ts) {
+  if (!PV.on) return; PV.raf = requestAnimationFrame(pvLoop);
+  const S = PV.S; if (ts - (S.last || 0) < 33) return; S.last = ts;
+  try { pvTick(ts); if (!PV.on) return; twDraw(S); } catch (e) { console.warn("pv", e); pvClose(); }
+}
+// ---- hooks ----
+function pvChat(m) {   // เรียกจาก addChat: ฝั่งผู้โจมตีอ่านผลจากข้อความ combat ที่เกมโพสต์อยู่แล้ว
+  if (!PV.on || PV.role !== "att" || PV.res || !m || m.type !== "combat" || typeof m.text !== "string") return;
+  const t = m.text, mine = m.uid === PV.uid || (m.uid === state.uid && t.startsWith("🏃") && t.includes(PV.name));
+  if (!mine) return;
+  const dm = /[−-](\d+) HP/.exec(t), rl = /ทอย (\d+) vs .*? ทอยป้องกันได้ (\d+)/.exec(t);
+  let k = "def";
+  if (t.includes("โจมตีโดน!") || t.includes("ฟาดเข้าเป้า")) k = "hit"; else if (t.includes("หลบได้")) k = "dodge"; else if (t.includes("รับแทน")) k = "block"; else if (t.includes("เสมอ")) k = "tie";
+  pvResult({ k, dmg: dm ? +dm[1] : null, dead: t.includes("ล้มลง"), ar: rl ? +rl[1] : null, dr: rl ? +rl[2] : null });
+}
+try { Object.defineProperty(window, "__town", { value: { TW, PV, pxaTemplate, pxaEnc, pxaDec, townChat, pxaFilled, twWorld, twGenMap, twReach, twPresIn, pvBegin, pvResult, pvChat, twDraw, TW_ZSTYLE } }); } catch { /* ข้าม: ตะขอไว้ให้เทสต์ UI ใช้ */ }
 // ---- /เมืองค่าย
 
 if (HAS_DOM) initNpcUi();
