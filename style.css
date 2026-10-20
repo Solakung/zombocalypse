@@ -1068,3 +1068,11 @@ body { background-image: radial-gradient(ellipse at 50% 0%, rgba(255, 255, 255, 
 .tw-evt { position: absolute; left: 4px; top: 4px; padding: 1px 7px; border-radius: 10px; background: rgba(0, 0, 0, .65); border: 1px solid #ffb84a; color: #ffe2a8; font: 600 11px/1.4 Kanit, sans-serif; pointer-events: none; }
 .tw-evt.hidden { display: none; }
 .tw-nm b.corpse { color: #c9a9a9; } .tw-nm b.bty { color: #ffd23a; }
+
+/* ===== 59) การ์ดเข้าฉากเดินบนหน้าแรก ===== */
+.tw-card { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid #5a4630; background: linear-gradient(135deg, rgba(120, 72, 28, .35), rgba(30, 24, 40, .6)); }
+.tw-card.hidden { display: none; }
+.tw-card-ic { font-size: 26px; line-height: 1; }
+.tw-card-tx { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.tw-card-tx b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tw-card-tx small { font-size: 11px; line-height: 1.3; }
