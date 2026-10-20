@@ -66,7 +66,7 @@ const hbCall = (data) => httpsCallable(fns, "hbossAct")(data).then((r) => r.data
    ทุกครั้งที่ deploy ต้องเปลี่ยนเลขเวอร์ชัน 3 ที่ให้ตรงกัน: APP_VERSION นี้ / ?v= ใน index.html / version.json
    (รัน `node bump.js` ทีเดียวจบ) — ตัวเกมจะเช็ค version.json แบบไม่ผ่านแคช แล้วเด้งปุ่มอัปเดตให้ผู้เล่น
    --------------------------------------------------------- */
-const APP_VERSION = "2026-10-19.1748";
+const APP_VERSION = "2026-10-20.1327";
 let updateBarShown = false;
 function reloadToVersion(v) {
   const u = new URL(location.href); u.searchParams.set("v", v);   // URL ใหม่ = บังคับโหลด index.html สดจากเซิร์ฟเวอร์
@@ -12775,6 +12775,7 @@ function sceneBtnSync() { const b = $("btn-sc"); if (!b) return; b.hidden = T("s
 
 
 
+
 // ---- 🏘️ เมืองค่ายแบบ Doom + อวาตาร์พิกเซล
 /* =========================================================
    53) 🎨 อวาตาร์พิกเซล (วาดเอง 16×24 • จานสี 16 สี) — ใช้ในเมืองค่ายแบบ Doom (หัวข้อ 54) และวงกลมรูปในแชท
@@ -13727,6 +13728,7 @@ function twOpen() {
   try { const b = $("tw-pv"); if (b) b.style.opacity = pvOn() ? "1" : "0.5"; } catch { /* ข้าม */ }
   $("tw-root").classList.remove("hidden"); try { $("tw-root").focus({ preventScroll: true }); } catch { /* ข้าม */ }
   twSelfImg(); twPresStart();
+  if (S.first) { S.first = false; twSys("👋 เคน: ใหม่ที่นี่สินะ — ยินดีต้อนรับสู่ค่ายพักพิง เดินเข้ามาคุยกับเราได้เลย"); twSys("💡 ลากบนภาพเพื่อหัน • ปุ่ม ▲ เดินหน้า • กด ✋ ที่ประตู ผู้คน หรือกองไฟ"); }
   S.watch = setInterval(() => { const p = state.profile; if (!p || p.hp <= 0 || p.banned || state.zone !== S.zone || state.boss) twClose(); }, 500);
   S.raf = requestAnimationFrame(twLoop);
 }
@@ -13737,7 +13739,7 @@ function twClose() {
   for (const el of S.lbl.values()) el.remove(); S.lbl.clear();
   const r = $("tw-root"); if (r) r.classList.add("hidden");
 }
-function twSync() {   // ปุ่มใต้รายการโซน (เรียกจาก renderNpcBox + เมื่อ tune เปลี่ยน)
+function twSync() {   // ปุ่มใต้รายการโซน + การ์ดหน้าแรก (เรียกจาก renderNpcBox + เมื่อ tune เปลี่ยน)
   const show = twWanted();
   let b = $("btn-town");
   if (!b) {
@@ -13749,6 +13751,35 @@ function twSync() {   // ปุ่มใต้รายการโซน (เ�
   if (b.textContent !== lab) b.textContent = lab;
   b.classList.toggle("hidden", !show);
   if (!show && TW.on) twClose();
+  try { twCardSync(show, lab); twFirstRun(); } catch { /* ข้าม */ }
+}
+// ---------- 1,2) ความรู้สึกแรก: การ์ดเข้าฉากบนหน้าแรก (แชต) + เปิดค่ายให้ผู้เล่นใหม่ครั้งแรกอัตโนมัติ ----------
+function twCardSync(show, lab) {
+  let c = $("tw-card");
+  if (!c) {
+    const log = $("chat-log"); if (!log) return;
+    c = mk("div", "tw-card"); c.id = "tw-card";
+    const ic = mk("span", "tw-card-ic", "🏘️"), tx = mk("div", "tw-card-tx"); tx.append(mk("b", "", ""), mk("small", "muted", "เดินในโลกพิกเซล คุยกับ NPC และเจอผู้เล่นคนอื่น"));
+    const go = btn("เข้าไป", () => twOpen(), "btn primary mini"); go.id = "tw-card-go";
+    c.append(ic, tx, go); log.before(c);
+  }
+  const t = c.querySelector("b"), name = state.zone === "safe" ? "เดินในค่ายพักพิง" : `เดินสำรวจ${ZONES[state.zone] ? " " + ZONES[state.zone].name : ""}`;
+  if (t.textContent !== name) t.textContent = name;
+  c.querySelector(".tw-card-ic").textContent = ZONES[state.zone]?.icon || "🏘️";
+  c.classList.toggle("hidden", !show);
+}
+function twFirstRun() {   // บัญชีอายุ < 7 วัน เข้า Safe Zone ครั้งแรก → เปิดฉากค่ายให้เองครั้งเดียว (มีเคนทักทาย) • ผู้เล่นเก่าไม่โดน
+  const S = TW, p = state.profile; if (S.fr || !p || state.zone !== "safe" || !twWanted() || typeof p.createdAt !== "number" || serverNow() - p.createdAt > 7 * 86400000) return;
+  try { if (LS.get(lsKey("twfirst"), 0)) { S.fr = 1; return; } } catch { /* ข้าม */ }
+  S.fr = 1; let tries = 0;
+  const go = () => {
+    if (TW.on) return;
+    if (document.querySelector(".modal:not(.hidden)") || document.querySelector("#sc-root:not(.hidden)")) { if (++tries < 12) setTimeout(go, 2500); return; }
+    if (!twWanted() || state.zone !== "safe") return;
+    try { LS.set(lsKey("twfirst"), 1); } catch { /* ข้าม */ }
+    TW.first = true; twOpen();
+  };
+  setTimeout(go, 2500);
 }
 
 /* =========================================================
